@@ -1,10 +1,10 @@
-# LAN Pipes — 技术实现文档
+# LAN Pipes — Technical Implementation
 
-面向开发者的实现细节。用户指南见 [lan-pipes.md](./lan-pipes.md)。
+Implementation details for developers. For the user guide, see [lan-pipes.md](./lan-pipes.md).
 
 ---
 
-## 架构
+## Architecture
 
 ```
 Machine A (192.168.50.22)                Machine B (192.168.50.27)
@@ -25,37 +25,37 @@ Machine A (192.168.50.22)                Machine B (192.168.50.27)
 └───────────────────────────┘           └───────────────────────────┘
 ```
 
-## Feature Flag
+## Feature flag
 
-`LAN_PIPES` — 在 `scripts/dev.ts` 和 `build.ts` 的 `DEFAULT_FEATURES` 中启用。
+`LAN_PIPES` — enabled in `DEFAULT_FEATURES` in `scripts/dev.ts` and `build.ts`.
 
-所有 LAN 代码路径通过 `feature('LAN_PIPES')` 编译时门控。`feature()` 只能在 `if` 或三元中使用（Bun 编译时常量约束）。
+All LAN code paths are gated at compile time through `feature('LAN_PIPES')`. `feature()` can only be used in an `if` or a ternary (a Bun compile-time constant constraint).
 
 ---
 
-## 核心文件
+## Core files
 
-| 文件 | 说明 |
+| File | Description |
 |------|------|
-| `src/utils/pipeTransport.ts` | PipeServer/PipeClient（UDS + TCP 双模式） |
+| `src/utils/pipeTransport.ts` | PipeServer/PipeClient (dual UDS + TCP mode) |
 | `src/utils/lanBeacon.ts` | UDP multicast beacon + module singleton |
-| `src/utils/ndjsonFramer.ts` | 共享 NDJSON socket 帧解析 |
-| `src/utils/pipeRegistry.ts` | 文件注册表 + `mergeWithLanPeers()` |
-| `src/utils/peerAddress.ts` | 地址解析（uds/bridge/tcp scheme） |
-| `src/utils/pipePermissionRelay.ts` | 权限转发 + `setPipeRelay`/`getPipeRelay` singleton |
-| `src/hooks/usePipeIpc.ts` | 生命周期 hook（从 REPL.tsx 提取） |
-| `src/hooks/usePipeRelay.ts` | 消息回传 hook |
-| `src/hooks/usePipePermissionForward.ts` | 权限转发 hook |
-| `src/hooks/usePipeRouter.ts` | 输入路由 hook |
-| `src/hooks/useMasterMonitor.ts` | slave 注册表 + 消息订阅 |
+| `src/utils/ndjsonFramer.ts` | Shared NDJSON socket frame parsing |
+| `src/utils/pipeRegistry.ts` | File registry + `mergeWithLanPeers()` |
+| `src/utils/peerAddress.ts` | Address resolution (uds/bridge/tcp schemes) |
+| `src/utils/pipePermissionRelay.ts` | Permission forwarding + `setPipeRelay`/`getPipeRelay` singleton |
+| `src/hooks/usePipeIpc.ts` | Lifecycle hook (extracted from REPL.tsx) |
+| `src/hooks/usePipeRelay.ts` | Message relay hook |
+| `src/hooks/usePipePermissionForward.ts` | Permission forwarding hook |
+| `src/hooks/usePipeRouter.ts` | Input routing hook |
+| `src/hooks/useMasterMonitor.ts` | Slave registry + message subscription |
 
 ---
 
-## PipeServer TCP 扩展
+## PipeServer TCP extension
 
 `src/utils/pipeTransport.ts`
 
-### 类型
+### Types
 
 ```typescript
 export type PipeTransportMode = 'uds' | 'tcp'
@@ -63,21 +63,21 @@ export type TcpEndpoint = { host: string; port: number }
 export type PipeServerOptions = { enableTcp?: boolean; tcpPort?: number }
 ```
 
-### PipeServer 变更
+### PipeServer changes
 
-- `setupSocket(socket)` — 从 start() 提取的共享方法，UDS 和 TCP 共用
-- `start(options?)` — 可选启用 TCP，port=0 让 OS 分配
-- 内部维护两个 `net.Server`，共享同一组 `clients: Set<Socket>` 和 `handlers`
-- `tcpAddress` getter 暴露 TCP 端口
-- `close()` 同时关闭两个 server
+- `setupSocket(socket)` — a shared method extracted from `start()`, used by both UDS and TCP
+- `start(options?)` — optionally enables TCP; port=0 lets the OS assign one
+- Maintains two `net.Server` instances internally, sharing one `clients: Set<Socket>` and one set of `handlers`
+- The `tcpAddress` getter exposes the TCP port
+- `close()` closes both servers
 
-socket 帧解析使用 `attachNdjsonFramer()` from `ndjsonFramer.ts`（替代原先 3 份重复代码）。
+Socket frame parsing uses `attachNdjsonFramer()` from `ndjsonFramer.ts` (replacing 3 duplicated copies).
 
-### PipeClient 变更
+### PipeClient changes
 
-- 构造函数新增可选 `TcpEndpoint` 参数
-- `connect()` 根据 tcpEndpoint 分派到 `connectTcp()` 或 `connectUds()`
-- TCP 不需要文件存在轮询，直接建连
+- The constructor takes a new optional `TcpEndpoint` parameter
+- `connect()` dispatches to `connectTcp()` or `connectUds()` depending on the tcpEndpoint
+- TCP does not need to poll for the file to exist; it connects directly
 
 ---
 
@@ -85,17 +85,17 @@ socket 帧解析使用 `attachNdjsonFramer()` from `ndjsonFramer.ts`（替代原
 
 `src/utils/lanBeacon.ts`
 
-### 协议参数
+### Protocol parameters
 
-| 参数 | 值 |
+| Parameter | Value |
 |------|-----|
-| Multicast 组 | `224.0.71.67` |
-| 端口 | `7101` |
-| 广播间隔 | `3000ms` |
-| Peer 超时 | `15000ms` |
+| Multicast group | `224.0.71.67` |
+| Port | `7101` |
+| Broadcast interval | `3000ms` |
+| Peer timeout | `15000ms` |
 | TTL | `1` |
 
-### Announce 包
+### Announce packet
 
 ```typescript
 type LanAnnounce = {
@@ -117,44 +117,44 @@ class LanBeacon extends EventEmitter {
   constructor(announce: Omit<LanAnnounce, 'proto' | 'ts'>)
   start(): void
   stop(): void
-  getPeers(): Map<string, LanAnnounce>  // 防御性拷贝
-  updateAnnounce(partial): void         // 使用 spread（不可变更新）
+  getPeers(): Map<string, LanAnnounce>  // defensive copy
+  updateAnnounce(partial): void         // uses spread (immutable update)
 
   on('peer-discovered', (peer: LanAnnounce) => void)
   on('peer-lost', (pipeName: string) => void)
 }
 ```
 
-### 存储
+### Storage
 
-module-level singleton：`getLanBeacon()` / `setLanBeacon()`。不挂在 Zustand state 上（避免 `setState` 展开时丢失引用）。
+A module-level singleton: `getLanBeacon()` / `setLanBeacon()`. It is not attached to the Zustand state (to avoid losing the reference when `setState` spreads).
 
-### 网卡绑定
+### NIC binding
 
-`addMembership(group, localIp)` + `setMulticastInterface(localIp)` 指定 LAN 网卡。解决 Windows 上 WSL/Docker 虚拟网卡劫持 multicast 的问题。
+`addMembership(group, localIp)` + `setMulticastInterface(localIp)` pin the LAN network card. This fixes the problem on Windows where WSL/Docker virtual adapters hijack multicast.
 
 ---
 
-## Hook 架构
+## Hook architecture
 
-从 REPL.tsx 提取的 ~830 行 Pipe IPC 代码：
+About 830 lines of Pipe IPC code extracted from REPL.tsx:
 
-### usePipeIpc（生命周期）
+### usePipeIpc (lifecycle)
 
-`src/hooks/usePipeIpc.ts`（623 行）
+`src/hooks/usePipeIpc.ts` (623 lines)
 
-在 REPL.tsx 顶层通过 feature-gated require 加载：
+Loaded at the top of REPL.tsx through a feature-gated require:
 
 ```typescript
 const usePipeIpc = feature('UDS_INBOX')
   ? require('../hooks/usePipeIpc.js').usePipeIpc
   : () => undefined;
 
-// 组件内
+// Inside the component
 usePipeIpc({ store, handleIncomingPrompt });
 ```
 
-内部使用 **lazy getter** 函数加载依赖（避免循环依赖导致 Bun 运行时崩溃）：
+Internally it loads dependencies through **lazy getter** functions (to avoid circular dependencies that crash the Bun runtime):
 
 ```typescript
 const pt = () => require('../utils/pipeTransport.js')
@@ -163,41 +163,41 @@ const mm = () => require('./useMasterMonitor.js')
 // ...
 ```
 
-`import type` 用于静态类型（不会触发模块加载）。
+`import type` is used for static types (it does not trigger module loading).
 
-### 四个阶段函数
+### Four phase functions
 
-| 函数 | 职责 |
+| Function | Responsibility |
 |------|------|
-| `initPipeServer` | 角色判定 + server 创建 + beacon 启动 |
-| `registerMessageHandlers` | ping、attach、prompt、permission、detach 五个 handler |
-| `runMainHeartbeat` | cleanup + 发现 + auto-attach + 清理死连接 |
-| `runSubHeartbeat` | 检测 main 是否存活，死亡则接管或独立 |
+| `initPipeServer` | Role determination + server creation + beacon startup |
+| `registerMessageHandlers` | Five handlers: ping, attach, prompt, permission, detach |
+| `runMainHeartbeat` | Cleanup + discovery + auto-attach + dead-connection cleanup |
+| `runSubHeartbeat` | Detects whether the main is alive; on death, takes over or goes standalone |
 
-### usePipeRelay（消息回传）
+### usePipeRelay (message relay)
 
-`src/hooks/usePipeRelay.ts`（38 行）
+`src/hooks/usePipeRelay.ts` (38 lines)
 
-提供 `relayPipeMessage()` 和 `pipeReturnHadErrorRef`。relay 函数通过 `getPipeRelay()` module singleton 读取（替代 `globalThis.__pipeSendToMaster`）。
+Provides `relayPipeMessage()` and `pipeReturnHadErrorRef`. The relay function is read through the `getPipeRelay()` module singleton (replacing `globalThis.__pipeSendToMaster`).
 
-### usePipePermissionForward（权限转发）
+### usePipePermissionForward (permission forwarding)
 
-`src/hooks/usePipePermissionForward.ts`（159 行）
+`src/hooks/usePipePermissionForward.ts` (159 lines)
 
-订阅 `subscribePipeEntries()`，处理：
-- `permission_request` → 解析 payload → 查找 tool → 加入确认队列
-- `permission_cancel` → 从队列移除
-- `stream/error/done` → 转为系统消息显示（含 role + IP 标签）
+Subscribes to `subscribePipeEntries()` and handles:
+- `permission_request` → parse the payload → look up the tool → add to the confirmation queue
+- `permission_cancel` → remove from the queue
+- `stream/error/done` → shown as system messages (with role + IP label)
 
-### usePipeRouter（输入路由）
+### usePipeRouter (input routing)
 
-`src/hooks/usePipeRouter.ts`（130 行）
+`src/hooks/usePipeRouter.ts` (130 lines)
 
-提供 `routeToSelectedPipes(input): boolean`。读取 `selectedPipes` + `routeMode`，逐个发送到已连接目标。通知显示 `[role] hostname/ip`（LAN peer）或 `[role]`（本机）。
+Provides `routeToSelectedPipes(input): boolean`. It reads `selectedPipes` + `routeMode` and sends to each connected target in turn. Notifications show `[role] hostname/ip` (LAN peer) or `[role]` (local machine).
 
 ---
 
-## Registry 并行探测
+## Registry parallel probing
 
 `src/utils/pipeRegistry.ts`
 
@@ -217,105 +217,105 @@ export async function getAliveSubs(): Promise<PipeRegistrySub[]> {
 
 ### cleanupStaleEntries()
 
-两阶段：
-1. **无锁并行探测**：`Promise.all` 探测 main + 所有 subs
-2. **短暂持锁写入**：`acquireLock()` → 重新读取 → 应用变更 → 写入 → `releaseLock()`
+Two phases:
+1. **Lock-free parallel probing**: `Promise.all` probes the main and all subs
+2. **Brief locked write**: `acquireLock()` → re-read → apply changes → write → `releaseLock()`
 
-持锁时间从 N 秒降至 ~10ms。
+Lock hold time drops from N seconds to about 10ms.
 
 ### getMachineId()
 
-Windows/macOS 使用 `execFile`（异步），不阻塞主线程。结果缓存，仅首次调用执行。
+Windows/macOS use `execFile` (asynchronous), which does not block the main thread. The result is cached, so only the first call executes.
 
 ---
 
-## NDJSON 协议
+## NDJSON protocol
 
-### 消息类型
+### Message types
 
-| 类型 | 方向 | 数据 |
+| Type | Direction | Data |
 |------|------|------|
-| `ping` / `pong` | 双向 | 无 |
+| `ping` / `pong` | Both | None |
 | `attach_request` | M→S | `meta: { machineId }` |
 | `attach_accept` / `attach_reject` | S→M | `data: reason` |
-| `detach` | M→S | 无 |
+| `detach` | M→S | None |
 | `prompt` | M→S | `data: prompt_text` |
 | `prompt_ack` | S→M | `data: 'accepted'` |
 | `stream` | S→M | `data: partial_text` |
-| `done` | S→M | 无 |
-| `error` | 双向 | `data: error_message` |
+| `done` | S→M | None |
+| `error` | Both | `data: error_message` |
 | `permission_request` | S→M | `data: JSON(PipePermissionRequestPayload)` |
 | `permission_response` | M→S | `data: JSON(PipePermissionResponsePayload)` |
 | `permission_cancel` | M→S | `data: JSON({ requestId, reason })` |
 
-### 帧格式
+### Frame format
 
-每行一个 JSON 对象，`\n` 分隔：
+One JSON object per line, separated by `\n`:
 ```
 {"type":"ping","from":"cli-abc","ts":"2026-04-11T00:00:00.000Z"}\n
-{"type":"prompt","data":"检查 git status","from":"cli-abc"}\n
+{"type":"prompt","data":"check git status","from":"cli-abc"}\n
 ```
 
 ---
 
-## 跨机器 Attach 流程
+## Cross-machine attach flow
 
 ```
-CLI-B (192.168.50.27) 心跳循环
-  → beacon.getPeers() 发现 CLI-A (192.168.50.22)
+CLI-B (192.168.50.27) heartbeat loop
+  → beacon.getPeers() discovers CLI-A (192.168.50.22)
   → connectToPipe(pName, myName, 3000, { host: '192.168.50.22', port: 58853 })
   → PipeClient.connectTcp() → net.createConnection({ host, port })
   → client.send({ type: 'attach_request', meta: { machineId } })
-  → CLI-A 收到：
+  → CLI-A receives it:
       isLanPeer = (msg.meta.machineId !== myMachineId) → true
-      → 不检查 role，直接 reply({ type: 'attach_accept' })
+      → skips the role check and replies directly with { type: 'attach_accept' }
       → setPipeRelay(socket.write)
-  → CLI-B 收到 attach_accept
+  → CLI-B receives attach_accept
   → addSlaveClient(pName, client)
   → store.setState: role='master', slaves[pName] = { status: 'idle' }
 ```
 
-关键：跨机器 attach 不要求对方是 sub 角色。通过 `machineId` 区分 LAN peer。
+Key point: a cross-machine attach does not require the other side to be in the sub role. LAN peers are distinguished by `machineId`.
 
 ---
 
-## SendMessageTool TCP 支持
+## SendMessageTool TCP support
 
 `packages/builtin-tools/src/tools/SendMessageTool/SendMessageTool.ts`
 
-- `to` 字段支持 `tcp:host:port` 格式
-- `checkPermissions`：`tcp:` scheme 返回 `behavior: 'ask'`，`classifierApprovable: false`
-- `call()`：创建临时 `PipeClient` → connect → send → disconnect
+- The `to` field supports the `tcp:host:port` format
+- `checkPermissions`: the `tcp:` scheme returns `behavior: 'ask'` with `classifierApprovable: false`
+- `call()`: creates a temporary `PipeClient` → connect → send → disconnect
 
 ---
 
-## 测试
+## Tests
 
-| 文件 | 测试数 | 覆盖 |
+| File | Tests | Coverage |
 |------|--------|------|
-| `lanBeacon.test.ts` | 7 | socket 初始化、announce、peer 发现/过滤/清理 |
-| `peerAddress.test.ts` | 8 | scheme 解析、parseTcpTarget、端口范围验证 |
-| `pipePermissionRelay.test.ts` | 2 | setPipeRelay singleton、权限请求/响应 |
-| `pipeTransport.test.ts` | 2 | UDS 基础行为 |
-| `useMasterMonitor.test.ts` | 5 | slave 注册/移除、事件发射 |
+| `lanBeacon.test.ts` | 7 | Socket initialization, announce, peer discovery/filtering/cleanup |
+| `peerAddress.test.ts` | 8 | Scheme parsing, parseTcpTarget, port range validation |
+| `pipePermissionRelay.test.ts` | 2 | setPipeRelay singleton, permission request/response |
+| `pipeTransport.test.ts` | 2 | Basic UDS behavior |
+| `useMasterMonitor.test.ts` | 5 | Slave registration/removal, event emission |
 
-全量：2190 pass / 0 fail
+Full suite: 2190 pass / 0 fail
 
 ---
 
-## 已知限制
+## Known limitations
 
-1. **TCP 无认证** — 同 LAN 内知道端口号即可连接
-2. **Beacon 明文广播** — IP/hostname/machineId 未 hash
-3. **单网卡选择** — `getLocalIp()` 返回首个非内部 IPv4，可能选到 VPN
-4. **端口随机** — 每次启动不同端口，依赖 beacon 发现
-5. **SendMessageTool 每次创建新连接** — 未复用已有 slave client
+1. **No TCP authentication**: anyone on the same LAN who knows the port number can connect
+2. **Beacon broadcasts in plaintext**: IP/hostname/machineId are not hashed
+3. **Single NIC selection**: `getLocalIp()` returns the first non-internal IPv4 address, which may pick a VPN
+4. **Random ports**: the port differs on every start, so discovery relies on the beacon
+5. **SendMessageTool creates a new connection every time**: it does not reuse an existing slave client
 
-## 后续改进方向
+## Future improvements
 
-1. HMAC-SHA256 TCP 握手认证
-2. machineId hash 后再广播
-3. 多网卡选择（优先 RFC 1918 地址）
-4. 固定端口范围配置
-5. TLS 加密传输
-6. SendMessageTool 复用已连接的 slave client
+1. HMAC-SHA256 TCP handshake authentication
+2. Hash the machineId before broadcasting
+3. Multi-NIC selection (prefer RFC 1918 addresses)
+4. Configurable fixed port range
+5. TLS-encrypted transport
+6. Have SendMessageTool reuse connected slave clients

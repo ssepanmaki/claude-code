@@ -1,0 +1,26 @@
+{
+  "model": "sonnet",
+  "effortLevel": "medium",
+  "idleCompaction": false,
+  "attribution": {
+    "commit": "",
+    "pr": ""
+  },
+  "includeCoAuthoredBy": false,
+  "env": {
+    "CLAUDE_CODE_SUBAGENT_MODEL": "haiku",
+    "CLAUDE_CODE_DISABLE_NONESSENTIAL_TRAFFIC": "1",
+    "BASH_MAX_OUTPUT_LENGTH": "20000"
+  },
+  "permissions": {
+    "deny": [
+      "Read(./node_modules/**)",
+      "Read(./**/node_modules/**)",
+      "Read(./dist/**)",
+      "Read(./bun.lock)",
+      "Read(./contributors.svg)",
+      "Read(./docs/images/**)",
+      "Read(./coverage/**)"
+    ]
+  }
+}

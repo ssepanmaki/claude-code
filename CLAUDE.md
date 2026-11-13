@@ -419,3 +419,10 @@ Impeccable 设计上下文保存在 `.impeccable.md` 中。设计 Web UI（RCS �
 ### 视觉参考
 
 Anthropic 公司的设计风格 — 干净、考究、温暖的底色。大量留白，以排版为核心。避免 AI 产品常见的设计套路（渐变文字、玻璃态、霓虹色）。
+
+## Owner Rules (always follow)
+
+- **Commits**: one short line, Conventional Commits (`fix: handle empty config`). No `Co-Authored-By` trailer, no "Generated with Claude Code" line, no session links.
+- **Branches**: `<type>/<short-kebab-topic>`, e.g. `feat/model-picker`, `fix/login-check`, `chore/english-docs`. Never auto-generated names like `claude/quirky-gates-xxxx`.
+- **PR descriptions**: short summary + test notes. No generated-by footer.
+- Run `bun run precheck` before committing.

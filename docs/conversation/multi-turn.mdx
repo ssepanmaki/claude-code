@@ -1,68 +1,68 @@
 ---
-title: "多轮对话管理 - QueryEngine 会话编排与持久化"
-description: "从源码角度解析 Claude Code 多轮对话管理：QueryEngine 的会话状态机、JSONL transcript 持久化、成本追踪模型和模型热切换机制。"
-keywords: ["多轮对话", "会话管理", "QueryEngine", "transcript", "成本追踪"]
+title: "Multi-Turn Conversation Management - QueryEngine Session Orchestration and Persistence"
+description: "A source-level look at Claude Code's multi-turn conversation management: the QueryEngine session state machine, JSONL transcript persistence, the cost-tracking model, and hot model switching."
+keywords: ["multi-turn conversation", "session management", "QueryEngine", "transcript", "cost tracking"]
 sourceRef: "3ec5675 (2026-04-08)"
 ---
 
-{/* 本章目标：从源码角度揭示会话编排、持久化存储、成本追踪和模型切换的完整链路 */}
+{/* Goal of this chapter: expose, from the source, the full path of session orchestration, persistent storage, cost tracking, and model switching */}
 
-首先要区分claude code的多种交互方式
+First, distinguish the several ways of interacting with Claude Code.
 
-REPL关注交互形态，SDK关注接入方式，ACP则关注通信协议。
+The REPL is about the interaction form, the SDK is about how you integrate, and ACP is about the communication protocol.
 
-### 🆚 核心概念对比
+### Core concept comparison
 
-| 维度 | 🖥️ REPL (交互形态) | 🧩 SDK (接入方式) | 🌉 ACP (通信协议) |
+| Dimension | REPL (interaction form) | SDK (integration method) | ACP (communication protocol) |
 | :--- | :--- | :--- | :--- |
-| **是什么** | 供开发者直接在终端使用的**交互式对话环境** | 面向开发者的**程序化调用库**，供集成到其他应用 | 一种**开放式的通信标准**，连接不同AI Agent与编辑器 |
-| **使用方式** | 1. 直接在终端输入`claude`命令<br>2. 进入专用界面（基于React Ink渲染）<br>3. 通过斜杠命令（如`/help`）交互 | 1. 在自己的Node.js/Python项目中安装SDK包（如`npm install claude-code-sdk`）<br>2. 通过API发送查询 | 1. 通过ACP适配器（如`claude-code-acp`）启动Claude Code<br>2. 供编辑器通过ACP协议与其通信 |
-| **典型场景** | 开发者日常编写代码时，随时向其提问、修改代码或执行任务 | 将Claude Code的核心能力（对话、工具执行等）集成到自动化脚本、CI/CD流程或其他应用的后台中 | 将Claude Code的能力集成到JetBrains IDE、Zed等第三方编辑器中，利用其UI交互功能 |
-| **主要特点** | - **面向人**：交互式、直观<br>- **功能完整**：可使用所有内置工具，并支持MCP集成<br>- **处理复杂任务**：可自主规划、执行多步操作 | - **面向程序**：编程化、可集成<br>- **轻量级**：不依赖Claude Code的完整运行时<br>- **由你控制**：适合在自有应用中实现自动化 | - **标准化**：统一不同Agent与编辑器间的通信<br>- **双向通信**：Agent可主动向编辑器请求文件、执行命令等<br>- **与编辑器深度整合**：能完全复用Claude Code的能力 |
+| **What it is** | An **interactive conversation environment** that developers use directly in the terminal | A **programmatic library** for developers, to be embedded in other applications | An **open communication standard** connecting different AI agents and editors |
+| **How it is used** | 1. Type the `claude` command in the terminal<br>2. Enter a dedicated UI (rendered with React Ink)<br>3. Interact through slash commands (such as `/help`) | 1. Install the SDK package in your own Node.js/Python project (such as `npm install claude-code-sdk`)<br>2. Send queries through the API | 1. Launch Claude Code through an ACP adapter (such as `claude-code-acp`)<br>2. Editors talk to it over the ACP protocol |
+| **Typical scenario** | A developer writing code day to day, asking questions, changing code, or running tasks at any time | Embedding Claude Code's core capabilities (conversation, tool execution, and so on) into automation scripts, CI/CD pipelines, or the backend of another application | Bringing Claude Code into third-party editors such as JetBrains IDEs and Zed, using their UI interaction features |
+| **Main traits** | - **Human-facing**: interactive, intuitive<br>- **Feature-complete**: all built-in tools plus MCP integration<br>- **Handles complex tasks**: plans and executes multi-step operations on its own | - **Program-facing**: programmatic, embeddable<br>- **Lightweight**: does not depend on Claude Code's full runtime<br>- **Under your control**: suited to automation inside your own applications | - **Standardized**: unifies communication between different agents and editors<br>- **Bidirectional**: the agent can proactively ask the editor for files, run commands, and so on<br>- **Deep editor integration**: can fully reuse Claude Code's capabilities |
 
-其中的 🧩 SDK (接入方式) 与 🌉 ACP (通信协议)采用如下QueryEngine实现会话管理
+The SDK and ACP modes use the QueryEngine described below for session management.
 
-作为一个对话终端（🖥️ REPL 交互形态模式），则使用的是 onQueryImpl 在 src/screens/REPL.tsx 中调用 query() 函数
+As a conversation terminal (the REPL interaction form), Claude Code instead uses `onQueryImpl` in `src/screens/REPL.tsx`, which calls the `query()` function.
 
-对于REPL 交互形态模式的调用链路如下
+The call chain for the REPL mode is:
 ```
-用户输入  
-  ↓  
-onSubmit (REPL.tsx)  
-  ↓  
-handlePromptSubmit (handlePromptSubmit.ts)  
-  ↓  
-executeUserInput (handlePromptSubmit.ts)  
-  ↓  
-onQuery (REPL.tsx)  
-  ↓  
-onQueryImpl (REPL.tsx)  
-  ↓  
-query (query.ts) ← 在这里调用  
+User input
+  ↓
+onSubmit (REPL.tsx)
+  ↓
+handlePromptSubmit (handlePromptSubmit.ts)
+  ↓
+executeUserInput (handlePromptSubmit.ts)
+  ↓
+onQuery (REPL.tsx)
+  ↓
+onQueryImpl (REPL.tsx)
+  ↓
+query (query.ts) ← called here
 ```
 
-其中
+Where:
 
-query 函数是 Agentic Loop 的核心实现，包含 while(true) 循环处理对话回合 query.ts:460-522
+The `query` function is the core implementation of the Agentic Loop, with a `while(true)` loop that handles conversation turns (`query.ts:460-522`).
 
-onQueryImpl 是 REPL（Read-Eval-Print Loop）中与 AI 模型交互的核心控制器，它负责：
+`onQueryImpl` is the core controller in the REPL (Read-Eval-Print Loop) that talks to the AI model. It is responsible for:
 
-1.环境准备（IDE、诊断、权限）
+1. Environment preparation (IDE, diagnostics, permissions)
 
-2.会话标题的首次生成
+2. Generating the session title the first time
 
-3.构建动态系统提示和用户上下文
+3. Building the dynamic system prompt and user context
 
-4.执行流式查询并实时更新 UI
+4. Running the streaming query and updating the UI in real time
 
-5.收集性能指标和最终清理
+5. Collecting performance metrics and final cleanup
 
-##  `onQueryImpl` 方法的详细解析
-以下是对 `onQueryImpl` 方法的详细解析。该方法是一个 React `useCallback` 包装的异步函数，负责处理用户消息到 AI 模型（Claude）的**完整查询流程**，包括预处理、系统提示构建、工具上下文准备、流式查询执行、后处理与指标记录。
+## A detailed walkthrough of `onQueryImpl`
+This section walks through `onQueryImpl`. It is an async function wrapped in a React `useCallback`, and it handles the **complete query flow** from a user message to the AI model (Claude): preprocessing, system prompt construction, tool context preparation, streaming query execution, post-processing, and metrics recording.
 
 ---
 
-### 一、函数签名与参数
+### 1. Function signature and parameters
 
 ```typescript
 const onQueryImpl = useCallback(
@@ -79,49 +79,49 @@ const onQueryImpl = useCallback(
 )
 ```
 
-| 参数                             | 说明                                                                                     |
+| Parameter                        | Description                                                                              |
 | -------------------------------- | ---------------------------------------------------------------------------------------- |
-| `messagesIncludingNewMessages` | 包含新增消息的完整消息列表，用于构建模型输入                                             |
-| `newMessages`                  | 本次新增的消息（例如用户刚输入的文本或附件）                                             |
-| `abortController`              | 用于取消当前查询的控制器                                                                 |
-| `shouldQuery`                  | 是否真正执行查询；若为 `false` 则跳过模型调用（例如处理无效斜杠命令、手动 compact 等） |
-| `additionalAllowedTools`       | 本轮查询额外允许的工具列表（通常来自 Skill 的 frontmatter）                              |
-| `mainLoopModelParam`           | 指定本次使用的主模型参数（如 `'claude-3-opus'`）                                       |
-| `effort`                       | 可选，覆盖全局的“努力程度”值（用于控制模型推理深度）                                   |
+| `messagesIncludingNewMessages` | The full message list including the new messages, used to build the model input          |
+| `newMessages`                  | The messages added this time (for example, the text or attachments the user just entered) |
+| `abortController`              | Controller used to cancel the current query                                              |
+| `shouldQuery`                  | Whether to actually run the query; if `false`, the model call is skipped (for example, for invalid slash commands or a manual compact) |
+| `additionalAllowedTools`       | Extra tools allowed for this query (usually from a Skill's frontmatter)                  |
+| `mainLoopModelParam`           | The main model to use for this query (such as `'claude-3-opus'`)                         |
+| `effort`                       | Optional; overrides the global "effort" value (controls how deeply the model reasons)    |
 
 ---
 
-### 二、总体执行流程
+### 2. Overall execution flow
 
-下图概括了函数的主要分支与关键步骤：
+The diagram below summarizes the main branches and key steps:
 
 ```mermaid
 graph TD
-A["开始"] --> B{shouldQuery?}
-B -- true --> C["IDE集成：刷新MCP客户端，诊断追踪，关闭差异视图"]
-B -- false --> D["仅处理compact边界/重置状态并返回"]
-C --> E["标记项目onboarding完成"]
-E --> F["尝试生成会话标题（仅一次）"]
-F --> G["将additionalAllowedTools写入全局权限store"]
-G --> H["获取ToolUseContext（含最新工具/MCP）"]
-H --> I["如有effort，临时覆盖getAppState中的effortValue"]
-I --> J["并行执行：系统提示/用户上下文/系统上下文/自动模式检查"]
-J --> K["构建有效系统提示"]
-K --> L["重置各类耗时计时器"]
-L --> M["执行query生成器，流式处理事件"]
-M --> N["若BUDDY开启，触发companion观察者"]
-N --> O["若UDS_INBOX且中断，记录错误"]
-O --> P["ant用户：收集API指标并插入指标消息"]
-P --> Q["重置加载状态，输出性能报告，调用onTurnComplete"]
-Q --> R["结束"]
+A["Start"] --> B{shouldQuery?}
+B -- true --> C["IDE integration: refresh MCP clients, diagnostics tracking, close diff views"]
+B -- false --> D["Only handle compact boundary / reset state, then return"]
+C --> E["Mark project onboarding complete"]
+E --> F["Try to generate session title (once only)"]
+F --> G["Write additionalAllowedTools to the global permission store"]
+G --> H["Get ToolUseContext (with latest tools/MCP)"]
+H --> I["If effort is set, temporarily override effortValue in getAppState"]
+I --> J["In parallel: system prompt / user context / system context / auto-mode check"]
+J --> K["Build the effective system prompt"]
+K --> L["Reset the various duration timers"]
+L --> M["Run the query generator, process events as a stream"]
+M --> N["If BUDDY is on, trigger the companion observer"]
+N --> O["If UDS_INBOX and interrupted, record an error"]
+O --> P["ant users: collect API metrics and insert a metrics message"]
+P --> Q["Reset loading state, print performance report, call onTurnComplete"]
+Q --> R["End"]
 D --> R
 ```
 
 ---
 
-### 三、核心逻辑详解
+### 3. Core logic in detail
 
-#### 3.1 IDE 集成与诊断（仅 `shouldQuery = true`）
+#### 3.1 IDE integration and diagnostics (only when `shouldQuery = true`)
 
 ```typescript
 const freshClients = mergeClients(initialMcpClients, store.getState().mcp.clients);
@@ -130,11 +130,11 @@ const ideClient = getConnectedIdeClient(freshClients);
 if (ideClient) closeOpenDiffs(ideClient);
 ```
 
-- 从 store 中获取最新的 MCP 客户端（因为 `useManageMCPConnections` 可能在闭包捕获后更新了状态）。
-- 通知诊断追踪器查询开始。
-- 若存在已连接的 IDE 客户端，关闭所有打开的差异视图（清理环境）。
+- Gets the latest MCP clients from the store (because `useManageMCPConnections` may have updated state after the closure captured it).
+- Notifies the diagnostics tracker that a query is starting.
+- If a connected IDE client exists, closes all open diff views (cleaning up the environment).
 
-#### 3.2 会话标题生成（仅一次）
+#### 3.2 Session title generation (once only)
 
 ```typescript
 if (!titleDisabled && !sessionTitle && !agentTitle && !haikuTitleAttemptedRef.current) {
@@ -147,12 +147,12 @@ if (!titleDisabled && !sessionTitle && !agentTitle && !haikuTitleAttemptedRef.cu
 }
 ```
 
-- 仅当全局标题未禁用、当前无任何标题且从未尝试过时执行。
-- 从新增消息中提取第一条**非元用户消息**的真实文本。
-- 跳过合成面包屑（如 slash 命令输出、skill 扩展标记等）。
-- 异步调用 `generateSessionTitle`，结果通过 `setHaikuTitle` 保存；失败则重置 ref 允许重试。
+- Runs only when titles are not globally disabled, no title exists yet, and no attempt has been made before.
+- Extracts the real text of the first **non-meta user message** from the new messages.
+- Skips synthetic breadcrumbs (such as slash command output and skill expansion markers).
+- Calls `generateSessionTitle` asynchronously and saves the result through `setHaikuTitle`; on failure it resets the ref so a retry is allowed.
 
-#### 3.3 权限工具覆盖写入 Store
+#### 3.3 Writing permission tool overrides to the store
 
 ```typescript
 store.setState(prev => {
@@ -162,12 +162,12 @@ store.setState(prev => {
 });
 ```
 
-- 将本轮 `additionalAllowedTools` 写入全局 store 的 `toolPermissionContext.alwaysAllowRules.command`。
-- 用于限定本轮查询中可用的工具集（例如 Skill 专属工具）。
-- 通过浅比较避免不必要的状态更新。
-- 即使在 `shouldQuery=false` 时也会执行（例如 forked 命令需要此权限信息），但原代码位置在 `shouldQuery` 分支**之前**，所以始终会更新。
+- Writes this query's `additionalAllowedTools` to `toolPermissionContext.alwaysAllowRules.command` in the global store.
+- Used to limit the toolset available in this query (for example, Skill-specific tools).
+- A shallow comparison avoids unnecessary state updates.
+- It also runs when `shouldQuery=false` (for example, forked commands need this permission information): in the original code this sits **before** the `shouldQuery` branch, so it always updates.
 
-#### 3.4 `shouldQuery = false` 分支
+#### 3.4 The `shouldQuery = false` branch
 
 ```typescript
 if (!shouldQuery) {
@@ -181,24 +181,24 @@ if (!shouldQuery) {
 }
 ```
 
-- 处理不需要实际调用模型的情况（如用户输入了无效斜杠命令，或者手动 `/compact` 等）。
-- 若新消息中包含 **compact 边界消息**（压缩边界），则：
-  - 生成新的 `conversationId`，促使 UI 中消息行组件重新挂载。
-  - 若开启了 PROACTIVE/KAIROS 特性，清除上下文阻塞标志（恢复主动提示）。
-- 最后重置加载状态并清空 abortController。
+- Handles cases that do not need an actual model call (such as an invalid slash command typed by the user, or a manual `/compact`).
+- If the new messages contain a **compact boundary message**:
+  - A new `conversationId` is generated, which makes the message row components in the UI remount.
+  - If the PROACTIVE/KAIROS features are on, the context-blocked flag is cleared (restoring proactive prompts).
+- Finally the loading state is reset and the abortController is cleared.
 
-#### 3.5 查询前置准备（`shouldQuery = true`）
+#### 3.5 Pre-query preparation (`shouldQuery = true`)
 
-##### 3.5.1 获取 ToolUseContext
+##### 3.5.1 Getting the ToolUseContext
 
 ```typescript
 const toolUseContext = getToolUseContext(messagesIncludingNewMessages, newMessages, abortController, mainLoopModelParam);
 const { tools: freshTools, mcpClients: freshMcpClients } = toolUseContext.options;
 ```
 
-- `getToolUseContext` 内部会从 store 中读取最新的 tools 和 MCP 客户端配置，确保闭包捕获的旧值不会导致遗漏新连接的工具或 MCP 服务器。
+- `getToolUseContext` reads the latest tools and MCP client configuration from the store, so stale values captured by the closure cannot cause newly connected tools or MCP servers to be missed.
 
-##### 3.5.2 Effort 覆盖（临时）
+##### 3.5.2 Effort override (temporary)
 
 ```typescript
 if (effort !== undefined) {
@@ -207,10 +207,10 @@ if (effort !== undefined) {
 }
 ```
 
-- 如果传入了 `effort` 参数，临时覆盖 `getAppState` 返回的 `effortValue`。
-- 作用域**仅限于本轮查询**，不影响全局 store，避免后台 Agent 或 UI 组件误读到该临时值。
+- If an `effort` argument is passed, it temporarily overrides the `effortValue` returned by `getAppState`.
+- The scope is **this query only**. The global store is untouched, so background agents and UI components cannot read the temporary value by mistake.
 
-##### 3.5.3 并行获取提示与上下文
+##### 3.5.3 Fetching prompts and context in parallel
 
 ```typescript
 const [, , defaultSystemPrompt, baseUserContext, systemContext] = await Promise.all([
@@ -222,13 +222,13 @@ const [, , defaultSystemPrompt, baseUserContext, systemContext] = await Promise.
 ]);
 ```
 
-- 并行执行以下任务以节省时间：
-  - **自动模式断路器**：如果启用了转录分类器，检查并可能禁用快速模式（`fastMode`）。
-  - **系统提示**：基于最新工具、模型参数、额外工作目录、MCP 客户端生成。
-  - **用户上下文**：如当前工作区、环境变量等。
-  - **系统上下文**：如操作系统、终端信息等。
+- These tasks run in parallel to save time:
+  - **Auto-mode circuit breaker**: if the transcript classifier is enabled, checks and may disable fast mode (`fastMode`).
+  - **System prompt**: generated from the latest tools, model parameter, extra working directories, and MCP clients.
+  - **User context**: such as the current workspace and environment variables.
+  - **System context**: such as operating system and terminal information.
 
-##### 3.5.4 增强用户上下文
+##### 3.5.4 Enriching the user context
 
 ```typescript
 const userContext = {
@@ -240,9 +240,9 @@ const userContext = {
 };
 ```
 
-- 合并基本用户上下文、协调器上下文（与 MCP 协作相关）、以及可选的终端焦点状态（当 proactive 特性激活且终端未聚焦时，提示模型用户未在观看）。
+- Merges the base user context, the coordinator context (related to MCP collaboration), and an optional terminal focus state (when the proactive feature is active and the terminal is unfocused, the model is told the user is not watching).
 
-##### 3.5.5 构建最终系统提示
+##### 3.5.5 Building the final system prompt
 
 ```typescript
 const systemPrompt = buildEffectiveSystemPrompt({
@@ -254,9 +254,9 @@ const systemPrompt = buildEffectiveSystemPrompt({
 });
 ```
 
-- 整合主线程 Agent 定义、工具上下文、自定义系统提示、默认系统提示以及需要追加的内容。
+- Combines the main-thread agent definition, the tool context, the custom system prompt, the default system prompt, and any content to append.
 
-#### 3.6 执行查询与流式事件处理
+#### 3.6 Running the query and handling streaming events
 
 ```typescript
 resetTurnHookDuration(); resetTurnToolDuration(); resetTurnClassifierDuration();
@@ -265,13 +265,13 @@ for await (const event of query({ messages, systemPrompt, userContext, systemCon
 }
 ```
 
-- 重置本轮钩子、工具、分类器的耗时计时器。
-- 调用 `query` 生成器函数（负责与模型 API 通信并返回 SSE 事件流）。
-- 遍历每个事件并调用 `onQueryEvent`（通常用于更新 UI 消息列表、处理工具调用等）。
+- Resets the hook, tool, and classifier duration timers for this query.
+- Calls the `query` generator function (which talks to the model API and returns an SSE event stream).
+- Iterates over each event and calls `onQueryEvent` (typically to update the UI message list, handle tool calls, and so on).
 
-#### 3.7 后处理与指标收集
+#### 3.7 Post-processing and metrics collection
 
-##### 3.7.1 BUDDY 特性（companion 反应）
+##### 3.7.1 The BUDDY feature (companion reactions)
 
 ```typescript
 if (feature('BUDDY') && typeof fireCompanionObserver === 'function') {
@@ -279,9 +279,9 @@ if (feature('BUDDY') && typeof fireCompanionObserver === 'function') {
 }
 ```
 
-- 将当前消息列表传递给 companion 观察者，并根据返回的反应更新全局状态。
+- Passes the current message list to the companion observer and updates global state from the reaction it returns.
 
-##### 3.7.2 UDS_INBOX 中断处理
+##### 3.7.2 UDS_INBOX interrupt handling
 
 ```typescript
 if (feature('UDS_INBOX') && abortController.signal.aborted) {
@@ -290,27 +290,27 @@ if (feature('UDS_INBOX') && abortController.signal.aborted) {
 }
 ```
 
-- 若因中断导致查询未完成，标记错误并通过管道中继消息。
+- If the query did not finish because of an interrupt, flags an error and relays a message through the pipe.
 
-##### 3.7.3 Ant 内部用户的 API 指标记录
+##### 3.7.3 API metrics for internal ant users
 
 ```typescript
 if (process.env.USER_TYPE === 'ant' && apiMetricsRef.current.length > 0) {
   const entries = apiMetricsRef.current;
   const ttfts = entries.map(e => e.ttftMs);
-  const otpsValues = entries.map(e => { /* 计算每请求的 OTPs */ });
+  const otpsValues = entries.map(e => { /* compute per-request OTPS */ });
   const isMultiRequest = entries.length > 1;
-  // 创建 API 指标消息并添加到消息列表
+  // create the API metrics message and add it to the message list
   setMessages(prev => [...prev, createApiMetricsMessage({ ttftMs: isMultiRequest ? median(ttfts) : ttfts[0], ... })]);
 }
 ```
 
-- 仅当用户类型为 `'ant'` 且存在 API 指标记录时执行。
-- 收集每次请求的 **首字节时间 (TTFT)** 和 **每秒输出 Token 数 (OTPS)**。
-- 若本轮包含多次请求（例如工具调用循环），计算中位数（P50）后存入指标消息。
-- 同时记录钩子耗时、工具耗时、分类器耗时、本轮总时长、配置写入次数等。
+- Runs only when the user type is `'ant'` and API metrics have been recorded.
+- Collects the **time to first token (TTFT)** and **output tokens per second (OTPS)** for each request.
+- If the query contained several requests (for example, a tool-call loop), the median (P50) is computed and stored in the metrics message.
+- It also records hook time, tool time, classifier time, total turn duration, number of config writes, and so on.
 
-##### 3.7.4 重置与清理
+##### 3.7.4 Reset and cleanup
 
 ```typescript
 resetLoadingState();
@@ -318,53 +318,53 @@ logQueryProfileReport();
 await onTurnComplete?.(messagesRef.current);
 ```
 
-- 重置加载状态（隐藏 loading 指示器）。
-- 输出查询性能报告（如果调试标志启用）。
-- 调用外部传入的 `onTurnComplete` 回调，并传递完整消息列表（通常用于触发后续行为如自动滚动、保存会话等）。
+- Resets the loading state (hides the loading indicator).
+- Prints the query performance report (if the debug flag is enabled).
+- Calls the externally supplied `onTurnComplete` callback with the full message list (typically to trigger follow-up behavior such as auto-scroll or saving the session).
 
 
-## 单轮 vs 多轮：架构层面的差异
+## Single turn vs. multi-turn: the architectural difference
 
-- **单轮**（一次 Agentic Loop）：`query()` 函数的一次完整执行——组装上下文 → 调 API → 处理工具调用 → 循环直到结束
-- **多轮**（一个 Session）：`QueryEngine` 类管理的一次会话——跨越数十轮 `submitMessage()` 调用，持续数小时
+- **Single turn** (one Agentic Loop): one full execution of `query()` — assemble context → call the API → handle tool calls → loop until done
+- **Multi-turn** (one Session): one session managed by the `QueryEngine` class — spanning dozens of `submitMessage()` calls and lasting hours
 
-`QueryEngine`（`src/QueryEngine.ts`，类定义）是单轮 Agentic Loop 之上的**会话编排器**，它管理的状态远不止消息列表：
+`QueryEngine` (`src/QueryEngine.ts`, class definition) is the **session orchestrator** on top of the single-turn Agentic Loop, and the state it manages goes well beyond the message list:
 
 ```
-QueryEngine 内部状态（src/QueryEngine.ts 构造函数）
-├── mutableMessages: Message[]         ← 完整对话历史，跨 turn 累积
-├── readFileState: FileStateCache      ← 已读文件内容缓存，避免重复读取
-├── totalUsage: NonNullableUsage       ← 累计 token 消耗（input/output/cache）
-├── permissionDenials: SDKPermissionDenial[]  ← 权限拒绝记录
-├── discoveredSkillNames: Set<string>  ← 当前 turn 已发现的 skill
-├── loadedNestedMemoryPaths: Set<string>  ← 已加载的嵌套 memory 路径（防重复）
-├── hasHandledOrphanedPermission: boolean  ← 是否已处理孤立权限请求
-└── abortController: AbortController   ← 会话级中断控制
+QueryEngine internal state (constructor in src/QueryEngine.ts)
+├── mutableMessages: Message[]         ← full conversation history, accumulated across turns
+├── readFileState: FileStateCache      ← cache of file contents already read, avoids re-reading
+├── totalUsage: NonNullableUsage       ← cumulative token usage (input/output/cache)
+├── permissionDenials: SDKPermissionDenial[]  ← record of permission denials
+├── discoveredSkillNames: Set<string>  ← skills discovered in the current turn
+├── loadedNestedMemoryPaths: Set<string>  ← nested memory paths already loaded (prevents duplicates)
+├── hasHandledOrphanedPermission: boolean  ← whether an orphaned permission request was handled
+└── abortController: AbortController   ← session-level interrupt control
 ```
 
-## QueryEngine 的核心方法：submitMessage()
+## QueryEngine's core method: submitMessage()
 
-每次用户输入一条消息，SDK 调用 `submitMessage()`，它会执行完整的 turn 初始化链路：
+Each time the user enters a message, the SDK calls `submitMessage()`, which runs the full turn initialization chain:
 
 ```typescript
-// src/QueryEngine.ts — QueryEngine.submitMessage() 简化流程
+// src/QueryEngine.ts — simplified flow of QueryEngine.submitMessage()
 async *submitMessage(
   prompt: string | ContentBlockParam[],
   options?: { uuid?: string; isMeta?: boolean },
 ): AsyncGenerator<SDKMessage> {
-  // 1. 清除 turn 级追踪状态
+  // 1. Clear turn-level tracking state
   this.discoveredSkillNames.clear()
 
-  // 2. 解析模型（用户可能中途通过 setModel() 切换了模型）
+  // 2. Resolve the model (the user may have switched models mid-session via setModel())
   const mainLoopModel = this.config.userSpecifiedModel
     ? parseUserSpecifiedModel(this.config.userSpecifiedModel)
     : getMainLoopModel()
 
-  // 3. 动态组装 System Prompt（每次 turn 都重新构建）
+  // 3. Assemble the System Prompt dynamically (rebuilt every turn)
   const { defaultSystemPrompt, userContext, systemContext } =
     await fetchSystemPromptParts({ tools, mainLoopModel, mcpClients })
 
-  // 4. 包装权限检查（追踪每次拒绝）
+  // 4. Wrap the permission check (tracks every denial)
   const wrappedCanUseTool = async (tool, input, ...) => {
     const result = await canUseTool(tool, input, ...)
     if (result.behavior !== 'allow') {
@@ -378,7 +378,7 @@ async *submitMessage(
     return result
   }
 
-  // 5. 调用核心 query() 函数执行 agentic loop
+  // 5. Call the core query() function to run the agentic loop
   yield* query({
     systemPrompt, messages: this.mutableMessages,
     tools, model: mainLoopModel, ...
@@ -386,134 +386,134 @@ async *submitMessage(
 }
 ```
 
-关键设计：`submitMessage()` 是 `async *Generator`——它逐步 yield `SDKMessage`，让调用方（REPL/SDK）能实时展示进度，而不是等整个 turn 结束。
+A key design point: `submitMessage()` is an `async *Generator`. It yields `SDKMessage` step by step so the caller (REPL/SDK) can show progress in real time instead of waiting for the whole turn to finish.
 
-## 会话持久化：JSONL Transcript
+## Session persistence: JSONL transcript
 
-每次对话事件都被追加写入 transcript 文件（`src/utils/sessionStorage.ts`）：
+Every conversation event is appended to a transcript file (`src/utils/sessionStorage.ts`):
 
-### 存储路径
+### Storage path
 
 ```
 ~/.claude/projects/<sanitized-cwd>/<session-uuid>.jsonl
 ```
 
-- 路径由 `getProjectDir(originalCwd)` 生成，使用 `sanitizePath()` 将项目目录路径转换为安全的目录名（非 hash），同一项目目录的会话归入同一子目录
-- 每条记录是一行 JSON（JSONL 格式），支持追加写入而不需要读取-修改-写入整个文件
-- 读取上限为 50MB（`MAX_TRANSCRIPT_READ_BYTES` 常量，`src/utils/sessionStorage.ts`），防止超大会话导致 OOM
+- The path comes from `getProjectDir(originalCwd)`, which uses `sanitizePath()` to turn the project directory path into a safe directory name (not a hash). Sessions from the same project directory go in the same subdirectory.
+- Each record is one line of JSON (JSONL format), which supports appending without reading, modifying, and rewriting the whole file
+- Reads are capped at 50MB (the `MAX_TRANSCRIPT_READ_BYTES` constant in `src/utils/sessionStorage.ts`) to keep oversized sessions from causing OOM
 
-### Transcript 写入器
+### The transcript writer
 
-`Project` 类（`src/utils/sessionStorage.ts`，私有类）管理 transcript 的写入。它通过 `writeQueues`（按文件分组的写队列）和 `drainWriteQueue()`（定时批量刷写）确保并发消息追加不会互相覆盖：
+The `Project` class (`src/utils/sessionStorage.ts`, a private class) manages transcript writes. It uses `writeQueues` (write queues grouped by file) and `drainWriteQueue()` (timed batch flushing) so concurrent message appends do not overwrite each other:
 
 ```
-写入流程（异步排队路径）：
+Write flow (async queued path):
   recordTranscript(sessionId, entry)
     ↓
-  project.enqueueWrite(filePath, entry)    ← 入列到 writeQueues
+  project.enqueueWrite(filePath, entry)    ← enqueue into writeQueues
     ↓
-  scheduleDrain()                          ← 设置定时器（FLUSH_INTERVAL_MS）
+  scheduleDrain()                          ← set a timer (FLUSH_INTERVAL_MS)
     ↓
-  drainWriteQueue()                        ← 按 MAX_CHUNK_BYTES 分批
-    ↓  写入每批
-  appendToFile(path, batchContent)         ← 批量追加
+  drainWriteQueue()                        ← split into batches by MAX_CHUNK_BYTES
+    ↓  write each batch
+  appendToFile(path, batchContent)         ← batch append
     ↓
-  如果配置了远程持久化：
+  If remote persistence is configured:
     persistToRemote(sessionId, entry)
       ├── CCR v2: internalEventWriter('transcript', entry)
       └── v1 Ingress: sessionIngress.appendSessionLog(...)
 
-同步直写路径（用于元数据重写等场景）：
-  appendEntryToFile(fullPath, entry)       ← 同步 appendFileSync
+Synchronous direct-write path (for metadata rewrites and similar cases):
+  appendEntryToFile(fullPath, entry)       ← synchronous appendFileSync
     ↓
-  失败时 mkdir + 重试
+  On failure: mkdir + retry
 ```
 
-### 会话恢复链路
+### Session resume path
 
-`--resume` 参数触发的恢复流程（`src/main.tsx` 中 `--resume` 分支）：
+The resume flow triggered by the `--resume` argument (the `--resume` branch in `src/main.tsx`):
 
 ```
-1. 解析 resume 参数：
-   ├── UUID 格式 → getTranscriptPathForSession(uuid)
-   ├── .jsonl 文件路径 → 直接使用
-   └── boolean → 最近一次会话的 picker
-   
+1. Parse the resume argument:
+   ├── UUID format → getTranscriptPathForSession(uuid)
+   ├── .jsonl file path → use directly
+   └── boolean → picker for the most recent sessions
+
 2. loadTranscriptFromFile(path)
-   ├── 按 JSONL 行解析
-   ├── 过滤出消息类型记录
-   └── 重建 Message[] 数组
+   ├── Parse line by line as JSONL
+   ├── Filter for message-type records
+   └── Rebuild the Message[] array
 
-3. 恢复上下文状态：
-   ├── restoreCostStateForSession(sessionId)  ← 恢复累计费用
-   ├── 恢复 agentSetting（用户选择的 Agent 类型）
-   └── 如果有 --rewind-files，恢复文件到指定消息时的快照
+3. Restore context state:
+   ├── restoreCostStateForSession(sessionId)  ← restore cumulative cost
+   ├── Restore agentSetting (the Agent type the user chose)
+   └── If --rewind-files is given, restore files to the snapshot at that message
 
-4. 创建 QueryEngine({ initialMessages: restoredMessages })
-   └── 从恢复的消息继续对话
+4. Create QueryEngine({ initialMessages: restoredMessages })
+   └── Continue the conversation from the restored messages
 ```
 
-## 成本追踪：从 API Usage 到美元
+## Cost tracking: from API Usage to dollars
 
-成本追踪贯穿三个模块，形成完整的记录→累计→展示链路：
+Cost tracking spans three modules, forming a complete record → accumulate → display chain:
 
-### 记录层：API 响应中的 Usage
+### Record layer: Usage in the API response
 
-每个 `message_delta` 事件携带 `usage` 字段（`input_tokens`、`output_tokens`、`cache_creation_input_tokens`、`cache_read_input_tokens`）。`accumulateUsage()` 将增量 usage 累加到会话总量。
+Each `message_delta` event carries a `usage` field (`input_tokens`, `output_tokens`, `cache_creation_input_tokens`, `cache_read_input_tokens`). `accumulateUsage()` adds the incremental usage to the session total.
 
-### 累计层：cost-tracker.ts
+### Accumulation layer: cost-tracker.ts
 
 ```typescript
-// src/cost-tracker.ts — StoredCostState 类型定义
+// src/cost-tracker.ts — StoredCostState type definition
 type StoredCostState = {
-  totalCostUSD: number                       // 累计美元花费
-  totalAPIDuration: number                   // API 调用总时长（含重试）
-  totalAPIDurationWithoutRetries: number     // 不含重试的纯推理时间
-  totalToolDuration: number                  // 工具执行总时长
-  totalLinesAdded: number                    // 代码增加行数
-  totalLinesRemoved: number                  // 代码删除行数
-  lastDuration: number | undefined           // 最近一次会话时长
-  modelUsage: { [modelName: string]: ModelUsage } | undefined  // 按模型分拆的用量
+  totalCostUSD: number                       // cumulative spend in USD
+  totalAPIDuration: number                   // total API call time (including retries)
+  totalAPIDurationWithoutRetries: number     // pure inference time without retries
+  totalToolDuration: number                  // total tool execution time
+  totalLinesAdded: number                    // lines of code added
+  totalLinesRemoved: number                  // lines of code removed
+  lastDuration: number | undefined           // duration of the most recent session
+  modelUsage: { [modelName: string]: ModelUsage } | undefined  // usage broken down by model
 }
 ```
 
-`addToTotalSessionCost()` 根据模型定价计算每次 API 调用的费用，累计到 `totalCostUSD`。按模型的 `ModelUsage` 支持在同一会话中切换模型后分别统计。
+`addToTotalSessionCost()` computes the cost of each API call from the model's pricing and adds it to `totalCostUSD`. The per-model `ModelUsage` allows separate accounting when the model is switched within one session.
 
-### 持久化：跨重启保留
+### Persistence: surviving restarts
 
 ```typescript
-// 每次会话结束时保存到项目配置
+// Saved to the project config at the end of each session
 saveCurrentSessionCosts(sessionId)
   → projectConfig.lastCost = totalCostUSD
   → projectConfig.lastSessionId = sessionId
   → projectConfig.lastModelUsage = modelUsage
 ```
 
-### 预算熔断
+### Budget circuit breaker
 
-`QueryEngineConfig.maxBudgetUsd` 提供了会话级的硬性预算上限。在 REPL 中，当累计费用超过 $5 时（`src/screens/REPL.tsx` 中费用阈值 `useEffect`），弹出费用提醒对话框——这不是硬性阻断，而是"软提醒"，且仅在 `hasConsoleBillingAccess()` 为 true 时显示。
+`QueryEngineConfig.maxBudgetUsd` provides a hard session-level budget cap. In the REPL, when cumulative cost exceeds $5 (the cost-threshold `useEffect` in `src/screens/REPL.tsx`), a cost reminder dialog pops up. This is not a hard block but a "soft reminder", and it is shown only when `hasConsoleBillingAccess()` is true.
 
-## 模型热切换
+## Hot model switching
 
-在一个会话中切换模型不会丢失对话历史——因为 `mutableMessages` 与模型选择是解耦的：
+Switching models within a session does not lose conversation history, because `mutableMessages` is decoupled from the model choice:
 
 ```
 /model sonnet → QueryEngine.setModel('claude-sonnet-4-20250514')
-  ↓  实际操作：this.config.userSpecifiedModel = model（QueryEngine.setModel() 方法）
-下一次 submitMessage() 开始时：
+  ↓  what actually happens: this.config.userSpecifiedModel = model (the QueryEngine.setModel() method)
+At the start of the next submitMessage():
   ↓
 parseUserSpecifiedModel(this.config.userSpecifiedModel)
-  → 返回新的模型配置
+  → returns the new model config
   ↓
 fetchSystemPromptParts({ mainLoopModel: newModel })
-  → System Prompt 根据新模型能力重新组装
+  → System Prompt is reassembled for the new model's capabilities
   ↓
 query({ model: newModel, messages: this.mutableMessages })
-  → 使用完整历史 + 新模型继续对话
+  → continues the conversation with the full history + the new model
 ```
 
-切换模型时，`contextWindowTokens` 和 `maxOutputTokens` 也会根据新模型的规格重新计算——例如从 Sonnet 切换到 Opus 时，上下文窗口可能从 200K 变为 1M。
+On a model switch, `contextWindowTokens` and `maxOutputTokens` are also recomputed from the new model's specs. For example, switching from Sonnet to Opus may change the context window from 200K to 1M.
 
-## 文件快照与回滚
+## File snapshots and rollback
 
-`fileHistoryMakeSnapshot()`（`src/utils/fileHistory.ts`）在 AI 每次修改文件前自动保存当前内容。快照绑定到具体的 `message.id`，使得 `--rewind-files <user-message-id>` 可以精确恢复到对话中任意时间点的文件状态——这比 git 更细粒度（git 只追踪已提交的内容）。
+`fileHistoryMakeSnapshot()` (`src/utils/fileHistory.ts`) automatically saves the current contents before every file change the AI makes. A snapshot is bound to a specific `message.id`, so `--rewind-files <user-message-id>` can restore file state to any point in the conversation. This is finer-grained than git, which only tracks what has been committed.

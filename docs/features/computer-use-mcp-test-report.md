@@ -1,277 +1,278 @@
-# Computer Use MCP 工具测试报告
+# Computer Use MCP Tool Test Report
 
-> 测试日期: 2026-04-04
-> 测试环境: macOS Darwin 25.4.0, Cursor (IDE tier: click)
+> Test date: 2026-04-04
+> Test environment: macOS Darwin 25.4.0, Cursor (IDE tier: click)
 > MCP Server: `@ant/computer-use-mcp`
 
-## 工具总览
+## Tool Overview
 
-共 17 个工具（含 batch 复合操作），分为 5 大类：
+There are 17 tools in total (including the composite batch operation), in 5 categories:
 
-| 类别 | 工具 | 数量 |
-|------|------|------|
-| 截图/显示 | `screenshot`, `switch_display`, `zoom` | 3 |
-| 鼠标操作 | `left_click`, `right_click`, `double_click`, `triple_click`, `middle_click`, `left_click_drag`, `mouse_move` | 7 |
-| 键盘操作 | `key`, `type`, `hold_key` | 3 |
-| 状态查询 | `cursor_position`, `request_access` | 2 |
-| 复合/辅助 | `computer_batch`, `wait` | 2 |
-
----
-
-## 测试结果
-
-### 1. 权限管理
-
-#### `request_access` — 请求应用访问权限
-
-| 项目 | 结果 |
-|------|------|
-| 状态 | ✅ 通过 |
-| 行为 | 弹出系统对话框请求用户授权，支持批量申请多个应用 |
-| 返回 | `{ granted: [...], denied: [...], tierGuidance: "..." }` |
-| 权限分级 | `click`（仅点击）, `full`（完整控制） |
-| 说明 | IDE 类应用（Cursor、VSCode、Terminal）默认授予 `click` tier，限制键盘输入和右键操作；系统应用（System Settings）授予 `full` tier |
-
-#### 已授权应用
-
-| 应用 | Tier | 能力 |
-|------|------|------|
-| Cursor | click | 可见 + 纯左键点击（无键盘输入、右键、修饰键点击、拖拽） |
-| Terminal | click | 同上 |
-| System Settings | full | 完整控制（键鼠、拖拽等） |
-| Finder | — | 已授权 |
+| Category | Tools | Count |
+|----------|-------|-------|
+| Screenshot/display | `screenshot`, `switch_display`, `zoom` | 3 |
+| Mouse | `left_click`, `right_click`, `double_click`, `triple_click`, `middle_click`, `left_click_drag`, `mouse_move` | 7 |
+| Keyboard | `key`, `type`, `hold_key` | 3 |
+| State queries | `cursor_position`, `request_access` | 2 |
+| Composite/helper | `computer_batch`, `wait` | 2 |
 
 ---
 
-### 2. 截图与显示
+## Test Results
 
-#### `screenshot` — 截取屏幕截图
+### 1. Permission Management
 
-| 项目 | 结果 |
-|------|------|
-| 状态 | ⚠️ 部分通过 |
-| 执行 | 工具成功执行，返回 `ok: true` |
-| 图片 | **未返回可视图片内容**（output 为空字符串） |
-| `save_to_disk` | 设置后仍无输出 |
-| 分析 | 可能原因：(1) macOS 屏幕录制权限未授予；(2) 当前前台应用未被过滤导致截图为空；(3) MCP 传输层未正确编码图片数据 |
-| 建议 | 检查 **系统设置 → 隐私与安全性 → 屏幕录制** 是否授权给运行 Claude Code 的应用 |
+#### `request_access` — Request application access
 
-#### `switch_display` — 切换显示器
+| Item | Result |
+|------|--------|
+| Status | ✅ Passed |
+| Behavior | Shows a system dialog asking the user for authorization; multiple applications can be requested at once |
+| Returns | `{ granted: [...], denied: [...], tierGuidance: "..." }` |
+| Permission tiers | `click` (clicks only), `full` (full control) |
+| Notes | IDE-type applications (Cursor, VSCode, Terminal) get the `click` tier by default, which restricts keyboard input and right-click; system applications (System Settings) get the `full` tier |
 
-| 项目 | 结果 |
-|------|------|
-| 状态 | ✅ 通过 |
-| 行为 | 接受显示器名称或 `"auto"`（自动选择） |
-| 返回 | 确认消息 |
+#### Authorized Applications
 
-#### `zoom` — 区域放大截图
-
-| 项目 | 结果 |
-|------|------|
-| 状态 | ⏭️ 跳过 |
-| 原因 | 依赖 `screenshot` 返回的图片坐标，截图未返回图片无法测试 |
+| Application | Tier | Capabilities |
+|-------------|------|--------------|
+| Cursor | click | Visible + plain left-click only (no keyboard input, right-click, modifier-key clicks or drag) |
+| Terminal | click | Same as above |
+| System Settings | full | Full control (keyboard, mouse, drag, etc.) |
+| Finder | — | Authorized |
 
 ---
 
-### 3. 鼠标操作
+### 2. Screenshots and Displays
 
-> 以下测试在 Cursor 窗口上执行（tier: click）
+#### `screenshot` — Capture a screenshot
 
-#### `mouse_move` — 移动鼠标
+| Item | Result |
+|------|--------|
+| Status | ⚠️ Partially passed |
+| Execution | The tool ran successfully and returned `ok: true` |
+| Image | **No visible image content returned** (output is an empty string) |
+| `save_to_disk` | Still no output after setting it |
+| Analysis | Possible causes: (1) macOS screen recording permission not granted; (2) the current foreground application was not filtered, leaving an empty capture; (3) the MCP transport layer did not encode the image data correctly |
+| Suggestion | Check whether **System Settings → Privacy & Security → Screen Recording** is granted to the application running Claude Code |
 
-| 项目 | 结果 |
-|------|------|
-| 状态 | ✅ 通过 |
-| 输入 | `coordinate: [500, 500]` |
-| 返回 | `"Moved."` |
+#### `switch_display` — Switch display
 
-#### `left_click` — 左键单击
+| Item | Result |
+|------|--------|
+| Status | ✅ Passed |
+| Behavior | Accepts a display name or `"auto"` (automatic selection) |
+| Returns | A confirmation message |
 
-| 项目 | 结果 |
-|------|------|
-| 状态 | ✅ 通过 |
-| 输入 | `coordinate: [500, 500]` |
-| 返回 | `"Clicked."` |
+#### `zoom` — Zoomed region screenshot
 
-#### `double_click` — 双击
-
-| 项目 | 结果 |
-|------|------|
-| 状态 | ✅ 通过 |
-| 输入 | `coordinate: [500, 500]` |
-| 返回 | `"Clicked."` |
-
-#### `triple_click` — 三击
-
-| 项目 | 结果 |
-|------|------|
-| 状态 | ✅ 通过 |
-| 输入 | `coordinate: [500, 500]` |
-| 返回 | `"Clicked."` |
-
-#### `right_click` — 右键点击
-
-| 项目 | 结果 |
-|------|------|
-| 状态 | ⚠️ 受 tier 限制 |
-| Cursor (click tier) | ❌ 被拒绝 — `"Code" is granted at tier "click" — right-click, middle-click, and clicks with modifier keys require tier "full"` |
-| Finder (full tier) | ✅ 通过 — 返回 `"Clicked."` |
-| 结论 | 功能正常，IDE 安全限制符合预期 |
-
-#### `middle_click` — 中键点击
-
-| 项目 | 结果 |
-|------|------|
-| 状态 | ⚠️ 受 tier 限制 |
-| Cursor (click tier) | ❌ 被拒绝 — 同 `right_click`，需要 full tier |
-| Finder (full tier) | ✅ 通过 — 返回 `"Clicked."` |
-| 结论 | 功能正常，IDE 安全限制符合预期 |
-
-#### `left_click_drag` — 拖拽
-
-| 项目 | 结果 |
-|------|------|
-| 状态 | ⚠️ 受 tier 限制 |
-| Cursor (click tier) | ❌ 被拒绝 — 拖拽被视为修饰键点击，需要 full tier |
-| Finder (full tier) | ✅ 通过 — 返回 `"Dragged."` |
-| 结论 | 功能正常，IDE 安全限制符合预期 |
-
-#### `scroll` — 滚轮滚动
-
-| 项目 | 结果 |
-|------|------|
-| 状态 | ✅ 通过 |
-| 输入 | `coordinate: [500, 500]`, `scroll_direction: "down"`, `scroll_amount: 3` |
-| 返回 | `"Scrolled."` |
-| 反向 | ✅ `scroll_direction: "up"` 也通过 |
+| Item | Result |
+|------|--------|
+| Status | ⏭️ Skipped |
+| Reason | Depends on the image coordinates returned by `screenshot`; cannot be tested because no image was returned |
 
 ---
 
-### 4. 键盘操作
+### 3. Mouse Operations
 
-> 以下测试在 Cursor 窗口上执行（tier: click）— 所有键盘操作均被拒绝
+> The following tests ran against the Cursor window (tier: click)
 
-#### `key` — 按键/快捷键
+#### `mouse_move` — Move the mouse
 
-| 项目 | 结果 |
-|------|------|
-| 状态 | ⚠️ 受 tier 限制 |
-| Cursor (click tier) | ❌ 被拒绝 — IDE tier 限制键盘输入 |
-| Finder (full tier) | ✅ 通过 — `escape` 按键成功，返回 `"Key pressed."` |
-| 结论 | 功能正常，IDE 安全限制符合预期 |
+| Item | Result |
+|------|--------|
+| Status | ✅ Passed |
+| Input | `coordinate: [500, 500]` |
+| Returns | `"Moved."` |
 
-#### `type` — 输入文本
+#### `left_click` — Left click
 
-| 项目 | 结果 |
-|------|------|
-| 状态 | ⚠️ 受 tier 限制 |
-| Cursor (click tier) | ❌ 被拒绝 — IDE tier 限制文本输入 |
-| Finder (full tier) | ✅ 通过 — 输入 `"hello"` 成功，返回 `"Typed 5 grapheme(s)."` |
-| 结论 | 功能正常，IDE 安全限制符合预期 |
+| Item | Result |
+|------|--------|
+| Status | ✅ Passed |
+| Input | `coordinate: [500, 500]` |
+| Returns | `"Clicked."` |
 
-#### `hold_key` — 按住按键
+#### `double_click` — Double click
 
-| 项目 | 结果 |
-|------|------|
-| 状态 | ⚠️ 受 tier 限制 |
-| Cursor (click tier) | ❌ 被拒绝 — IDE tier 限制键盘输入 |
-| Finder (full tier) | ✅ 通过 — 按住 `shift` 1 秒成功，返回 `"Key held."` |
-| 结论 | 功能正常，IDE 安全限制符合预期 |
+| Item | Result |
+|------|--------|
+| Status | ✅ Passed |
+| Input | `coordinate: [500, 500]` |
+| Returns | `"Clicked."` |
 
----
+#### `triple_click` — Triple click
 
-### 5. 状态查询
+| Item | Result |
+|------|--------|
+| Status | ✅ Passed |
+| Input | `coordinate: [500, 500]` |
+| Returns | `"Clicked."` |
 
-#### `cursor_position` — 获取鼠标位置
+#### `right_click` — Right click
 
-| 项目 | 结果 |
-|------|------|
-| 状态 | ✅ 通过 |
-| 返回 | `{"x": null, "y": null, "coordinateSpace": "image_pixels"}` |
-| 说明 | 坐标为 null 是因为没有成功截图，无参考坐标系 |
+| Item | Result |
+|------|--------|
+| Status | ⚠️ Restricted by tier |
+| Cursor (click tier) | ❌ Denied — `"Code" is granted at tier "click" — right-click, middle-click, and clicks with modifier keys require tier "full"` |
+| Finder (full tier) | ✅ Passed — returned `"Clicked."` |
+| Conclusion | Works correctly; the IDE security restriction is as expected |
 
----
+#### `middle_click` — Middle click
 
-### 6. 复合/辅助操作
+| Item | Result |
+|------|--------|
+| Status | ⚠️ Restricted by tier |
+| Cursor (click tier) | ❌ Denied — same as `right_click`, requires the full tier |
+| Finder (full tier) | ✅ Passed — returned `"Clicked."` |
+| Conclusion | Works correctly; the IDE security restriction is as expected |
 
-#### `computer_batch` — 批量执行操作
+#### `left_click_drag` — Drag
 
-| 项目 | 结果 |
-|------|------|
-| 状态 | ✅ 通过 |
-| 行为 | 按顺序执行操作列表，遇到失败则停止后续操作 |
-| 返回 | `{ completed: [...], failed: {...}, remaining: N }` |
-| 特点 | 单次 API 调用执行多个操作，减少往返延迟 |
-| 错误处理 | 失败的操作会中断后续操作，返回已完成和剩余数量 |
+| Item | Result |
+|------|--------|
+| Status | ⚠️ Restricted by tier |
+| Cursor (click tier) | ❌ Denied — dragging is treated as a modifier-key click and requires the full tier |
+| Finder (full tier) | ✅ Passed — returned `"Dragged."` |
+| Conclusion | Works correctly; the IDE security restriction is as expected |
 
-#### `wait` — 等待
+#### `scroll` — Scroll wheel
 
-| 项目 | 结果 |
-|------|------|
-| 状态 | ✅ 通过 |
-| 输入 | `duration: 1` (秒) |
-| 返回 | `"Waited 1s."` |
-| 最大值 | 100 秒 |
-
----
-
-## 汇总统计
-
-| 状态 | 数量 | 工具 |
-|------|------|------|
-| ✅ 通过 | 10 | `request_access`, `switch_display`, `mouse_move`, `left_click`, `double_click`, `triple_click`, `scroll`, `cursor_position`, `computer_batch`, `wait` |
-| ⚠️ 部分通过 | 7 | `screenshot`（执行成功但无图片返回）, `right_click`, `middle_click`, `left_click_drag`, `key`, `type`, `hold_key`（均在 full tier 应用上通过，IDE click tier 限制是预期行为） |
-| ❌ 被拒绝 | 0 | — |
-| ⏭️ 跳过 | 1 | `zoom`（依赖截图） |
+| Item | Result |
+|------|--------|
+| Status | ✅ Passed |
+| Input | `coordinate: [500, 500]`, `scroll_direction: "down"`, `scroll_amount: 3` |
+| Returns | `"Scrolled."` |
+| Reverse | ✅ `scroll_direction: "up"` also passed |
 
 ---
 
-## 已知问题
+### 4. Keyboard Operations
 
-### P0: 截图无图片返回
+> The following tests ran against the Cursor window (tier: click); all keyboard operations were denied
 
-`screenshot` 工具执行成功但未返回图片内容，导致：
-- 无法获取屏幕坐标参考
-- `cursor_position` 返回 null 坐标
-- `zoom` 无法使用
-- 所有点击操作只能盲点（无截图验证）
+#### `key` — Key press / shortcut
 
-**可能原因**:
-1. macOS 屏幕录制权限未授予
-2. MCP 图片传输/编码问题
-3. 截图内容被安全过滤机制过滤
+| Item | Result |
+|------|--------|
+| Status | ⚠️ Restricted by tier |
+| Cursor (click tier) | ❌ Denied — the IDE tier restricts keyboard input |
+| Finder (full tier) | ✅ Passed — the `escape` key press succeeded, returned `"Key pressed."` |
+| Conclusion | Works correctly; the IDE security restriction is as expected |
 
-**建议排查**: 检查 `系统设置 → 隐私与安全性 → 屏幕录制` 权限。
+#### `type` — Type text
 
-### P1: IDE 应用键盘操作受限 — ✅ 已确认功能正常
+| Item | Result |
+|------|--------|
+| Status | ⚠️ Restricted by tier |
+| Cursor (click tier) | ❌ Denied — the IDE tier restricts text input |
+| Finder (full tier) | ✅ Passed — typing `"hello"` succeeded, returned `"Typed 5 grapheme(s)."` |
+| Conclusion | Works correctly; the IDE security restriction is as expected |
 
-IDE 类应用（Cursor、VSCode、Terminal）被限制在 `click` tier，无法执行：
-- 键盘输入（`key`, `type`, `hold_key`）
-- 右键/中键点击（`right_click`, `middle_click`）
-- 拖拽操作（`left_click_drag`）
+#### `hold_key` — Hold a key
 
-这是安全设计，防止 AI 操控 IDE 终端。**在 full tier 应用（Finder、System Settings）上，以上 6 个操作均测试通过，功能完全正常。**
+| Item | Result |
+|------|--------|
+| Status | ⚠️ Restricted by tier |
+| Cursor (click tier) | ❌ Denied — the IDE tier restricts keyboard input |
+| Finder (full tier) | ✅ Passed — holding `shift` for 1 second succeeded, returned `"Key held."` |
+| Conclusion | Works correctly; the IDE security restriction is as expected |
 
 ---
 
-## 权限模型说明
+### 5. State Queries
 
-Computer Use MCP 采用分级权限模型：
+#### `cursor_position` — Get the mouse position
+
+| Item | Result |
+|------|--------|
+| Status | ✅ Passed |
+| Returns | `{"x": null, "y": null, "coordinateSpace": "image_pixels"}` |
+| Notes | The coordinates are null because no screenshot succeeded, so there is no reference coordinate system |
+
+---
+
+### 6. Composite/Helper Operations
+
+#### `computer_batch` — Run operations in batch
+
+| Item | Result |
+|------|--------|
+| Status | ✅ Passed |
+| Behavior | Runs the list of operations in order and stops the remaining ones when one fails |
+| Returns | `{ completed: [...], failed: {...}, remaining: N }` |
+| Characteristics | Runs multiple operations in a single API call, reducing round-trip latency |
+| Error handling | A failed operation interrupts the following ones; the completed and remaining counts are returned |
+
+#### `wait` — Wait
+
+| Item | Result |
+|------|--------|
+| Status | ✅ Passed |
+| Input | `duration: 1` (seconds) |
+| Returns | `"Waited 1s."` |
+| Maximum | 100 seconds |
+
+---
+
+## Summary
+
+| Status | Count | Tools |
+|--------|-------|-------|
+| ✅ Passed | 10 | `request_access`, `switch_display`, `mouse_move`, `left_click`, `double_click`, `triple_click`, `scroll`, `cursor_position`, `computer_batch`, `wait` |
+| ⚠️ Partially passed | 7 | `screenshot` (ran successfully but returned no image), `right_click`, `middle_click`, `left_click_drag`, `key`, `type`, `hold_key` (all passed on full-tier applications; the IDE click-tier restriction is expected behavior) |
+| ❌ Denied | 0 | — |
+| ⏭️ Skipped | 1 | `zoom` (depends on screenshots) |
+
+---
+
+## Known Issues
+
+### P0: Screenshot returns no image
+
+The `screenshot` tool runs successfully but returns no image content, which means:
+- No screen coordinate reference is available
+- `cursor_position` returns null coordinates
+- `zoom` cannot be used
+- All click operations are blind (no screenshot to verify against)
+
+**Possible causes**:
+1. macOS screen recording permission not granted
+2. An MCP image transport/encoding problem
+3. The screenshot content was removed by a security filter
+
+**Suggested investigation**: check the `System Settings → Privacy & Security → Screen Recording` permission.
+
+### P1: Keyboard operations restricted in IDE applications — ✅ Confirmed working as designed
+
+IDE-type applications (Cursor, VSCode, Terminal) are limited to the `click` tier and cannot perform:
+- Keyboard input (`key`, `type`, `hold_key`)
+- Right/middle click (`right_click`, `middle_click`)
+- Drag (`left_click_drag`)
+
+This is a security design that stops the AI from controlling the IDE terminal. **On full-tier applications (Finder, System Settings), all six of these operations passed testing and work fully.**
+
+---
+
+## Permission Model
+
+Computer Use MCP uses a tiered permission model:
 
 ```
 ┌─────────────────────────────────────────┐
 │  Tier: full                             │
-│  - 所有鼠标操作（左键、右键、中键、拖拽）  │
-│  - 键盘输入（type, key, hold_key）       │
-│  - 适用于: 系统应用、Finder 等           │
+│  - All mouse operations (left, right,   │
+│    middle, drag)                        │
+│  - Keyboard input (type, key, hold_key) │
+│  - For: system apps, Finder, etc.       │
 ├─────────────────────────────────────────┤
 │  Tier: click                            │
-│  - 仅纯左键点击                          │
-│  - 滚轮滚动                             │
-│  - 适用于: IDE、Terminal 等              │
+│  - Plain left-click only                │
+│  - Scroll wheel                         │
+│  - For: IDEs, Terminal, etc.            │
 ├─────────────────────────────────────────┤
-│  未授权                                  │
-│  - 所有操作被拒绝                        │
-│  - 需通过 request_access 申请            │
+│  Not authorized                         │
+│  - All operations denied                │
+│  - Request through request_access       │
 └─────────────────────────────────────────┘
 ```

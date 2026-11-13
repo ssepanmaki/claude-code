@@ -7,19 +7,19 @@ describe('getLatestChannelContextHint', () => {
       getLatestChannelContextHint([
         {
           type: 'user',
-          origin: { kind: 'channel', server: 'plugin:weixin:weixin' },
+          origin: { kind: 'channel', server: 'plugin:telegram:telegram' },
           message: {
             content: [
               {
                 type: 'text',
-                text: '<channel source="plugin:weixin:weixin" chat_id="user-1" sender_id="user-1">\nhello\n</channel>',
+                text: '<channel source="plugin:telegram:telegram" chat_id="user-1" sender_id="user-1">\nhello\n</channel>',
               },
             ],
           },
         },
       ]),
     ).toEqual({
-      sourceServer: 'plugin:weixin:weixin',
+      sourceServer: 'plugin:telegram:telegram',
       chatId: 'user-1',
     })
   })

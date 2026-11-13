@@ -44,7 +44,6 @@ data
 .codex/skills/.system/**
 !.codex/prompts/
 !.codex/prompts/**
-teach-me
 credentials.json
 
 # Session-scoped progress / state files written by agents and skills

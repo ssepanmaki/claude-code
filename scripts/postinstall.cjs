@@ -37,7 +37,6 @@ try {
 
 const RG_VERSION = '15.0.1'
 const DEFAULT_RELEASE_BASE = `https://github.com/microsoft/ripgrep-prebuilt/releases/download/v${RG_VERSION}`
-const MIRROR_RELEASE_BASE = `https://ghproxy.net/https://github.com/microsoft/ripgrep-prebuilt/releases/download/v${RG_VERSION}`
 const RELEASE_BASE = (
   process.env.RIPGREP_DOWNLOAD_BASE ?? DEFAULT_RELEASE_BASE
 ).replace(/\/$/, '')
@@ -327,9 +326,6 @@ async function downloadAndExtract() {
   const extractedBinary = process.platform === 'win32' ? 'rg.exe' : 'rg'
 
   const mirrors = [RELEASE_BASE]
-  if (RELEASE_BASE === DEFAULT_RELEASE_BASE.replace(/\/$/, '')) {
-    mirrors.push(MIRROR_RELEASE_BASE.replace(/\/$/, ''))
-  }
 
   let buffer
   let lastError

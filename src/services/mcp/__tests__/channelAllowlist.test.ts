@@ -7,8 +7,8 @@ mock.module('../../analytics/growthbook.js', () => ({
 import { isChannelAllowlisted } from '../channelAllowlist.js'
 
 describe('isChannelAllowlisted', () => {
-  test('allows builtin weixin plugin', () => {
-    expect(isChannelAllowlisted('weixin@builtin')).toBe(true)
+  test('rejects builtin plugins that are not on the allowlist', () => {
+    expect(isChannelAllowlisted('example@builtin')).toBe(false)
   })
 
   test('rejects undefined plugin source', () => {

@@ -1,170 +1,164 @@
-# Claude Code Best (CCB) — 全功能使用指南
+# Claude Code Best (CCB) — Complete Feature Guide
 
-本文档覆盖我们通过 13 个 PR 为 CCB 恢复/新增的**全部功能**，按类别组织，每个功能包含说明、使用方法和示例。
-
----
-
-## 目录
-
-1. [Buddy 伴侣系统](#1-buddy-伴侣系统)
-2. [Remote Control 远程控制](#2-remote-control-远程控制)
-3. [定时任务 /triggers](#3-定时任务-triggers)
-4. [Voice Mode 语音模式](#4-voice-mode-语音模式)
-5. [Chrome 浏览器控制](#5-chrome-浏览器控制)
-6. [Computer Use 屏幕操控](#6-computer-use-屏幕操控)
-7. [Feature Flags 与 GrowthBook](#7-feature-flags-与-growthbook)
-8. [/ultraplan 高级规划](#8-ultraplan-高级规划)
-9. [Daemon 后台守护](#9-daemon-后台守护)
-10. [Pipe IPC 多实例协作](#10-pipe-ipc-多实例协作)
-11. [LAN Pipes 局域网群控](#11-lan-pipes-局域网群控)
-12. [Monitor 后台监控](#12-monitor-后台监控)
-13. [Workflow 工作流脚本](#13-workflow-工作流脚本)
-14. [Coordinator 多Worker协调](#14-coordinator-多worker协调)
-15. [Proactive 自主模式](#15-proactive-自主模式)
-16. [History / Snip 历史管理](#16-history--snip-历史管理)
-17. [Fork 子Agent](#17-fork-子agent)
-18. [其他恢复的工具](#18-其他恢复的工具)
+This document covers **all features** restored or added in this fork, organized by category. Each feature includes a description, usage, and examples.
 
 ---
 
-## 1. Buddy 伴侣系统
+## Contents
 
-**PR**: #82 `refactor(buddy): align companion system with official CLI`
+1. [Buddy companion system](#1-buddy-companion-system)
+2. [Remote Control](#2-remote-control)
+3. [Scheduled tasks /triggers](#3-scheduled-tasks-triggers)
+4. [Voice Mode](#4-voice-mode)
+5. [Chrome browser control](#5-chrome-browser-control)
+6. [Computer Use](#6-computer-use)
+7. [Feature Flags and GrowthBook](#7-feature-flags-and-growthbook)
+8. [/ultraplan advanced planning](#8-ultraplan-advanced-planning)
+9. [Daemon](#9-daemon)
+10. [Pipe IPC multi-instance collaboration](#10-pipe-ipc-multi-instance-collaboration)
+11. [LAN Pipes](#11-lan-pipes)
+12. [Monitor background monitoring](#12-monitor-background-monitoring)
+13. [Workflow scripts](#13-workflow-scripts)
+14. [Coordinator multi-worker orchestration](#14-coordinator-multi-worker-orchestration)
+15. [Proactive mode](#15-proactive-mode)
+16. [History / Snip](#16-history--snip)
+17. [Fork sub-agent](#17-fork-sub-agent)
+18. [Other restored tools](#18-other-restored-tools)
+
+---
+
+## 1. Buddy companion system
+
 **Feature Flag**: `BUDDY`
 
-### 说明
-Buddy 是一个后台运行的伴侣 AI，在你主对话进行的同时，异步观察会话内容并提供建议。
+### Description
+Buddy is a companion AI that runs in the background. While your main conversation continues, it asynchronously observes the session and offers suggestions.
 
-### 使用
+### Usage
 ```bash
-# 启动时自动加载（feature 默认开启）
+# Loaded automatically at startup (the feature is on by default)
 bun run dev
 
-# 在对话中，Buddy 会在适当时机自动提供建议
-# 例如当你在调试时，Buddy 可能提示你检查日志
+# During a conversation, Buddy offers suggestions at suitable moments
+# For example, while you are debugging, Buddy may suggest checking the logs
 ```
 
 ---
 
-## 2. Remote Control 远程控制
+## 2. Remote Control
 
-**PR**: #60 `feat: enable Remote Control (BRIDGE_MODE)` + #170 `feat: restore daemon supervisor`
 **Feature Flag**: `BRIDGE_MODE`
 
-### 说明
-通过 WebSocket 远程控制 Claude Code 会话。支持自托管私有部署。
+### Description
+Control a Claude Code session remotely over WebSocket. Self-hosted private deployment is supported.
 
-### 使用
+### Usage
 ```bash
-# 启动远程控制模式
+# Start remote control mode
 bun run dev -- remote-control
 
-# 使用自托管服务器
+# Use a self-hosted server
 CLAUDE_BRIDGE_BASE_URL=https://your-server.com CLAUDE_BRIDGE_OAUTH_TOKEN=your-token bun run dev --remote-control
 
-# 或通过 /remote-control 命令在会话中启动
+# Or start it from within a session with the /remote-control command
 /remote-control
 ```
 
-### 命令
-- `claude remote-control` / `claude rc` — 启动远程控制客户端
-- `claude bridge` — 同上（别名）
+### Commands
+- `claude remote-control` / `claude rc` — start the remote control client
+- `claude bridge` — same as above (alias)
 
 ---
 
-## 3. 定时任务 /triggers
+## 3. Scheduled tasks /triggers
 
-**PR**: #88 `feat: enable /schedule by adding AGENT_TRIGGERS_REMOTE`
 **Feature Flag**: `AGENT_TRIGGERS_REMOTE`
 
-> 命令名已从 `/schedule` 改为 `/triggers`，避免与上游 bundled skill `schedule` 冲突。`/cron` 是别名。
+> The command was renamed from `/schedule` to `/triggers` to avoid a conflict with the bundled skill `schedule`. `/cron` is an alias.
 
-### 说明
-创建定时执行的远程 agent 任务，支持 cron 表达式。
+### Description
+Create remote agent tasks that run on a schedule, with cron expression support.
 
-### 使用
+### Usage
 ```
-/triggers create "每天检查依赖更新" --cron "0 9 * * *" --prompt "检查 package.json 中的过期依赖并创建更新 PR"
-/triggers list          — 列出所有定时任务
-/triggers delete <id>   — 删除指定任务
+/triggers create "Check dependency updates daily" --cron "0 9 * * *" --prompt "Check package.json for outdated dependencies and open an update PR"
+/triggers list          — list all scheduled tasks
+/triggers delete <id>   — delete a task
 ```
 
 ---
 
-## 4. Voice Mode 语音模式
+## 4. Voice Mode
 
-**PR**: #92 `feat: enable /voice mode with native audio binaries`
 **Feature Flag**: `VOICE_MODE`
 
-### 说明
-Push-to-Talk 语音输入，音频通过 WebSocket 流式传输到 Anthropic STT（Nova 3）。需要 Anthropic OAuth 认证（非 API key）。
+### Description
+Push-to-talk voice input. Audio is streamed over WebSocket to Anthropic STT (Nova 3). Requires Anthropic OAuth authentication (not an API key).
 
-### 使用
+### Usage
 ```bash
-# 确保已通过 OAuth 登录
+# Make sure you are logged in via OAuth
 claude auth login
 
-# 在会话中按住指定键说话
-# 松开后自动转写为文字输入
+# In a session, hold the configured key and speak
+# On release, the speech is transcribed into text input
 ```
 
-### 前提条件
-- Anthropic OAuth 认证（不支持 API key 模式）
-- 系统麦克风权限
+### Prerequisites
+- Anthropic OAuth authentication (API key mode is not supported)
+- System microphone permission
 
 ---
 
-## 5. Chrome 浏览器控制
+## 5. Chrome browser control
 
-**PR**: #93 `feat: enable Claude in Chrome MCP with full browser control`
 **Feature Flag**: `CHICAGO_MCP`
 
-### 说明
-通过 Chrome 扩展控制浏览器：导航、点击、填表、截图、执行 JS。
+### Description
+Control the browser through a Chrome extension: navigate, click, fill forms, take screenshots, and run JS.
 
-### 使用
+### Usage
 ```bash
-# 启动带 Chrome 控制的模式
+# Start with Chrome control
 bun run dev -- --chrome
 
-# 安装 Chrome 扩展后，AI 可以：
-# - 打开网页、点击按钮
-# - 填写表单
-# - 截取页面内容
-# - 执行 JavaScript
+# Once the Chrome extension is installed, the AI can:
+# - Open web pages and click buttons
+# - Fill in forms
+# - Capture page content
+# - Execute JavaScript
 ```
 
-### AI 可用工具
-- `navigate` — 导航到 URL
-- `click` / `find` / `form_input` — 页面交互
-- `get_page_text` / `read_page` — 读取内容
-- `javascript_tool` — 执行 JS
-- `gif_creator` — 录制操作 GIF
+### Tools available to the AI
+- `navigate` — navigate to a URL
+- `click` / `find` / `form_input` — page interaction
+- `get_page_text` / `read_page` — read content
+- `javascript_tool` — run JS
+- `gif_creator` — record an action GIF
 
 ---
 
-## 6. Computer Use 屏幕操控
+## 6. Computer Use
 
-**PR**: #98 + #137 `feat: Computer Use — 跨平台 Executor + Python Bridge + GUI 无障碍`
 **Feature Flag**: `CHICAGO_MCP`
 
-### 说明
-跨平台屏幕操控：截图、键鼠模拟、应用管理。支持 macOS + Windows，Linux 后端待完成。
+### Description
+Cross-platform screen control: screenshots, keyboard and mouse simulation, and app management. Supports macOS and Windows; the Linux backend is still to be completed.
 
-### 使用
+### Usage
 ```bash
-# 启动后 AI 可自动调用屏幕操控工具
+# After startup the AI can call the screen control tools automatically
 bun run dev
 
-# AI 可以：
-# - 截取屏幕/窗口截图
-# - 模拟键盘输入和鼠标操作
-# - 列出运行的应用
-# - 使用剪贴板
+# The AI can:
+# - Take screenshots of the screen or a window
+# - Simulate keyboard input and mouse actions
+# - List running applications
+# - Use the clipboard
 ```
 
-### 平台支持
-| 平台 | 截图 | 键鼠 | 应用管理 |
+### Platform support
+| Platform | Screenshot | Keyboard/mouse | App management |
 |------|------|------|----------|
 | macOS | ✅ | ✅ | ✅ |
 | Windows | ✅ | ✅ | ✅ |
@@ -172,174 +166,169 @@ bun run dev
 
 ---
 
-## 7. Feature Flags 与 GrowthBook
+## 7. Feature Flags and GrowthBook
 
-**PR**: #140 + #153 `feat: enable GrowthBook local gate defaults`
 **Feature Flags**: `SHOT_STATS`, `PROMPT_CACHE_BREAK_DETECTION`, `TOKEN_BUDGET`
 
-### 说明
-本地 GrowthBook gate defaults 机制，绕过远程 feature flag 服务，确保功能在无网络时也可使用。
+### Description
+A local GrowthBook gate defaults mechanism that bypasses the remote feature flag service, so features stay available without network access.
 
-### 使用
+### Usage
 ```bash
-# 通过环境变量启用任意 feature
+# Enable any feature through an environment variable
 FEATURE_PROACTIVE=1 bun run dev
 
-# dev/build 模式有各自的默认启用列表
-# 查看 scripts/dev.ts 中的 DEFAULT_FEATURES
+# dev and build modes each have their own default-enabled list
+# See DEFAULT_FEATURES in scripts/dev.ts
 ```
 
-### 关键 feature flags
-| Flag | 说明 |
+### Key feature flags
+| Flag | Description |
 |------|------|
-| `SHOT_STATS` | API 调用统计 |
-| `TOKEN_BUDGET` | Token 预算控制 |
-| `PROMPT_CACHE_BREAK_DETECTION` | Prompt 缓存命中检测 |
+| `SHOT_STATS` | API call statistics |
+| `TOKEN_BUDGET` | Token budget control |
+| `PROMPT_CACHE_BREAK_DETECTION` | Prompt cache hit detection |
 
 ---
 
-## 8. /ultraplan 高级规划
+## 8. /ultraplan advanced planning
 
-**PR**: #156 `feat: enable /ultraplan and harden GrowthBook fallback chain`
 **Feature Flag**: `ULTRAPLAN`
 
-### 说明
-高级多 agent 规划模式。将复杂任务分解为多个阶段，每阶段可分配给不同 agent 并行执行。
+### Description
+An advanced multi-agent planning mode. It breaks a complex task into phases, and each phase can be assigned to a different agent and run in parallel.
 
-### 使用
+### Usage
 ```
-/ultraplan 实现一个完整的用户认证系统，包括注册、登录、密码重置、OAuth 集成
+/ultraplan Implement a complete user authentication system, including registration, login, password reset, and OAuth integration
 ```
 
-AI 会生成：
-1. 任务分解（多阶段）
-2. 每阶段的 agent 分配
-3. 依赖关系图
-4. 并行执行计划
+The AI will produce:
+1. A task breakdown (multiple phases)
+2. Agent assignment for each phase
+3. A dependency graph
+4. A parallel execution plan
 
 ---
 
-## 9. Daemon 后台守护
+## 9. Daemon
 
-**PR**: #170 `feat: restore daemon supervisor and remoteControlServer command`
 **Feature Flag**: `DAEMON`
 
-### 说明
-Daemon 模式允许 Claude Code 作为后台长驻进程运行，管理多个 worker。
+### Description
+Daemon mode lets Claude Code run as a long-lived background process that manages multiple workers.
 
-### 使用
+### Usage
 ```bash
-# 启动 daemon
+# Start the daemon
 claude daemon start
 
-# 查看状态
+# Check status
 claude daemon status
 
-# 停止
+# Stop
 claude daemon stop
 
-# 启动远程控制服务器
+# Start the remote control server
 bun run rcs
 ```
 
 ---
 
-## 10. Pipe IPC 多实例协作
+## 10. Pipe IPC multi-instance collaboration
 
-**PR**: #241 `feat: restore pipe IPC, LAN pipes, monitor tool`
 **Feature Flag**: `UDS_INBOX`
 
-### 说明
-同一台机器上的多个 Claude Code 实例通过 UDS（Unix Domain Socket / Windows Named Pipe）自动发现并协作。首个启动的实例成为 main，后续自动注册为 sub。
+### Description
+Multiple Claude Code instances on the same machine discover each other and collaborate automatically over UDS (Unix Domain Socket / Windows Named Pipe). The first instance to start becomes main; later ones register as sub automatically.
 
-### 使用
+### Usage
 
-**启动多实例**：
+**Starting multiple instances**:
 ```bash
-# 终端 1
+# Terminal 1
 bun run dev
-# → 自动成为 main
+# → becomes main automatically
 
-# 终端 2
+# Terminal 2
 bun run dev
-# → 自动成为 sub-1，被 main attach
+# → becomes sub-1 automatically and is attached by main
 ```
 
-**管理实例**：
+**Managing instances**:
 ```
-/pipes                — 显示所有实例，Shift+↓ 展开选择面板
-/pipes select <name>  — 选中实例
-/pipes all            — 全选
-/pipes none           — 取消全选
-/attach <name>        — 手动 attach 某实例
-/detach <name>        — 断开连接
-/send <name> <msg>    — 向指定实例发送消息
-/claim-main           — 强制声明为 main
-/pipe-status          — 显示详细状态
-/peers                — 列出所有已发现的 peer
+/pipes                — show all instances; Shift+↓ expands the selection panel
+/pipes select <name>  — select an instance
+/pipes all            — select all
+/pipes none           — deselect all
+/attach <name>        — manually attach an instance
+/detach <name>        — disconnect
+/send <name> <msg>    — send a message to the given instance
+/claim-main           — force this instance to claim main
+/pipe-status          — show detailed status
+/peers                — list all discovered peers
 ```
 
-**选择面板操作**：
-1. 按 `Shift+↓` 展开面板
-2. `↑/↓` 移动光标
-3. `Space` 选中/取消 pipe
-4. `Enter` 确认关闭
-5. `←/→` 切换路由模式（selected pipes ↔ local main）
+**Selection panel controls**:
+1. Press `Shift+↓` to expand the panel
+2. `↑/↓` moves the cursor
+3. `Space` selects/deselects a pipe
+4. `Enter` confirms and closes
+5. `←/→` switches the routing mode (selected pipes ↔ local main)
 
-**消息广播**：
-选中 pipe 后，输入的消息自动路由到所有选中的 slave 执行，结果流式回传到 main。
+**Message broadcast**:
+After selecting pipes, messages you type are routed to all selected slaves for execution, and results stream back to main.
 
-**权限转发**：
-slave 执行需要权限的工具时（如 BashTool），权限请求自动转发到 main 的确认队列。
+**Permission forwarding**:
+When a slave runs a tool that needs permission (such as BashTool), the permission request is forwarded to main's confirmation queue.
 
 ---
 
-## 11. LAN Pipes 局域网群控
+## 11. LAN Pipes
 
-**PR**: #241（同上）
 **Feature Flag**: `LAN_PIPES`
 
-### 说明
-在 Pipe IPC 基础上增加 TCP 传输层和 UDP Multicast 发现，实现跨机器零配置协作。
+### Description
+Adds a TCP transport layer and UDP multicast discovery on top of Pipe IPC, enabling zero-configuration collaboration across machines.
 
-### 使用
+### Usage
 
-**局域网多机器**：
+**Multiple machines on a LAN**:
 ```bash
-# 机器 A (192.168.50.22)
+# Machine A (192.168.50.22)
 bun run dev
 
-# 机器 B (192.168.50.27)
+# Machine B (192.168.50.27)
 bun run dev
 
-# 两边启动后 3-5 秒自动发现和 attach
-# /pipes 显示 [LAN] 标记的远端实例
+# After both start, they discover and attach to each other within 3-5 seconds
+# /pipes shows remote instances marked [LAN]
 ```
 
-**防火墙配置**（每台机器都需要）：
+**Firewall configuration** (needed on every machine):
 
-Windows（管理员 PowerShell）：
+Windows (administrator PowerShell):
 ```powershell
 New-NetFirewallRule -DisplayName "CCB LAN Beacon (UDP)" -Direction Inbound -Protocol UDP -LocalPort 7101 -Action Allow -Profile Private
 New-NetFirewallRule -DisplayName "CCB LAN Pipes (TCP)" -Direction Inbound -Protocol TCP -LocalPort 1024-65535 -Program (Get-Command bun).Source -Action Allow -Profile Private
 New-NetFirewallRule -DisplayName "CCB LAN Beacon Out (UDP)" -Direction Outbound -Protocol UDP -RemotePort 7101 -Action Allow -Profile Private
 ```
 
-macOS：
+macOS:
 ```bash
-# 首次运行时系统弹对话框，点"允许"即可
+# On first run the system shows a dialog; click "Allow"
 ```
 
-Linux：
+Linux:
 ```bash
 sudo firewall-cmd --zone=trusted --add-port=7101/udp --permanent
 sudo firewall-cmd --zone=trusted --add-port=1024-65535/tcp --permanent
 sudo firewall-cmd --reload
 ```
 
-**通知显示格式**：
+**Notification format**:
 ```
-# 本机 sub
+# Local sub
 Routed to [sub-1]; main can continue other tasks
 
 # LAN peer
@@ -348,229 +337,203 @@ Routed to [main] vmwin11/192.168.50.27; main can continue other tasks
 
 ---
 
-## 12. Monitor 后台监控
+## 12. Monitor background monitoring
 
-**PR**: #241（同上）
 **Feature Flag**: `MONITOR_TOOL`
 
-### 说明
-在后台运行 shell 命令持续监控输出（类似 `watch` 命令）。AI 也可自主调用 MonitorTool。
+### Description
+Runs a shell command in the background and continuously monitors its output (similar to the `watch` command). The AI can also call MonitorTool on its own.
 
-### 使用
+### Usage
 
-**用户命令**：
+**User commands**:
 ```
 /monitor tail -f /var/log/syslog
 /monitor watch -n 5 docker ps
 /monitor "while true; do curl -s localhost:3000/health; sleep 10; done"
 ```
 
-**查看监控**：
-- 按 `Shift+Down` 展开后台任务面板
-- 查看监控输出和状态
+**Viewing monitors**:
+- Press `Shift+Down` to expand the background task panel
+- Check the monitor output and status
 
-**Windows 兼容**：
-`watch -n <sec> <cmd>` 自动转为 PowerShell 循环：
+**Windows compatibility**:
+`watch -n <sec> <cmd>` is converted automatically to a PowerShell loop:
 ```powershell
 while($true){ <cmd>; Start-Sleep -Seconds <sec> }
 ```
 
-**AI 调用**：
-AI 可在对话中自动调用 `MonitorTool` 监控日志、构建输出等。
+**AI invocation**:
+The AI can call `MonitorTool` during a conversation to monitor logs, build output, and so on.
 
 ---
 
-## 13. Workflow 工作流脚本
+## 13. Workflow scripts
 
-**PR**: #241（同上）
 **Feature Flag**: `WORKFLOW_SCRIPTS`
 
-### 说明
-执行 `.claude/workflows/` 目录下的用户定义工作流脚本。
+### Description
+Runs user-defined workflow scripts from the `.claude/workflows/` directory.
 
-### 使用
+### Usage
 
-**创建工作流**：
+**Creating a workflow**:
 ```bash
 mkdir -p .claude/workflows
-cat > .claude/workflows/deploy.sh << 'EOF'
+cat > .claude/workflows/deploy.sh << 'EOS'
 #!/bin/bash
 echo "Running tests..."
 bun test
 echo "Building..."
 bun run build
 echo "Deploying..."
-EOF
+EOS
 chmod +x .claude/workflows/deploy.sh
 ```
 
-**列出可用工作流**：
+**Listing available workflows**:
 ```
 /workflows
 ```
 
-**AI 调用**：
-AI 可通过 `WorkflowTool` 自动执行工作流：
+**AI invocation**:
+The AI can run workflows automatically through `WorkflowTool`:
 ```
-请执行 deploy 工作流
+Please run the deploy workflow
 ```
 
 ---
 
-## 14. Coordinator 多Worker协调
+## 14. Coordinator multi-worker orchestration
 
-**PR**: #241（同上）
 **Feature Flag**: `COORDINATOR_MODE`
 
-### 说明
-启用 coordinator 模式后，AI 可自动将任务分配给多个 worker 并行执行。
+### Description
+With coordinator mode on, the AI can automatically assign tasks to multiple workers that run in parallel.
 
-### 使用
+### Usage
 ```
-/coordinator       — 切换 coordinator 模式开/关
+/coordinator       — toggle coordinator mode on/off
 ```
 
-启用后，AI 在处理复杂任务时会：
-1. 分析任务可并行的部分
-2. 自动创建 worker 分支
-3. 分配子任务
-4. 汇总结果
+Once enabled, for complex tasks the AI will:
+1. Analyze which parts of the task can run in parallel
+2. Create worker branches automatically
+3. Assign subtasks
+4. Aggregate the results
 
 ---
 
-## 15. Proactive 自主模式
+## 15. Proactive mode
 
-**PR**: #241（同上）
 **Feature Flag**: `PROACTIVE` / `KAIROS`
 
-### 说明
-启用后 AI 会主动发起操作（而不仅回应用户输入），例如自动检测文件变更、主动提出优化建议。
+### Description
+When enabled, the AI initiates actions on its own (rather than only responding to user input), for example detecting file changes automatically or proposing optimizations.
 
-### 使用
+### Usage
 ```
-/proactive         — 切换 proactive 模式开/关
+/proactive         — toggle proactive mode on/off
 ```
 
 ---
 
-## 16. History / Snip 历史管理
+## 16. History / Snip
 
-**PR**: #241（同上）
 **Feature Flag**: `HISTORY_SNIP`
 
-### 说明
-查看和管理对话历史，支持手动截断以释放上下文窗口空间。
+### Description
+View and manage conversation history, with manual truncation to free up context window space.
 
-### 使用
+### Usage
 ```
-/history           — 显示对话历史摘要
-/force-snip        — 强制在当前位置截断历史
+/history           — show a summary of the conversation history
+/force-snip        — force-truncate the history at the current position
 ```
 
-AI 也可通过 `SnipTool` 自动截断过长的对话：
+The AI can also truncate an overly long conversation automatically through `SnipTool`:
 ```
-对话太长了，请帮我截断历史
+The conversation is too long, please snip the history
 ```
 
 ---
 
-## 17. Fork 子Agent
+## 17. Fork sub-agent
 
-**PR**: #241（同上）
 **Feature Flag**: `FORK_SUBAGENT`
 
-### 说明
-在当前对话上下文中 fork 一个独立的子 agent，继承完整会话状态独立执行。
+### Description
+Forks an independent sub-agent from the current conversation context. It inherits the full session state and runs on its own.
 
-### 使用
+### Usage
 ```
-/fork              — 基于当前上下文 fork 子 agent
+/fork              — fork a sub-agent from the current context
 ```
 
-子 agent 会：
-- 继承当前的全部对话历史
-- 在独立的执行环境中运行
-- 不影响主会话状态
+The sub-agent will:
+- Inherit the entire current conversation history
+- Run in an isolated execution environment
+- Leave the main session state unaffected
 
 ---
 
-## 18. 其他恢复的工具
+## 18. Other restored tools
 
-以下工具从 stub 恢复为完整实现：
+The following tools were restored from stubs to full implementations:
 
-| 工具 | 说明 | 使用 |
+| Tool | Description | Usage |
 |------|------|------|
-| `SleepTool` | 暂停执行指定时间 | AI 在轮询场景自动调用 |
-| `WebBrowserTool` | 终端内网页交互 | AI 需要查看网页时调用 |
-| `SubscribePRTool` | 订阅 GitHub PR 变更 | `/subscribe-pr` 或 AI 调用 |
-| `PushNotificationTool` | 推送桌面通知 | AI 在长任务完成时调用 |
-| `CtxInspectTool` | 检查上下文窗口使用 | AI 判断上下文剩余空间 |
-| `TerminalCaptureTool` | 截取终端屏幕 | AI 需要看终端输出时调用 |
-| `SendUserFileTool` | 向用户发送文件 | AI 导出文件时调用 |
-| `REPLTool` | 启动子 REPL 会话 | AI 需要独立交互环境时调用 |
-| `VerifyPlanExecutionTool` | 验证执行计划完成度 | AI 完成计划后自动验证 |
-| `SuggestBackgroundPRTool` | 建议创建后台 PR | AI 发现可独立的变更时提议 |
-| `ListPeersTool` | 列出已发现的 peer | AI 查询多实例状态时调用 |
+| `SleepTool` | Pause execution for a given time | Called automatically by the AI in polling scenarios |
+| `WebBrowserTool` | In-terminal web interaction | Called when the AI needs to view a web page |
+| `SubscribePRTool` | Subscribe to GitHub PR changes | `/subscribe-pr` or called by the AI |
+| `PushNotificationTool` | Send desktop notifications | Called by the AI when a long task finishes |
+| `CtxInspectTool` | Inspect context window usage | The AI checks the remaining context space |
+| `TerminalCaptureTool` | Capture the terminal screen | Called when the AI needs to see terminal output |
+| `SendUserFileTool` | Send a file to the user | Called when the AI exports a file |
+| `REPLTool` | Start a sub-REPL session | Called when the AI needs an independent interactive environment |
+| `VerifyPlanExecutionTool` | Verify plan completion | Runs automatically after the AI finishes a plan |
+| `SuggestBackgroundPRTool` | Suggest creating a background PR | Proposed when the AI finds a self-contained change |
+| `ListPeersTool` | List discovered peers | Called when the AI queries multi-instance state |
 
 ---
 
-## 附录：全部 Feature Flags
+## Appendix: All feature flags
 
-| Flag | 默认 | 说明 |
+| Flag | Default | Description |
 |------|------|------|
-| `BUDDY` | ✅ dev only | 伴侣系统 |
-| `BRIDGE_MODE` | ✅ dev only | 远程控制 |
-| `VOICE_MODE` | ✅ dev+build | 语音模式 |
+| `BUDDY` | ✅ dev only | Companion system |
+| `BRIDGE_MODE` | ✅ dev only | Remote control |
+| `VOICE_MODE` | ✅ dev+build | Voice mode |
 | `CHICAGO_MCP` | ✅ dev+build | Computer Use + Chrome |
-| `AGENT_TRIGGERS_REMOTE` | ✅ dev+build | 定时任务 |
-| `SHOT_STATS` | ✅ dev+build | API 统计 |
-| `TOKEN_BUDGET` | ✅ dev+build | Token 预算 |
-| `PROMPT_CACHE_BREAK_DETECTION` | ✅ dev+build | 缓存检测 |
-| `ULTRAPLAN` | ✅ dev+build | 高级规划 |
-| `DAEMON` | ✅ dev+build | 后台守护 |
+| `AGENT_TRIGGERS_REMOTE` | ✅ dev+build | Scheduled tasks |
+| `SHOT_STATS` | ✅ dev+build | API statistics |
+| `TOKEN_BUDGET` | ✅ dev+build | Token budget |
+| `PROMPT_CACHE_BREAK_DETECTION` | ✅ dev+build | Cache detection |
+| `ULTRAPLAN` | ✅ dev+build | Advanced planning |
+| `DAEMON` | ✅ dev+build | Background daemon |
 | `UDS_INBOX` | ✅ dev only | Pipe IPC |
-| `LAN_PIPES` | ✅ dev only | LAN 群控 |
-| `MONITOR_TOOL` | ✅ dev+build | 后台监控 |
-| `WORKFLOW_SCRIPTS` | ✅ dev+build | 工作流脚本 |
-| `FORK_SUBAGENT` | ✅ dev+build | 子 Agent |
-| `KAIROS` | ✅ dev+build | Kairos 调度 |
-| `COORDINATOR_MODE` | ✅ dev+build | 多 Worker |
-| `HISTORY_SNIP` | ✅ dev+build | 历史管理 |
-| `CONTEXT_COLLAPSE` | ✅ dev+build | 上下文折叠 |
-| `ULTRATHINK` | ✅ dev+build | 扩展思考 |
-| `EXTRACT_MEMORIES` | ✅ dev+build | 自动记忆提取 |
-| `VERIFICATION_AGENT` | ✅ dev+build | 验证 Agent |
-| `KAIROS_BRIEF` | ✅ dev+build | Brief 模式 |
-| `AWAY_SUMMARY` | ✅ dev+build | 离开摘要 |
-| `ACP` | ✅ dev+build | ACP 协议 |
-| `LODESTONE` | ✅ dev+build | 深度链接 |
-| `BUILTIN_EXPLORE_PLAN_AGENTS` | ✅ dev+build | 内置 Explore/Plan agent |
-| `AGENT_TRIGGERS` | ✅ dev+build | 本地定时任务 |
-| `BG_SESSIONS` | ✅ dev only | 后台会话 |
-| `TEMPLATES` | ✅ dev only | 模板系统 |
-| `TRANSCRIPT_CLASSIFIER` | ✅ dev only | 对话分类 |
+| `LAN_PIPES` | ✅ dev only | LAN control |
+| `MONITOR_TOOL` | ✅ dev+build | Background monitoring |
+| `WORKFLOW_SCRIPTS` | ✅ dev+build | Workflow scripts |
+| `FORK_SUBAGENT` | ✅ dev+build | Sub-agent |
+| `KAIROS` | ✅ dev+build | Kairos scheduling |
+| `COORDINATOR_MODE` | ✅ dev+build | Multi-worker |
+| `HISTORY_SNIP` | ✅ dev+build | History management |
+| `CONTEXT_COLLAPSE` | ✅ dev+build | Context collapse |
+| `ULTRATHINK` | ✅ dev+build | Extended thinking |
+| `EXTRACT_MEMORIES` | ✅ dev+build | Automatic memory extraction |
+| `VERIFICATION_AGENT` | ✅ dev+build | Verification agent |
+| `KAIROS_BRIEF` | ✅ dev+build | Brief mode |
+| `AWAY_SUMMARY` | ✅ dev+build | Away summary |
+| `ACP` | ✅ dev+build | ACP protocol |
+| `LODESTONE` | ✅ dev+build | Deep links |
+| `BUILTIN_EXPLORE_PLAN_AGENTS` | ✅ dev+build | Built-in Explore/Plan agents |
+| `AGENT_TRIGGERS` | ✅ dev+build | Local scheduled tasks |
+| `BG_SESSIONS` | ✅ dev only | Background sessions |
+| `TEMPLATES` | ✅ dev only | Template system |
+| `TRANSCRIPT_CLASSIFIER` | ✅ dev only | Transcript classification |
 
-手动启用任意 flag：
+Enable any flag manually:
 ```bash
 FEATURE_FLAG_NAME=1 bun run dev
 ```
-
----
-
-## 附录：PR 列表
-
-| PR | 日期 | 标题 |
-|----|------|------|
-| #60 | 2026-04-02 | feat: enable Remote Control (BRIDGE_MODE) |
-| #82 | 2026-04-03 | refactor(buddy): align companion system |
-| #88 | 2026-04-03 | feat: enable /schedule (AGENT_TRIGGERS_REMOTE) |
-| #89 | 2026-04-03 | feat: built-in status line |
-| #92 | 2026-04-03 | feat: enable /voice mode |
-| #93 | 2026-04-03 | feat: enable Chrome MCP |
-| #98 | 2026-04-03 | feat: enable Computer Use (macOS + Windows + Linux) |
-| #137 | 2026-04-05 | feat: Computer Use v2 — 跨平台 Executor |
-| #140 | 2026-04-05 | feat: enable SHOT_STATS, TOKEN_BUDGET |
-| #153 | 2026-04-06 | feat: enable GrowthBook local gate defaults |
-| #156 | 2026-04-06 | feat: enable /ultraplan |
-| #170 | 2026-04-07 | feat: restore daemon supervisor |
-| #241 | 2026-04-11 | feat: restore pipe IPC, LAN pipes, monitor tool |

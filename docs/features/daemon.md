@@ -1,117 +1,117 @@
-# DAEMON — 后台守护进程
+# DAEMON — Background daemon process
 
 > Feature Flag: `FEATURE_DAEMON=1`
-> 实现状态：Supervisor 和 remoteControl Worker 已实现
-> 引用数：3
+> Implementation status: the Supervisor and the remoteControl Worker are implemented
+> References: 3
 
-## 一、功能概述
+## 1. Overview
 
-DAEMON 将 Claude Code 变为后台守护进程。主进程（supervisor）管理多个 worker 子进程的生命周期，通过文件系统状态文件进行通信。适用于持续运行的后台服务场景（如配合 BRIDGE_MODE 提供远程控制服务）。
+DAEMON turns Claude Code into a background daemon process. The main process (supervisor) manages the lifecycle of several worker child processes and communicates through filesystem state files. It suits always-on background service scenarios (for example providing a remote-control service together with BRIDGE_MODE).
 
-## 二、实现架构
+## 2. Implementation architecture
 
-### 2.1 模块状态
+### 2.1 Module status
 
-| 模块 | 文件 | 状态 |
-|------|------|------|
-| 守护主进程 | `src/daemon/main.ts` | **已实现** — Supervisor 含子命令、Worker 生命周期管理、指数退避重启 |
-| Worker 注册 | `src/daemon/workerRegistry.ts` | **已实现** — remoteControl Worker（headless bridge） |
-| Daemon 状态 | `src/daemon/state.ts` | **已实现** — PID/状态文件的读写与查询 |
-| CLI 路由 | `src/entrypoints/cli.tsx` | **布线** — `--daemon-worker` 和 `daemon` 子命令 |
-| 命令注册 | `src/commands.ts` | **布线** — DAEMON + BRIDGE_MODE 门控 |
+| Module | File | Status |
+|--------|------|--------|
+| Daemon main process | `src/daemon/main.ts` | **Implemented** — Supervisor with subcommands, Worker lifecycle management, exponential-backoff restart |
+| Worker registry | `src/daemon/workerRegistry.ts` | **Implemented** — remoteControl Worker (headless bridge) |
+| Daemon state | `src/daemon/state.ts` | **Implemented** — read/write/query of the PID/state file |
+| CLI routing | `src/entrypoints/cli.tsx` | **Wired** — `--daemon-worker` and the `daemon` subcommand |
+| Command registration | `src/commands.ts` | **Wired** — gated by DAEMON + BRIDGE_MODE |
 
-### 2.2 CLI 入口
+### 2.2 CLI entry points
 
 ```
-# 启动守护进程
+# Start the daemon
 claude daemon start
 
-# 查看状态（默认子命令）
+# Show status (default subcommand)
 claude daemon status
 claude daemon ps
 
-# 停止守护进程
+# Stop the daemon
 claude daemon stop
 
-# 以 worker 身份启动（由 supervisor 自动调用）
+# Start as a worker (called automatically by the supervisor)
 claude --daemon-worker=remoteControl
 
-# 后台会话管理
+# Background session management
 claude daemon bg
 claude daemon attach <session>
 claude daemon logs <session>
 claude daemon kill <session>
 ```
 
-### 2.3 架构
+### 2.3 Architecture
 
 ```
 Supervisor (daemonMain)
       │
       ├── Worker: remoteControl
-      │   └── runBridgeHeadless() — 远程控制 headless 模式
-      │       接收远程会话、处理消息、权限审批
+      │   └── runBridgeHeadless() — remote-control headless mode
+      │       receives remote sessions, handles messages, permission approval
       │
       ▼
-文件系统状态文件 (daemon-state.json)
-  - PID、CWD、启动时间、Worker 类型
+Filesystem state file (daemon-state.json)
+  - PID, CWD, start time, Worker kinds
   - queryDaemonStatus() / stopDaemonByPid()
 ```
 
-### 2.4 Worker 生命周期管理
+### 2.4 Worker lifecycle management
 
-Supervisor 为每个 worker 实现：
-- **指数退避重启**：初始 2s，上限 120s，倍数 ×2
-- **快速失败检测**：10s 内连续崩溃 5 次则 parking（不再重启）
-- **永久错误退出码**：78 (EXIT_CODE_PERMANENT) 导致直接 parking
-- **优雅关闭**：SIGTERM/SIGINT → abort signal → 30s 强制 SIGKILL
+For each worker the supervisor implements:
+- **Exponential-backoff restart**: initial 2s, cap 120s, factor ×2
+- **Fast-failure detection**: 5 consecutive crashes within 10s cause parking (no more restarts)
+- **Permanent-error exit code**: 78 (EXIT_CODE_PERMANENT) causes immediate parking
+- **Graceful shutdown**: SIGTERM/SIGINT → abort signal → forced SIGKILL after 30s
 
-### 2.5 与 BRIDGE_MODE 的关系
+### 2.5 Relation to BRIDGE_MODE
 
-DAEMON 和 BRIDGE_MODE 常组合使用：
+DAEMON and BRIDGE_MODE are often used together:
 
 ```ts
 // src/commands.ts
 if (feature('DAEMON') && feature('BRIDGE_MODE')) {
-  // 加载 remoteControlServer 命令
+  // load the remoteControlServer command
 }
 ```
 
-双重门控：两个 feature 都需要开启才能使用远程控制服务器。
+Double gating: both features must be enabled to use the remote-control server.
 
-## 三、关键设计决策
+## 3. Key design decisions
 
-1. **多进程架构**：一个 supervisor + 多个 worker，进程隔离
-2. **文件系统状态通信**：通过 `daemon-state.json` 文件进行状态共享（非 Unix 域套接字）
-3. **与 BRIDGE_MODE 强绑定**：守护进程最常见的用途是提供远程控制服务
-4. **CLI 子命令路由**：`daemon` 子命令和 `--daemon-worker` 参数在 `cli.tsx` 中路由
-5. **Worker 环境变量**：supervisor 通过环境变量（`DAEMON_WORKER_*`）向 worker 传递配置
+1. **Multi-process architecture**: one supervisor + several workers, with process isolation
+2. **Filesystem state communication**: state is shared through the `daemon-state.json` file (not a Unix domain socket)
+3. **Tightly bound to BRIDGE_MODE**: the most common use of the daemon is to provide the remote-control service
+4. **CLI subcommand routing**: the `daemon` subcommand and the `--daemon-worker` argument are routed in `cli.tsx`
+5. **Worker environment variables**: the supervisor passes configuration to workers through environment variables (`DAEMON_WORKER_*`)
 
-## 四、使用方式
+## 4. Usage
 
 ```bash
-# 启用守护进程模式
+# Enable daemon mode
 FEATURE_DAEMON=1 FEATURE_BRIDGE_MODE=1 bun run dev
 
-# 启动守护进程
+# Start the daemon
 claude daemon start
 
-# 查看状态
+# Show status
 claude daemon status
 
-# 停止守护进程
+# Stop the daemon
 claude daemon stop
 
-# 以特定 worker 启动（通常由 supervisor 自动调用）
+# Start as a specific worker (usually called automatically by the supervisor)
 claude --daemon-worker=remoteControl
 ```
 
-## 五、文件索引
+## 5. File index
 
-| 文件 | 职责 |
-|------|------|
-| `src/daemon/main.ts` | Supervisor 主进程：子命令分发、Worker 生命周期管理、退避重启 |
-| `src/daemon/workerRegistry.ts` | Worker 入口：remoteControl worker 实现 |
-| `src/daemon/state.ts` | Daemon 状态管理：PID 文件读写、状态查询 |
-| `src/entrypoints/cli.tsx` | CLI 路由 |
-| `src/commands.ts` | 命令注册（双重门控） |
+| File | Responsibility |
+|------|----------------|
+| `src/daemon/main.ts` | Supervisor main process: subcommand dispatch, Worker lifecycle management, backoff restart |
+| `src/daemon/workerRegistry.ts` | Worker entry: remoteControl worker implementation |
+| `src/daemon/state.ts` | Daemon state management: PID file read/write, status queries |
+| `src/entrypoints/cli.tsx` | CLI routing |
+| `src/commands.ts` | Command registration (double gating) |

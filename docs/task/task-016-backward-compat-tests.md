@@ -1,98 +1,98 @@
-# Task 016: 向后兼容 + 测试
+# Task 016: Backward compatibility + tests
 
-> 设计文档: [daemon-restructure-design.md](../features/daemon-restructure-design.md) § 五
-> 依赖: Task 014, Task 015
-> 分支: `feat/integrate-5-branches`
+> Design doc: [daemon-restructure-design.md](../features/daemon-restructure-design.md) § 5
+> Depends on: Task 014, Task 015
+> Branch: `feat/integrate-5-branches`
 
-## 目标
+## Goal
 
-确保旧命令向后兼容 (deprecation 警告 + 正常代理)，并为重构后的命令结构编写测试。
+Make sure the old commands stay backward compatible (deprecation warning + normal proxying), and write tests for the restructured command layout.
 
-## 文件清单
+## File list
 
-### 新增
+### New
 
-| 文件 | 说明 |
-|------|------|
-| `src/daemon/__tests__/daemonMain.test.ts` | daemonMain 子命令路由测试 |
-| `src/cli/bg/__tests__/engine.test.ts` | BgEngine 选择逻辑测试 |
-| `src/cli/bg/__tests__/detached.test.ts` | DetachedEngine 启动/停止测试 |
-| `src/cli/bg/__tests__/tail.test.ts` | 日志 tail 功能测试 |
+| File | Description |
+|------|-------------|
+| `src/daemon/__tests__/daemonMain.test.ts` | daemonMain subcommand routing tests |
+| `src/cli/bg/__tests__/engine.test.ts` | BgEngine selection logic tests |
+| `src/cli/bg/__tests__/detached.test.ts` | DetachedEngine start/stop tests |
+| `src/cli/bg/__tests__/tail.test.ts` | Log tail feature tests |
 
-### 修改
+### Modified
 
-| 文件 | 变更 |
-|------|------|
-| `src/entrypoints/cli.tsx` | 确认 deprecation 路径正确代理 |
+| File | Change |
+|------|--------|
+| `src/entrypoints/cli.tsx` | Confirm the deprecation path proxies correctly |
 
-## 实现方案
+## Implementation plan
 
-### 1. 向后兼容矩阵
+### 1. Backward compatibility matrix
 
-| 旧命令 | 新命令 | 处理方式 |
-|--------|--------|---------|
-| `claude ps` | `claude daemon status` | stderr 输出 `[deprecated] Use: claude daemon status`，然后执行 |
-| `claude logs <x>` | `claude daemon logs <x>` | 同上 |
-| `claude attach <x>` | `claude daemon attach <x>` | 同上 |
-| `claude kill <x>` | `claude daemon kill <x>` | 同上 |
-| `claude --bg` | `claude daemon bg` | 保留为快捷方式，**不** deprecate (太常用) |
-| `claude new <t>` | `claude job new <t>` | stderr deprecation + 执行 |
-| `claude list` | `claude job list` | stderr deprecation + 执行 |
-| `claude reply <id>` | `claude job reply <id>` | stderr deprecation + 执行 |
+| Old command | New command | Handling |
+|-------------|-------------|----------|
+| `claude ps` | `claude daemon status` | Print `[deprecated] Use: claude daemon status` to stderr, then run it |
+| `claude logs <x>` | `claude daemon logs <x>` | Same as above |
+| `claude attach <x>` | `claude daemon attach <x>` | Same as above |
+| `claude kill <x>` | `claude daemon kill <x>` | Same as above |
+| `claude --bg` | `claude daemon bg` | Kept as a shortcut and **not** deprecated (too commonly used) |
+| `claude new <t>` | `claude job new <t>` | stderr deprecation + run |
+| `claude list` | `claude job list` | stderr deprecation + run |
+| `claude reply <id>` | `claude job reply <id>` | stderr deprecation + run |
 
-**关键**: deprecation 输出到 stderr 而非 stdout，不影响脚本管道。
+**Key point**: the deprecation notice goes to stderr rather than stdout so script pipelines are unaffected.
 
-### 2. 测试计划
+### 2. Test plan
 
-#### 2.1 daemonMain 路由测试
+#### 2.1 daemonMain routing tests
 
 ```typescript
 describe('daemonMain', () => {
-  test('无参数默认 status', async () => { ... })
-  test('start 调用 runSupervisor', async () => { ... })
-  test('stop 调用 handleDaemonStop', async () => { ... })
-  test('bg 委托给 bg.handleBgStart', async () => { ... })
-  test('attach 委托给 bg.attachHandler', async () => { ... })
-  test('logs 委托给 bg.logsHandler', async () => { ... })
-  test('kill 委托给 bg.killHandler', async () => { ... })
-  test('未知子命令设置 exitCode=1', async () => { ... })
+  test('defaults to status with no arguments', async () => { ... })
+  test('start calls runSupervisor', async () => { ... })
+  test('stop calls handleDaemonStop', async () => { ... })
+  test('bg delegates to bg.handleBgStart', async () => { ... })
+  test('attach delegates to bg.attachHandler', async () => { ... })
+  test('logs delegates to bg.logsHandler', async () => { ... })
+  test('kill delegates to bg.killHandler', async () => { ... })
+  test('an unknown subcommand sets exitCode=1', async () => { ... })
 })
 ```
 
-#### 2.2 引擎选择测试
+#### 2.2 Engine selection tests
 
 ```typescript
 describe('selectEngine', () => {
-  test('win32 返回 DetachedEngine', async () => { ... })
-  test('darwin + tmux 可用返回 TmuxEngine', async () => { ... })
-  test('darwin + tmux 不可用返回 DetachedEngine', async () => { ... })
-  test('linux + tmux 可用返回 TmuxEngine', async () => { ... })
+  test('win32 returns DetachedEngine', async () => { ... })
+  test('darwin + tmux available returns TmuxEngine', async () => { ... })
+  test('darwin + tmux unavailable returns DetachedEngine', async () => { ... })
+  test('linux + tmux available returns TmuxEngine', async () => { ... })
 })
 ```
 
-#### 2.3 DetachedEngine 测试
+#### 2.3 DetachedEngine tests
 
 ```typescript
 describe('DetachedEngine', () => {
-  test('available 始终返回 true', async () => { ... })
-  test('start 创建 detached 子进程并写入日志', async () => { ... })
-  test('start 返回的 PID 文件存在', async () => { ... })
+  test('available always returns true', async () => { ... })
+  test('start creates a detached child process and writes the log', async () => { ... })
+  test('the PID file returned by start exists', async () => { ... })
 })
 ```
 
-#### 2.4 Tail 测试
+#### 2.4 Tail tests
 
 ```typescript
 describe('tailLog', () => {
-  test('输出已有日志内容', async () => { ... })
-  test('追加内容时实时输出', async () => { ... })
-  test('SIGINT 退出 tail', async () => { ... })
+  test('prints existing log content', async () => { ... })
+  test('prints appended content in real time', async () => { ... })
+  test('SIGINT exits the tail', async () => { ... })
 })
 ```
 
-### 3. 集成验证脚本
+### 3. Integration verification script
 
-可选: 在 `scripts/` 下添加一个手动验证脚本:
+Optional: add a manual verification script under `scripts/`:
 
 ```bash
 #!/bin/bash
@@ -113,11 +113,11 @@ echo "=== 5. claude list (deprecated) ==="
 bun run dev -- list 2>&1 | head -1
 ```
 
-## 验证清单
+## Verification checklist
 
-- [ ] 旧命令全部正常工作 (仅多一行 stderr 警告)
-- [ ] `--bg` 保持无警告
-- [ ] 所有新增测试通过
-- [ ] 现有 2695 个测试无回归
-- [ ] tsc --noEmit 零错误
-- [ ] 手动在 Windows + macOS/Linux 上验证关键路径
+- [ ] All old commands still work (only one extra stderr warning line)
+- [ ] `--bg` stays warning-free
+- [ ] All new tests pass
+- [ ] No regressions in the existing 2695 tests
+- [ ] tsc --noEmit reports zero errors
+- [ ] Manually verify the key paths on Windows + macOS/Linux

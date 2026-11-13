@@ -1,114 +1,114 @@
 # UDS_INBOX / pipes
 
-## 概述
+## Overview
 
-`UDS_INBOX` 现在不是一个“空壳 flag”，而是一套已经落地的本机 IPC 能力。但它同时承载了两层不同目标，必须拆开理解：
+`UDS_INBOX` is no longer an "empty-shell flag"; it is a local IPC capability that has landed. It carries two layers with different goals, which must be understood separately:
 
 1. **UDS peer messaging**
-   - 面向任意 Claude Code 进程。
-   - 使用 `src/utils/udsMessaging.ts` 和 `src/utils/udsClient.ts`。
-   - 对外入口是 `/peers` 和 `SendMessageTool` 的 `uds:<socket-path>` 地址。
+   - Targets any Claude Code process.
+   - Uses `src/utils/udsMessaging.ts` and `src/utils/udsClient.ts`.
+   - Exposed through `/peers` and the `uds:<socket-path>` address of `SendMessageTool`.
 2. **pipes control plane**
-   - 面向交互式 REPL 会话之间的主从协作。
-   - 使用 `src/utils/pipeTransport.ts`、`src/utils/pipeRegistry.ts` 和 `src/screens/REPL.tsx` 中的内联 bootstrap。
-   - 对外入口是 `/pipes`、`/attach`、`/detach`、`/send`、`/pipe-status`、`/history`、`/claim-main`。
+   - Targets master/slave collaboration between interactive REPL sessions.
+   - Uses `src/utils/pipeTransport.ts`, `src/utils/pipeRegistry.ts` and the inline bootstrap in `src/screens/REPL.tsx`.
+   - Exposed through `/pipes`, `/attach`, `/detach`, `/send`, `/pipe-status`, `/history` and `/claim-main`.
 
-这两层都依赖本机 socket，但职责不同。`/peers` 解决“找到其他会话并发消息”，`/pipes` 解决“把一个 REPL 变成另一个 REPL 的受控 worker”。
+Both layers depend on a local socket, but their responsibilities differ. `/peers` solves "find other sessions and send them messages"; `/pipes` solves "turn one REPL into a controlled worker of another REPL".
 
-## 为什么要有单独的 `pipes`
+## Why a separate `pipes` layer
 
-单独的 `pipes` 层有三个实际理由：
+There are three practical reasons for a separate `pipes` layer:
 
-1. **命名与角色模型不同**
-   - UDS peer 层按 `messagingSocketPath` 寻址。
-   - pipes 层按 `cli-xxxxxxxx` 会话名、`main/sub/master/slave` 角色和 `machineId` 注册表工作。
-2. **交互语义不同**
-   - peer 层是通用消息投递。
-   - pipes 层需要 attach、detach、历史收集、选择性广播、状态栏和 REPL 快捷键。
-3. **UI 集成不同**
-   - peer 层主要服务工具调用。
-   - pipes 层直接影响 REPL 提交路径和 PromptInput 页脚。
+1. **Different naming and role model**
+   - The UDS peer layer addresses by `messagingSocketPath`.
+   - The pipes layer works with `cli-xxxxxxxx` session names, `main/sub/master/slave` roles and a `machineId` registry.
+2. **Different interaction semantics**
+   - The peer layer is general message delivery.
+   - The pipes layer needs attach, detach, history collection, selective broadcast, a status bar and REPL shortcuts.
+3. **Different UI integration**
+   - The peer layer mainly serves tool calls.
+   - The pipes layer directly affects the REPL submit path and the PromptInput footer.
 
-如果把两者硬合并，`SendMessageTool` 的通用寻址和 REPL 的主从控制会互相污染，命令语义也会变得混乱。
+If the two were merged by force, the generic addressing of `SendMessageTool` and the REPL's master/slave control would contaminate each other, and the command semantics would become confusing.
 
-## 当前通信模型
+## Current communication model
 
 ### 1. UDS peer messaging
 
-- 服务端：`src/utils/udsMessaging.ts`
-- 客户端：`src/utils/udsClient.ts`
-- 发现方式：读取 `~/.claude/sessions/*.json`
-- 地址方式：`uds:<socket-path>`
-- 传输方式：**本机 Unix socket / Windows named pipe**
+- Server: `src/utils/udsMessaging.ts`
+- Client: `src/utils/udsClient.ts`
+- Discovery: read `~/.claude/sessions/*.json`
+- Addressing: `uds:<socket-path>`
+- Transport: **local Unix socket / Windows named pipe**
 
-这层是真正的“通用收件箱”。
+This layer is the real "general inbox".
 
 ### 2. pipes control plane
 
-- 服务端/客户端：`src/utils/pipeTransport.ts`
-- 注册表：`src/utils/pipeRegistry.ts`
-- 生效入口：`src/screens/REPL.tsx`
-- 发现方式：扫描 `~/.claude/pipes/` + `registry.json`
-- 会话名：`cli-${sessionId.slice(0, 8)}`
-- 传输方式：**本机 Unix socket / Windows named pipe**
+- Server/client: `src/utils/pipeTransport.ts`
+- Registry: `src/utils/pipeRegistry.ts`
+- Entry that takes effect: `src/screens/REPL.tsx`
+- Discovery: scan `~/.claude/pipes/` + `registry.json`
+- Session name: `cli-${sessionId.slice(0, 8)}`
+- Transport: **local Unix socket / Windows named pipe**
 
-这层是真正的“主从 REPL 协调平面”。
+This layer is the real "master/slave REPL coordination plane".
 
-## 关于“局域网通信”的事实
+## Facts about "LAN communication"
 
-当前实现**不是**真正的局域网传输。
+The current implementation is **not** a real LAN transport.
 
-代码里虽然保存了这些字段：
+The code does store these fields:
 
 - `localIp`
 - `hostname`
 - `machineId`
 - `mac`
 
-但这些字段当前只用于：
+but for now they are only used for:
 
-1. 注册表展示
-2. main/sub 身份判定
-3. `claim-main` 的机器级归属切换
-4. 状态输出与排障信息
+1. Registry display
+2. main/sub identity decisions
+3. Machine-level ownership switching in `claim-main`
+4. Status output and troubleshooting information
 
-它们**没有**被用于创建 TCP/WebSocket 连接。真正的传输仍然是 `getPipePath(name)` 返回的本机 socket 路径。
+They are **not** used to create TCP/WebSocket connections. The real transport is still the local socket path returned by `getPipePath(name)`.
 
-所以目前更准确的描述应该是：
+So a more accurate description right now is:
 
-- `pipes` 支持 **本机多实例协作**
-- `registry` 带有 **机器身份元数据**
-- 但 **尚未实现跨机器局域网 transport**
+- `pipes` supports **local multi-instance collaboration**
+- The `registry` carries **machine identity metadata**
+- But a **cross-machine LAN transport is not implemented yet**
 
-如果未来要做真局域网版本，至少还需要：
+A real LAN version in the future would need at least:
 
-1. TCP/WebSocket transport
-2. 认证与会话授权
-3. 发现与地址交换
-4. 超时、重连和安全边界
+1. A TCP/WebSocket transport
+2. Authentication and session authorization
+3. Discovery and address exchange
+4. Timeouts, reconnection and security boundaries
 
-## 当前 REPL 行为
+## Current REPL behavior
 
-当前线上行为由 `src/screens/REPL.tsx` 的内联实现负责：
+The behavior currently in production is handled by the inline implementation in `src/screens/REPL.tsx`:
 
-1. 启动时创建当前 REPL 的 pipe server
-2. 通过 `pipeRegistry` 判定 `main` / `sub`
-3. 处理 `attach_request` / `detach` / `prompt`
-4. 主实例心跳探测并维护 `slaves`
-5. `/pipes` 打开状态栏并维护选择器
-6. 提交普通消息时，仅向**已连接**的 selected pipes 广播
+1. At startup, create the pipe server of the current REPL
+2. Decide `main` / `sub` through `pipeRegistry`
+3. Handle `attach_request` / `detach` / `prompt`
+4. The main instance probes heartbeats and maintains `slaves`
+5. `/pipes` opens the status bar and maintains the selector
+6. When a normal message is submitted, it is broadcast only to the **connected** selected pipes
 
-最近的收敛点：
+Latest convergence points:
 
-- 过去遗留了一套未接线的 hook 方案
-- 当前已明确以 `REPL.tsx` 内联 bootstrap 为唯一生效实现
-- 选中但未连接的 pipe 不再导致本地处理被错误跳过
+- There used to be a leftover hook-based scheme that was never wired up
+- It is now explicit that the inline bootstrap in `REPL.tsx` is the only implementation in effect
+- A selected-but-not-connected pipe no longer causes local handling to be skipped by mistake
 
-## 文档与代码对齐约定
+## Doc/code alignment conventions
 
-后续关于 `UDS_INBOX` / `pipes` 的说明应遵守以下表述：
+Future descriptions of `UDS_INBOX` / `pipes` should follow these statements:
 
-1. 默认称为“本机 IPC / 本机多实例协作”
-2. 不把 `localIp` / `hostname` 元数据表述成已完成的 LAN transport
-3. 明确区分 `/peers` 和 `/pipes` 的两层职责
-4. 以 `src/screens/REPL.tsx`、`src/utils/pipeTransport.ts`、`src/utils/pipeRegistry.ts` 为事实来源
+1. Call it "local IPC / local multi-instance collaboration" by default
+2. Do not describe the `localIp` / `hostname` metadata as a finished LAN transport
+3. Clearly distinguish the two responsibilities of `/peers` and `/pipes`
+4. Treat `src/screens/REPL.tsx`, `src/utils/pipeTransport.ts` and `src/utils/pipeRegistry.ts` as the source of truth

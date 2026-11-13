@@ -1,135 +1,135 @@
-# SSH Remote — 远程主机运行 Claude Code
+# SSH Remote — Running Claude Code on a Remote Host
 
-## 概述
+## Overview
 
-SSH Remote 提供两种方式在远程 Linux 主机上运行 Claude Code：
+SSH Remote provides two ways to run Claude Code on a remote Linux host:
 
-1. **SSH Remote 模块**（`ccb ssh <host>`）— 本地 REPL + 远程工具执行，自动部署二进制 + 认证隧道
-2. **直接 SSH 运行**（`ssh <host> -t ccb`）— 远程已安装 ccb，直接启动交互式会话
+1. **SSH Remote module** (`ccb ssh <host>`) — local REPL + remote tool execution, with automatic binary deployment + an authentication tunnel
+2. **Direct SSH run** (`ssh <host> -t ccb`) — ccb is already installed remotely, and an interactive session is started directly
 
-## 架构
+## Architecture
 
-### 方式一：SSH Remote 模块（完整模式）
+### Mode 1: SSH Remote module (full mode)
 
-适用场景：远端没有 API 凭据或没有安装 ccb。
+Use case: the remote host has no API credentials or no ccb installed.
 
 ```
-┌──────────────── 本地 Windows/Mac/Linux ───────────┐
+┌──────────────── Local Windows/Mac/Linux ──────────┐
 │                                                    │
 │  ccb ssh <host> [dir]                              │
 │     │                                              │
-│     ├── 1. SSHProbe: 探测远端平台/架构/已有二进制    │
-│     ├── 2. SSHDeploy: 部署 dist/ 到远端             │
-│     ├── 3. SSHAuthProxy: 启动本地认证代理            │
+│     ├── 1. SSHProbe: probe remote platform/arch/existing binary │
+│     ├── 2. SSHDeploy: deploy dist/ to the remote   │
+│     ├── 3. SSHAuthProxy: start a local auth proxy  │
 │     │      ├─ Unix Socket (Linux/Mac)              │
 │     │      └─ TCP 127.0.0.1:<port> (Windows)       │
 │     │                                              │
-│     └── 4. SSH -R 反向隧道 + 启动远端 CLI            │
+│     └── 4. SSH -R reverse tunnel + start remote CLI │
 │            ssh -R <remote>:<local> <host> \         │
 │                ANTHROPIC_BASE_URL=... \             │
 │                ANTHROPIC_AUTH_NONCE=... \            │
 │                ccb --output-format stream-json      │
 │                                                    │
-│  ┌─────── 本地 REPL (Ink TUI) ───────┐             │
-│  │ 用户输入 → NDJSON → SSH stdin     │             │
-│  │ SSH stdout → NDJSON → 渲染消息    │             │
-│  │ 工具权限请求 → 本地审批 → 回传    │             │
+│  ┌─────── Local REPL (Ink TUI) ───────┐            │
+│  │ User input → NDJSON → SSH stdin    │            │
+│  │ SSH stdout → NDJSON → render messages │         │
+│  │ Tool permission request → approve locally → send back │
 │  └────────────────────────────────────┘             │
 └────────────────────────────────────────────────────┘
                         │
-                        │ SSH 连接 (加密通道)
+                        │ SSH connection (encrypted channel)
                         │
-┌───────────────── 远端 Linux ──────────────────────┐
+┌───────────────── Remote Linux ────────────────────┐
 │                                                    │
-│  ccb (自动部署或已存在)                              │
+│  ccb (auto-deployed or already present)            │
 │     ├── --output-format stream-json                │
 │     ├── --input-format stream-json                 │
 │     ├── --verbose -p                               │
 │     │                                              │
-│     ├── API 请求 → ANTHROPIC_BASE_URL              │
-│     │   → SSH 反向隧道 → 本地 AuthProxy             │
-│     │   → 注入真实凭据 → api.anthropic.com          │
+│     ├── API request → ANTHROPIC_BASE_URL           │
+│     │   → SSH reverse tunnel → local AuthProxy     │
+│     │   → inject real credentials → api.anthropic.com │
 │     │                                              │
-│     └── 工具执行 (Bash/Read/Write/...)              │
-│         直接在远端文件系统上操作                      │
+│     └── Tool execution (Bash/Read/Write/...)       │
+│         operates directly on the remote filesystem │
 └────────────────────────────────────────────────────┘
 ```
 
-### 方式二：直接 SSH 运行（简单模式）
+### Mode 2: Direct SSH run (simple mode)
 
-适用场景：远端已安装 ccb 且已有 API 凭据（订阅或 API Key）。
+Use case: ccb is already installed on the remote host and it already has API credentials (a subscription or API key).
 
 ```
-┌─────── 本地终端 ───────┐          ┌──────── 远端 Linux ────────┐
+┌─────── Local terminal ──┐          ┌──────── Remote Linux ──────┐
 │                         │   SSH    │                             │
-│  ssh <host> -t ccb      │ ──────→  │  ccb (全局安装)              │
-│                         │          │    ├── 使用远端自身凭据       │
-│  终端直接显示远端 TUI    │  ←────── │    ├── 远端文件系统操作       │
-│                         │   TTY    │    └── API 直连 Anthropic    │
+│  ssh <host> -t ccb      │ ──────→  │  ccb (globally installed)   │
+│                         │          │    ├── uses the remote's own credentials │
+│  Terminal shows the remote TUI directly │  ←────── │    ├── operates on the remote filesystem │
+│                         │   TTY    │    └── API direct to Anthropic │
 └─────────────────────────┘          └─────────────────────────────┘
 ```
 
-### 适用场景对比
+### Use case comparison
 
-| | SSH Remote 模块 | 直接 SSH 运行 |
+| | SSH Remote module | Direct SSH run |
 |---|---|---|
-| 远端需要安装 ccb | 不需要（自动部署） | 需要 |
-| 远端需要 API 凭据 | 不需要（本地隧道） | 需要 |
-| 本地需要安装 ccb | 需要 | 不需要（任何终端） |
-| 斜杠命令 | 本地处理 | 远端处理 |
-| 网络延迟敏感 | 高（NDJSON 双向） | 低（仅 TTY） |
-| 推荐场景 | 远端无凭据/无安装 | 远端已配置完整 |
+| ccb must be installed remotely | No (auto-deployed) | Yes |
+| Remote needs API credentials | No (local tunnel) | Yes |
+| ccb must be installed locally | Yes | No (any terminal) |
+| Slash commands | Handled locally | Handled remotely |
+| Sensitive to network latency | High (two-way NDJSON) | Low (TTY only) |
+| Recommended for | Remote has no credentials/no install | Remote is fully configured |
 
 ---
 
-## 前置准备：SSH 密钥配置
+## Prerequisite: SSH key setup
 
-两种方式都依赖 SSH 免密连接。以下是完整的密钥配置步骤。
+Both modes rely on passwordless SSH. Here are the complete key setup steps.
 
-### 1. 生成 SSH 密钥对（本地）
+### 1. Generate an SSH key pair (local)
 
 ```bash
-# 生成 Ed25519 密钥（推荐）
+# Generate an Ed25519 key (recommended)
 ssh-keygen -t ed25519 -C "your-email@example.com" -f ~/.ssh/id_remote
 
-# 或 RSA 4096 位
+# Or RSA 4096-bit
 ssh-keygen -t rsa -b 4096 -C "your-email@example.com" -f ~/.ssh/id_remote
 ```
 
-生成两个文件：
-- `~/.ssh/id_remote` — 私钥（不可泄露）
-- `~/.ssh/id_remote.pub` — 公钥（部署到远端）
+This generates two files:
+- `~/.ssh/id_remote` — the private key (must not be leaked)
+- `~/.ssh/id_remote.pub` — the public key (deployed to the remote)
 
-### 2. 将公钥部署到远端
+### 2. Deploy the public key to the remote
 
 ```bash
-# 方式 A：ssh-copy-id（推荐）
+# Option A: ssh-copy-id (recommended)
 ssh-copy-id -i ~/.ssh/id_remote.pub user@remote-host
 
-# 方式 B：手动复制
+# Option B: copy manually
 cat ~/.ssh/id_remote.pub | ssh user@remote-host "mkdir -p ~/.ssh && chmod 700 ~/.ssh && cat >> ~/.ssh/authorized_keys && chmod 600 ~/.ssh/authorized_keys"
 ```
 
-### 3. 配置 SSH Config（本地）
+### 3. Configure SSH Config (local)
 
-编辑 `~/.ssh/config`（不存在则创建）：
+Edit `~/.ssh/config` (create it if it does not exist):
 
 ```
 Host my-server
-    HostName 192.168.1.100       # 远端 IP 或域名
-    User root                     # 远端用户名
-    IdentityFile ~/.ssh/id_remote # 私钥路径
-    ServerAliveInterval 60        # 防止连接超时断开
+    HostName 192.168.1.100       # Remote IP or domain name
+    User root                     # Remote username
+    IdentityFile ~/.ssh/id_remote # Private key path
+    ServerAliveInterval 60        # Prevent idle-timeout disconnects
     ServerAliveCountMax 3
 ```
 
-配置后可直接用别名连接：
+After configuring, you can connect with the alias:
 
 ```bash
-ssh my-server          # 等同于 ssh -i ~/.ssh/id_remote root@192.168.1.100
+ssh my-server          # Equivalent to ssh -i ~/.ssh/id_remote root@192.168.1.100
 ```
 
-### 4. 文件权限设置
+### 4. File permission settings
 
 #### Linux / macOS
 
@@ -140,287 +140,287 @@ chmod 600 ~/.ssh/id_remote
 chmod 644 ~/.ssh/id_remote.pub
 ```
 
-#### Windows（OpenSSH 强制 ACL 检查）
+#### Windows (OpenSSH enforces ACL checks)
 
 ```powershell
-# 重置 .ssh 目录权限：仅允许当前用户 + SYSTEM
+# Reset .ssh directory permissions: allow only the current user + SYSTEM
 icacls "$env:USERPROFILE\.ssh" /inheritance:r /grant:r "$($env:USERNAME):(OI)(CI)F" /grant "SYSTEM:(OI)(CI)F"
 
-# 修复 config 文件权限
+# Fix config file permissions
 icacls "$env:USERPROFILE\.ssh\config" /inheritance:r /grant:r "$($env:USERNAME):F" /grant "SYSTEM:F"
 
-# 修复私钥权限
+# Fix private key permissions
 icacls "$env:USERPROFILE\.ssh\id_remote" /inheritance:r /grant:r "$($env:USERNAME):F" /grant "SYSTEM:F"
 ```
 
-> **Windows 常见错误**：如果 `icacls` 显示 `UNKNOWN\UNKNOWN` ACL 条目，需要先移除再重新授权。权限错误会导致 SSH 拒绝使用密钥。
+> **Common Windows error**: if `icacls` shows `UNKNOWN\UNKNOWN` ACL entries, remove them first and then grant permissions again. A permissions error makes SSH refuse to use the key.
 
-### 5. 验证免密连接
+### 5. Verify passwordless connection
 
 ```bash
 ssh my-server "echo 'SSH connection OK'"
-# 应直接输出 "SSH connection OK"，不要求输入密码
+# Should print "SSH connection OK" directly, without asking for a password
 ```
 
 ---
 
-## 使用方式
+## Usage
 
-### 方式一：SSH Remote 模块
+### Mode 1: SSH Remote module
 
 ```bash
-# 基本用法 — 自动探测、部署、启动
+# Basic usage — automatically probes, deploys, and starts
 ccb ssh user@remote-host
 
-# 使用 SSH Config 别名
+# Use an SSH Config alias
 ccb ssh my-server
 
-# 指定远端工作目录
+# Specify the remote working directory
 ccb ssh my-server /home/user/project
 
-# 使用自定义远端二进制（跳过探测/部署）
+# Use a custom remote binary (skips probe/deploy)
 ccb ssh my-server --remote-bin "bun /opt/ccb/dist/cli.js"
 
-# 权限控制
+# Permission control
 ccb ssh my-server --permission-mode auto
 ccb ssh my-server --dangerously-skip-permissions
 
-# 恢复远端会话
+# Resume a remote session
 ccb ssh my-server --continue
 ccb ssh my-server --resume <session-uuid>
 
-# 选择模型
+# Choose a model
 ccb ssh my-server --model claude-sonnet-4-6-20250514
 
-# 本地测试模式（不连接远端，测试 auth proxy 管道）
+# Local test mode (does not connect remotely, tests the auth proxy pipeline)
 ccb ssh localhost --local
 ```
 
-### 方式二：直接 SSH 运行
+### Mode 2: Direct SSH run
 
 ```bash
-# 启动交互式会话
+# Start an interactive session
 ssh my-server -t ccb
 
-# 指定工作目录
+# Specify the working directory
 ssh my-server -t "ccb --cwd /home/user/project"
 
-# 使用特定模型
+# Use a specific model
 ssh my-server -t "ccb --model claude-sonnet-4-6-20250514"
 ```
 
 ---
 
-## 构建与部署
+## Build and deployment
 
-### 构建产物
+### Build output
 
 ```bash
-# 安装依赖
+# Install dependencies
 bun install
 
-# 构建（输出到 dist/）
+# Build (outputs to dist/)
 bun run build
 ```
 
-产物说明：
+Output description:
 
-| 文件 | 说明 |
+| File | Description |
 |------|------|
-| `dist/cli.js` | Bun 入口（`#!/usr/bin/env bun`） |
-| `dist/cli-node.js` | Node.js 入口（`#!/usr/bin/env node` → `import ./cli.js`） |
-| `dist/cli-bun.js` | Bun 专用入口 |
-| `dist/chunk-*.js` | 代码分割 chunk 文件（约 668 个） |
+| `dist/cli.js` | Bun entry (`#!/usr/bin/env bun`) |
+| `dist/cli-node.js` | Node.js entry (`#!/usr/bin/env node` → `import ./cli.js`) |
+| `dist/cli-bun.js` | Bun-specific entry |
+| `dist/chunk-*.js` | Code-splitting chunk files (about 668) |
 
-### 运行方式
+### Ways to run
 
 ```bash
-# 方式 A：通过 bun 直接运行（开发/调试）
+# Option A: run directly through bun (development/debugging)
 bun run dev
 
-# 方式 B：运行构建产物（bun 运行时）
+# Option B: run the build output (bun runtime)
 bun dist/cli.js
 
-# 方式 C：运行构建产物（node 运行时）
+# Option C: run the build output (node runtime)
 node dist/cli-node.js
 
-# 方式 D：全局安装后使用命令名
+# Option D: use the command name after global install
 ccb
 ```
 
-### 全局安装
+### Global install
 
-在项目根目录执行：
+From the project root:
 
 ```bash
-# bun 全局安装（推荐）
+# bun global install (recommended)
 bun install -g .
 
-# 创建的命令：
+# Commands created:
 #   ccb            → dist/cli-node.js
 #   ccb-bun        → dist/cli-bun.js
 #   claude-code-best → dist/cli-node.js
 
-# 安装位置：~/.bun/bin/ccb
+# Install location: ~/.bun/bin/ccb
 ```
 
-或使用 npm：
+Or with npm:
 
 ```bash
 npm install -g .
 ```
 
-验证：
+Verify:
 
 ```bash
 ccb --version
 # → x.x.x (Claude Code)
 ```
 
-### 远端部署（全流程）
+### Remote deployment (full flow)
 
 ```bash
-# 1. 登录远端
+# 1. Log in to the remote
 ssh my-server
 
-# 2. 克隆或同步项目代码
+# 2. Clone or sync the project code
 git clone <repo-url> ~/ccb-project
 cd ~/ccb-project
 
-# 3. 安装运行时（如果没有 bun）
+# 3. Install the runtime (if bun is missing)
 curl -fsSL https://bun.sh/install | bash
 source ~/.bashrc
 
-# 4. 安装依赖 + 构建
+# 4. Install dependencies + build
 bun install
 bun run build
 
-# 5. 全局安装
+# 5. Global install
 bun install -g .
 
-# 6. 确保非交互式 SSH 可访问 ccb 命令
-#    bun install -g 安装到 ~/.bun/bin/，但非交互式 SSH 不加载 .bashrc，
-#    所以 PATH 中不包含 ~/.bun/bin/
-#    解决方式（任选其一）：
+# 6. Make sure non-interactive SSH can reach the ccb command
+#    bun install -g installs to ~/.bun/bin/, but non-interactive SSH does not load .bashrc,
+#    so ~/.bun/bin/ is not in PATH
+#    Fix (pick one):
 
-# 方式 A：符号链接到系统 PATH（推荐）
+# Option A: symlink into the system PATH (recommended)
 ln -sf ~/.bun/bin/ccb /usr/local/bin/ccb
 
-# 方式 B：添加到 /etc/profile.d/（所有用户生效）
+# Option B: add to /etc/profile.d/ (applies to all users)
 echo 'export PATH="$HOME/.bun/bin:$PATH"' > /etc/profile.d/bun-path.sh
 
-# 方式 C：添加到 ~/.bash_profile（当前用户，ssh -t 时生效）
+# Option C: add to ~/.bash_profile (current user, applies with ssh -t)
 echo 'export PATH="$HOME/.bun/bin:$PATH"' >> ~/.bash_profile
 
-# 7. 验证
+# 7. Verify
 ccb --version
 
-# 8. 从本地测试
-# （在本地终端）
+# 8. Test from the local machine
+# (in a local terminal)
 ssh my-server -t ccb
 ```
 
-### SSH Remote 自动部署
+### SSH Remote automatic deployment
 
-使用 `ccb ssh <host>` 时，模块自动处理：
+When using `ccb ssh <host>`, the module handles the following automatically:
 
-1. **SSHProbe** 探测远端 `~/.local/bin/claude` 或 `command -v claude`
-2. 若二进制不存在或版本不匹配，**SSHDeploy** 通过 `scp` 传输 `dist/` 目录
-3. 在远端创建 wrapper 脚本（`~/.local/bin/claude`）
-4. 无需手动安装
+1. **SSHProbe** probes the remote for `~/.local/bin/claude` or `command -v claude`
+2. If the binary is missing or the version does not match, **SSHDeploy** transfers the `dist/` directory via `scp`
+3. A wrapper script (`~/.local/bin/claude`) is created on the remote
+4. No manual installation is needed
 
 ---
 
-## 模块结构
+## Module structure
 
 ```
 src/ssh/
-├── createSSHSession.ts     — 会话工厂：编排 probe → deploy → proxy → spawn
-├── SSHSessionManager.ts    — 双向 NDJSON 通信管理 + 权限转发 + 重连
-├── SSHAuthProxy.ts         — 本地认证代理（API 凭据隧道）
-├── SSHProbe.ts             — 远端主机探测（平台/架构/已有二进制）
-├── SSHDeploy.ts            — 远端二进制部署（scp + wrapper 脚本）
+├── createSSHSession.ts     — Session factory: orchestrates probe → deploy → proxy → spawn
+├── SSHSessionManager.ts    — Two-way NDJSON communication management + permission forwarding + reconnection
+├── SSHAuthProxy.ts         — Local auth proxy (API credential tunnel)
+├── SSHProbe.ts             — Remote host probe (platform/arch/existing binary)
+├── SSHDeploy.ts            — Remote binary deployment (scp + wrapper script)
 └── __tests__/
-    └── SSHSessionManager.test.ts  — 17 个单元测试
+    └── SSHSessionManager.test.ts  — 17 unit tests
 ```
 
-## 关键技术细节
+## Key technical details
 
-### 认证隧道
+### Authentication tunnel
 
-- **AuthProxy** 在本地监听（Unix socket 或 TCP），接收远端 CLI 的 API 请求
-- 通过 SSH `-R` 反向端口转发隧道到远端
-- AuthProxy 注入本地真实凭据（API key 或 OAuth token），转发到 `api.anthropic.com`
-- `ANTHROPIC_AUTH_NONCE` header 防止未授权访问（nonce 通过环境变量传递给远端 CLI，远端 CLI 在每个 API 请求中携带此 header）
+- **AuthProxy** listens locally (Unix socket or TCP) and receives API requests from the remote CLI
+- It is tunneled to the remote through SSH `-R` reverse port forwarding
+- AuthProxy injects the real local credentials (API key or OAuth token) and forwards to `api.anthropic.com`
+- The `ANTHROPIC_AUTH_NONCE` header prevents unauthorized access (the nonce is passed to the remote CLI through an environment variable, and the remote CLI carries this header on every API request)
 
-### waitForInit vs 存活检查
+### waitForInit vs liveness check
 
-- **标准模式**：`waitForInit` 等待远端 CLI 发送 `{type:'system', subtype:'init'}` JSON 消息
-- **`--remote-bin` 模式**：跳过 `waitForInit`（print+stream-json 模式下 init 只在首次查询后发送），改用 3 秒进程存活检查
+- **Standard mode**: `waitForInit` waits for the remote CLI to send a `{type:'system', subtype:'init'}` JSON message
+- **`--remote-bin` mode**: skips `waitForInit` (in print+stream-json mode init is only sent after the first query) and uses a 3-second process liveness check instead
 
-### 重连机制
+### Reconnection mechanism
 
-- `SSHSessionManager` 检测 SSH 连接断开后自动重连
-- 重连时在远端 CLI 命令中追加 `--continue` 恢复会话
-- 指数退避重试（最多 5 次，间隔 1s → 2s → 4s → 8s → 16s）
+- `SSHSessionManager` reconnects automatically after detecting that the SSH connection dropped
+- On reconnect, `--continue` is appended to the remote CLI command to resume the session
+- Exponential backoff retries (up to 5 times, with intervals 1s → 2s → 4s → 8s → 16s)
 
 ## Feature Flag
 
-SSH Remote 功能受 `SSH_REMOTE` feature flag 控制：
+The SSH Remote feature is controlled by the `SSH_REMOTE` feature flag:
 
-- **Dev 模式**：默认启用
-- **Build 模式**：需在 `build.ts` 的 `DEFAULT_BUILD_FEATURES` 中添加 `'SSH_REMOTE'`
-- **运行时**：`FEATURE_SSH_REMOTE=1` 环境变量
+- **Dev mode**: enabled by default
+- **Build mode**: add `'SSH_REMOTE'` to `DEFAULT_BUILD_FEATURES` in `build.ts`
+- **Runtime**: the `FEATURE_SSH_REMOTE=1` environment variable
 
 ---
 
-## 常见问题
+## FAQ
 
-### `ccb: command not found`（SSH 远程执行时）
+### `ccb: command not found` (during SSH remote execution)
 
-非交互式 SSH 不加载 `.bashrc`，`~/.bun/bin` 不在 PATH 中。
+Non-interactive SSH does not load `.bashrc`, so `~/.bun/bin` is not in PATH.
 
 ```bash
-# 解决：创建符号链接
+# Fix: create a symlink
 ln -sf ~/.bun/bin/ccb /usr/local/bin/ccb
 ```
 
-### SSH 密钥被拒绝
+### SSH key rejected
 
 ```
 Permission denied (publickey)
 ```
 
-1. 确认公钥已添加到远端 `~/.ssh/authorized_keys`
-2. 确认本地私钥文件权限正确（`chmod 600`）
-3. 确认 `~/.ssh/config` 中 `IdentityFile` 路径正确
-4. Windows 用户检查 ACL 权限（见上方 Windows 权限设置）
+1. Confirm the public key was added to the remote `~/.ssh/authorized_keys`
+2. Confirm the local private key file permissions are correct (`chmod 600`)
+3. Confirm the `IdentityFile` path in `~/.ssh/config` is correct
+4. Windows users should check ACL permissions (see the Windows permission settings above)
 
-### SSH 连接超时
+### SSH connection timeout
 
 ```
 ssh: connect to host x.x.x.x port 22: Connection timed out
 ```
 
-1. 确认远端 SSH 服务正在运行：`systemctl status sshd`
-2. 确认防火墙允许 22 端口
-3. 确认 IP 地址/域名正确
-4. 在 `~/.ssh/config` 中添加 `ConnectTimeout 10`
+1. Confirm the remote SSH service is running: `systemctl status sshd`
+2. Confirm the firewall allows port 22
+3. Confirm the IP address/domain name is correct
+4. Add `ConnectTimeout 10` to `~/.ssh/config`
 
-### 403 Forbidden（SSH Remote 模块）
+### 403 Forbidden (SSH Remote module)
 
-AuthProxy 的 nonce 验证失败。确认：
-1. 远端 CLI 版本包含 nonce header 注入修复
-2. `ANTHROPIC_AUTH_NONCE` 环境变量正确传递到远端
-3. `src/services/api/client.ts` 中 `x-auth-nonce` header 已启用
+AuthProxy's nonce validation failed. Confirm:
+1. The remote CLI version includes the nonce header injection fix
+2. The `ANTHROPIC_AUTH_NONCE` environment variable is passed to the remote correctly
+3. The `x-auth-nonce` header is enabled in `src/services/api/client.ts`
 
-### 远端 CLI 启动后立即退出
+### The remote CLI exits immediately after starting
 
 ```
 Remote process exited immediately (code 1)
 ```
 
-1. 确认远端 `bun` / `node` 运行时可用
-2. 手动在远端执行 `ccb --version` 验证安装
-3. 检查 `--remote-bin` 路径是否正确
-4. 查看 stderr 输出获取详细错误信息
+1. Confirm the remote `bun` / `node` runtime is available
+2. Run `ccb --version` on the remote manually to verify the installation
+3. Check that the `--remote-bin` path is correct
+4. Check the stderr output for detailed error information

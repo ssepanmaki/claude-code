@@ -1,34 +1,34 @@
-# acp-link — ACP 代理服务器
+# acp-link — ACP Proxy Server
 
-> 源码目录：`packages/acp-link/`
+> Source directory: `packages/acp-link/`
 > PR: #292
-> 新增时间：2026-04-18
+> Added: 2026-04-18
 
-## 一、功能概述
+## 1. Overview
 
-`acp-link` 是一个 ACP (Agent Client Protocol) 代理服务器，将 WebSocket 客户端桥接到 ACP agent 的 stdio 接口。它让 ACP agent（如 Claude Code）可以通过 WebSocket 远程访问，而不仅限于本地 stdio。
+`acp-link` is an ACP (Agent Client Protocol) proxy server that bridges WebSocket clients to an ACP agent's stdio interface. It makes ACP agents such as Claude Code reachable remotely over WebSocket instead of only through local stdio.
 
-### 核心特性
+### Key Features
 
-- **WebSocket → stdio 桥接**：将浏览器/远程客户端的 WebSocket 连接转换为 ACP agent 的 stdin/stdout NDJSON 流
-- **会话管理**：创建、加载、恢复、列出、关闭会话
-- **权限审批流程**：客户端可远程审批 agent 的工具权限请求
-- **RCS 集成**：可与 Remote Control Server (RCS) 连接，将 ACP agent 注册到 RCS 并通过 Web UI 交互
-- **HTTPS 支持**：内置自签名证书生成，支持安全连接
-- **Token 认证**：自动生成或通过环境变量配置认证 token
+- **WebSocket → stdio bridge**: converts browser/remote WebSocket connections into the ACP agent's stdin/stdout NDJSON stream
+- **Session management**: create, load, resume, list and close sessions
+- **Permission approval flow**: clients can approve the agent's tool permission requests remotely
+- **RCS integration**: can connect to a Remote Control Server (RCS), registering the ACP agent there so it can be driven from the Web UI
+- **HTTPS support**: built-in self-signed certificate generation for secure connections
+- **Token authentication**: the auth token is generated automatically or configured through an environment variable
 
-## 二、架构
+## 2. Architecture
 
-### 独立模式
+### Standalone Mode
 
 ```
 ┌──────────────────┐    WebSocket     ┌──────────────────┐    stdio/NDJSON    ┌──────────────┐
-│  浏览器/客户端     │ ◄──────────────►│  acp-link        │ ◄────────────────►│  ACP Agent   │
-│  (WS Client)     │  ws://host:port  │  (Proxy Server)  │  spawn subprocess │  (Claude等)   │
+│  Browser/Client  │ ◄──────────────►│  acp-link        │ ◄────────────────►│  ACP Agent   │
+│  (WS Client)     │  ws://host:port  │  (Proxy Server)  │  spawn subprocess │  (Claude etc)│
 └──────────────────┘                  └──────────────────┘                    └──────────────┘
 ```
 
-### RCS 集成模式
+### RCS Integration Mode
 
 ```
 ┌──────────────┐    WebSocket     ┌──────────────────┐    stdio/NDJSON    ┌──────────────┐
@@ -37,46 +37,46 @@
 └──────────────┘                  └──────────────────┘                    └──────────────┘
 ```
 
-### 文件结构
+### File Structure
 
 ```
 packages/acp-link/
 ├── src/
-│   ├── server.ts        # 主服务器：WS 连接管理、会话管理、权限处理、消息桥接
-│   ├── rcs-upstream.ts  # RCS 上游客户端：REST 注册 + WS identify 两步流程
-│   ├── cert.ts          # TLS 证书生成（自签名）
-│   ├── logger.ts        # 日志模块
-│   ├── types.ts         # JSON-RPC 和 ACP 协议类型定义
+│   ├── server.ts        # Main server: WS connection management, sessions, permission handling, message bridging
+│   ├── rcs-upstream.ts  # RCS upstream client: REST registration + WS identify two-step flow
+│   ├── cert.ts          # TLS certificate generation (self-signed)
+│   ├── logger.ts        # Logging module
+│   ├── types.ts         # JSON-RPC and ACP protocol type definitions
 │   ├── cli/
-│   │   ├── bin.ts       # CLI 入口
-│   │   ├── command.ts   # 命令行参数解析
-│   │   ├── app.ts       # 应用启动
-│   │   └── context.ts   # 上下文配置
-│   └── __tests__/       # 测试（cert, server, types）
+│   │   ├── bin.ts       # CLI entry
+│   │   ├── command.ts   # Command-line argument parsing
+│   │   ├── app.ts       # App startup
+│   │   └── context.ts   # Context configuration
+│   └── __tests__/       # Tests (cert, server, types)
 ├── package.json
 └── tsconfig.json
 ```
 
-## 三、安装与使用
+## 3. Installation and Usage
 
-### 基本用法
+### Basic Usage
 
 ```bash
-# 直接运行（在 monorepo 中）
-# 注意：claude 本身不支持 ACP，需要用 ccb-bun --acp 启动 ACP agent
+# Run directly (inside the monorepo)
+# Note: claude itself does not support ACP; launch the ACP agent with ccb-bun --acp
 bun packages/acp-link/src/cli/bin.ts ccb-bun -- --acp
 
-# 指定端口和主机
+# Specify port and host
 acp-link --port 9000 --host 0.0.0.0 ccb-bun -- --acp
 
-# 启用 HTTPS（自签名证书）
+# Enable HTTPS (self-signed certificate)
 acp-link --https ccb-bun -- --acp
 
-# 调试模式
+# Debug mode
 acp-link --debug ccb-bun -- --acp
 ```
 
-### CLI 参考
+### CLI Reference
 
 ```
 USAGE
@@ -97,111 +97,111 @@ ARGUMENTS
   command...  Agent command followed by its arguments (e.g. "ccb-bun -- --acp")
 ```
 
-## 四、认证
+## 4. Authentication
 
-默认启动时自动生成随机 token。客户端连接时不要把 token 放在 URL 中：
+A random token is generated automatically at startup. Clients should not put the token in the URL when connecting:
 
 ```
 ws://localhost:9315/ws
 ```
 
-无法发送 `Authorization` header 的 WebSocket 客户端需要使用
-`rcs.auth.<base64url-token>` 子协议传递 token。
+WebSocket clients that cannot send an `Authorization` header must pass the token
+through the `rcs.auth.<base64url-token>` subprotocol.
 
-配置固定 token：
+Configure a fixed token:
 
 ```bash
 ACP_AUTH_TOKEN=my-fixed-token acp-link ccb-bun -- --acp
 ```
 
-禁用认证（不推荐，仅用于开发）：
+Disable authentication (not recommended; development only):
 
 ```bash
 acp-link --no-auth ccb-bun -- --acp
 ```
 
-## 五、RCS 集成
+## 5. RCS Integration
 
-acp-link 支持将 ACP agent 注册到 Remote Control Server，通过 Web UI 远程操控。
+acp-link can register an ACP agent with a Remote Control Server so it can be driven remotely from the Web UI.
 
-### 连接方式
+### Connecting
 
 ```bash
-# 通过环境变量配置 RCS 连接
+# Configure the RCS connection through environment variables
 ACP_RCS_URL=http://localhost:3000 \
 ACP_RCS_TOKEN=sk-rcs-your-key \
 acp-link ccb-bun -- --acp
 ```
 
-### 注册流程（两步）
+### Registration Flow (Two Steps)
 
-1. **REST 注册**：通过 `POST /v1/environments/bridge` 向 RCS 注册环境
-2. **WS identify**：建立 WebSocket 连接后发送 `identify` 消息（携带 agentId），替代完整 `register`
+1. **REST registration**: registers the environment with RCS via `POST /v1/environments/bridge`
+2. **WS identify**: after the WebSocket connection is established, sends an `identify` message (carrying the agentId) in place of a full `register`
 
-RCS 的 ACP WebSocket 连接不接受 URL query token。acp-link 会通过
-`rcs.auth.<base64url-token>` WebSocket 子协议发送 `ACP_RCS_TOKEN`。
+RCS's ACP WebSocket connection does not accept a URL query token. acp-link sends `ACP_RCS_TOKEN`
+through the `rcs.auth.<base64url-token>` WebSocket subprotocol.
 
 ```
 acp-link                          RCS
    │                                │
-   │── POST /v1/environments/bridge ──►│  (REST 注册)
+   │── POST /v1/environments/bridge ──►│  (REST registration)
    │◄── { agentId, sessionId } ───────│
    │                                │
    │── WS connect ─────────────────►│  (WebSocket)
-   │── identify { agentId } ────────►│  (WS 标识)
+   │── identify { agentId } ────────►│  (WS identification)
    │◄── identified ─────────────────│
    │                                │
-   │── ACP events ─────────────────►│  (双向消息转发)
+   │── ACP events ─────────────────►│  (bidirectional forwarding)
    │◄── user prompts/permissions ───│
 ```
 
-## 六、权限模式
+## 6. Permission Modes
 
-### permissionMode 传递链
+### permissionMode Propagation
 
-权限模式通过整条链路传递：Web UI → RCS → acp-link → ACP agent。
+The permission mode is passed along the whole chain: Web UI → RCS → acp-link → ACP agent.
 
-支持的权限模式：
-- `default` — 每次请求权限确认
-- `auto` — 自动判断
-- `acceptEdits` — 自动接受编辑
-- `plan` — 规划模式
-- `dontAsk` — 不询问
-- `bypassPermissions` — 绕过权限（需 sandbox 环境）
+Supported permission modes:
+- `default` — ask for confirmation on every request
+- `auto` — decide automatically
+- `acceptEdits` — accept edits automatically
+- `plan` — plan mode
+- `dontAsk` — never ask
+- `bypassPermissions` — bypass permissions (requires a sandbox environment)
 
-### fallback 链
+### Fallback Chain
 
-当客户端未显式传递 permissionMode 时，使用以下 fallback 链：
+When the client does not pass permissionMode explicitly, the following fallback chain applies:
 
 ```
-客户端传值 > config.permissionMode > ACP_PERMISSION_MODE 环境变量
+client value > config.permissionMode > ACP_PERMISSION_MODE environment variable
 ```
 
-示例：
+Example:
 
 ```bash
 ACP_PERMISSION_MODE=auto acp-link ccb-bun -- --acp
 ```
 
-## 七、权限管道（2026-04-18 改进）
+## 7. Permission Pipeline (Improved 2026-04-18)
 
-### 模式同步
+### Mode Sync
 
-`applySessionMode` 在 agent 切换权限模式时同步 `appState.toolPermissionContext.mode`，确保内部权限上下文与 ACP 客户端状态一致。
+`applySessionMode` syncs `appState.toolPermissionContext.mode` when the agent switches permission mode, keeping the internal permission context consistent with the ACP client's state.
 
-### 统一权限流水线
+### Unified Permission Pipeline
 
-`createAcpCanUseTool` 接入 `hasPermissionsToUseTool` 统一权限流水线，替代原来分散的处理逻辑。支持 `onModeChange` 回调，模式变更时实时同步。
+`createAcpCanUseTool` plugs into the unified `hasPermissionsToUseTool` pipeline, replacing the previously scattered handling. It supports an `onModeChange` callback so mode changes sync in real time.
 
-### bypass 检测
+### Bypass Detection
 
-`bypassPermissions` 模式增加可用性检测 — 仅在非 root 或 sandbox 环境中允许启用，防止权限绕过的安全风险。
+`bypassPermissions` mode now has an availability check: it can only be enabled for non-root users or in a sandbox environment, preventing a permission-bypass security risk.
 
-## 八、环境变量
+## 8. Environment Variables
 
-| 变量 | 说明 |
-|------|------|
-| `ACP_AUTH_TOKEN` | 固定认证 token（默认自动生成） |
-| `ACP_PERMISSION_MODE` | 默认权限模式 fallback |
-| `ACP_RCS_URL` | RCS 服务器地址（启用 RCS 集成） |
+| Variable | Description |
+|----------|-------------|
+| `ACP_AUTH_TOKEN` | Fixed authentication token (generated automatically by default) |
+| `ACP_PERMISSION_MODE` | Default permission mode fallback |
+| `ACP_RCS_URL` | RCS server address (enables RCS integration) |
 | `ACP_RCS_TOKEN` | RCS API token |

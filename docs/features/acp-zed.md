@@ -1,25 +1,25 @@
-# ACP (Agent Client Protocol) — Zed / IDE 集成
+# ACP (Agent Client Protocol) — Zed / IDE Integration
 
-> Feature Flag: `FEATURE_ACP=1`（build 和 dev 模式默认启用）
-> 实现状态：可用（支持 Zed、Cursor 等 ACP 客户端）
-> 源码目录：`src/services/acp/`
+> Feature Flag: `FEATURE_ACP=1` (enabled by default in build and dev modes)
+> Status: working (supports ACP clients such as Zed and Cursor)
+> Source directory: `src/services/acp/`
 
-## 一、功能概述
+## 1. Overview
 
-ACP (Agent Client Protocol) 是一种标准化的 stdio 协议，允许 IDE 和编辑器通过 stdin/stdout 的 NDJSON 流驱动 AI Agent。CCB 实现了完整的 ACP agent 端，可以被 Zed、Cursor 等支持 ACP 的客户端直接调用。
+ACP (Agent Client Protocol) is a standardized stdio protocol that lets IDEs and editors drive an AI agent over an NDJSON stream on stdin/stdout. CCB implements the full agent side of ACP and can be invoked directly by ACP-capable clients such as Zed and Cursor.
 
-### 核心特性
+### Key Features
 
-- **会话管理**：新建 / 恢复 / 加载 / 分叉 / 关闭会话
-- **历史回放**：恢复会话时自动加载并回放对话历史
-- **权限桥接**：ACP 客户端的权限决策映射到 CCB 的工具权限系统
-- **斜杠命令 & Skills**：加载真实命令列表，支持 `/commit`、`/review` 等 prompt 型 skill
-- **Context Window 跟踪**：精确的 usage_update，含 model prefix matching
-- **Prompt 排队**：支持连续发送多条 prompt，自动排队处理
-- **模式切换**：auto / default / acceptEdits / plan / dontAsk / bypassPermissions
-- **模型切换**：运行时切换 AI 模型
+- **Session management**: create / resume / load / fork / close sessions
+- **History replay**: conversation history is loaded and replayed automatically when a session is resumed
+- **Permission bridging**: permission decisions from the ACP client map onto CCB's tool permission system
+- **Slash commands & skills**: loads the real command list and supports prompt-type skills such as `/commit` and `/review`
+- **Context window tracking**: accurate usage_update, including model prefix matching
+- **Prompt queueing**: multiple prompts can be sent back to back and are queued automatically
+- **Mode switching**: auto / default / acceptEdits / plan / dontAsk / bypassPermissions
+- **Model switching**: switch the AI model at runtime
 
-## 二、架构
+## 2. Architecture
 
 ```
 ┌──────────────┐    NDJSON/stdio    ┌──────────────────┐
@@ -29,28 +29,28 @@ ACP (Agent Client Protocol) 是一种标准化的 stdio 协议，允许 IDE 和�
                                     │  entry.ts        │ ← stdio → NDJSON stream
                                     │  agent.ts        │ ← ACP protocol handler
                                     │  bridge.ts       │ ← SDKMessage → ACP SessionUpdate
-                                    │  permissions.ts  │ ← 权限桥接
-                                    │  utils.ts        │ ← 通用工具
+                                    │  permissions.ts  │ ← permission bridge
+                                    │  utils.ts        │ ← shared helpers
                                     │                  │
-                                    │  QueryEngine     │ ← 内部查询引擎
+                                    │  QueryEngine     │ ← internal query engine
                                     └──────────────────┘
 ```
 
-### 文件职责
+### File Responsibilities
 
-| 文件 | 职责 |
-|------|------|
-| `entry.ts` | 入口，创建 stdio → NDJSON stream，启动 `AgentSideConnection` |
-| `agent.ts` | 实现 ACP `Agent` 接口：会话 CRUD、prompt、cancel、模式/模型切换 |
-| `bridge.ts` | `SDKMessage` → ACP `SessionUpdate` 转换：文本/思考/工具/用量/编辑 diff |
-| `permissions.ts` | ACP `requestPermission()` → CCB `CanUseToolFn` 桥接 |
-| `utils.ts` | Pushable、流转换、权限模式解析、session fingerprint、路径显示 |
+| File | Responsibility |
+|------|----------------|
+| `entry.ts` | Entry point; creates the stdio → NDJSON stream and starts `AgentSideConnection` |
+| `agent.ts` | Implements the ACP `Agent` interface: session CRUD, prompt, cancel, mode/model switching |
+| `bridge.ts` | Converts `SDKMessage` → ACP `SessionUpdate`: text/thinking/tools/usage/edit diffs |
+| `permissions.ts` | Bridges ACP `requestPermission()` → CCB `CanUseToolFn` |
+| `utils.ts` | Pushable, stream conversion, permission-mode parsing, session fingerprint, path display |
 
-## 三、配置 Zed 编辑器
+## 3. Configuring the Zed Editor
 
-### 3.1 Zed settings.json 配置
+### 3.1 Zed settings.json
 
-打开 Zed 的 `settings.json`（`Cmd+,` → Open Settings），添加 `agent_servers` 配置：
+Open Zed's `settings.json` (`Cmd+,` → Open Settings) and add an `agent_servers` entry:
 
 ```json
 {
@@ -64,11 +64,11 @@ ACP (Agent Client Protocol) 是一种标准化的 stdio 协议，允许 IDE 和�
 }
 ```
 
-### 3.3 API 认证配置
+### 3.3 API Authentication
 
-CCB 的 ACP agent 在启动时会自动加载 `settings.json` 中的环境变量（`ANTHROPIC_BASE_URL`、`ANTHROPIC_AUTH_TOKEN` 等）。确保已通过 `/login` 配置好 API 供应商。
+At startup, CCB's ACP agent automatically loads the environment variables from `settings.json` (`ANTHROPIC_BASE_URL`, `ANTHROPIC_AUTH_TOKEN`, etc.). Make sure an API provider has been configured through `/login`.
 
-也可通过环境变量传入：
+They can also be passed as environment variables:
 
 ```json
 {
@@ -85,48 +85,48 @@ CCB 的 ACP agent 在启动时会自动加载 `settings.json` 中的环境变量
 }
 ```
 
-### 3.4 在 Zed 中使用
+### 3.4 Using It in Zed
 
-1. 配置完成后重启 Zed
-2. 打开任意项目目录
-3. 按 `Cmd+'`（macOS）或 `Ctrl+'`（Linux）打开 Agent Panel
-4. 在 Agent Panel 顶部的下拉菜单中选择 **claude-code**
-5. 开始对话
+1. Restart Zed after configuring
+2. Open any project directory
+3. Press `Cmd+'` (macOS) or `Ctrl+'` (Linux) to open the Agent Panel
+4. Choose **claude-code** from the dropdown at the top of the Agent Panel
+5. Start chatting
 
-### 3.5 功能说明
+### 3.5 Features
 
-| 功能 | 操作 |
-|------|------|
-| 对话 | 在 Agent Panel 中直接输入消息 |
-| 斜杠命令 | 输入 `/` 查看可用 skills 列表（如 `/commit`、`/review`） |
-| 工具权限 | 弹出权限请求时选择 Allow / Reject / Always Allow |
-| 模式切换 | 通过 Agent Panel 的设置菜单切换 auto/default/plan 等模式 |
-| 模型切换 | 通过 Agent Panel 的设置菜单切换 AI 模型 |
-| 会话恢复 | 关闭重开 Zed 后，之前的会话可自动恢复（含历史消息） |
+| Feature | How |
+|---------|-----|
+| Chat | Type a message directly in the Agent Panel |
+| Slash commands | Type `/` to see the available skills (e.g. `/commit`, `/review`) |
+| Tool permissions | Choose Allow / Reject / Always Allow when a permission request appears |
+| Mode switching | Switch between auto/default/plan etc. from the Agent Panel settings menu |
+| Model switching | Switch the AI model from the Agent Panel settings menu |
+| Session resume | After closing and reopening Zed, earlier sessions resume automatically (with history) |
 
-## 四、配置其他 ACP 客户端
+## 4. Configuring Other ACP Clients
 
-ACP 是开放协议，任何支持 ACP 的客户端都可以连接 CCB。通用配置模式：
+ACP is an open protocol, so any ACP-capable client can connect to CCB. The general configuration pattern:
 
 ```
-命令: ccb --acp
-参数: ["--acp"]
-通信: stdin/stdout NDJSON
-协议版本: ACP v1
+Command: ccb --acp
+Args: ["--acp"]
+Transport: stdin/stdout NDJSON
+Protocol version: ACP v1
 ```
 
 ### 4.1 Cursor
 
-在 Cursor 的设置中配置 MCP / Agent Server，使用同样的 `ccb --acp` 命令。
+In Cursor's settings, configure an MCP / Agent Server using the same `ccb --acp` command.
 
-### 4.2 自定义客户端
+### 4.2 Custom Clients
 
-使用 `@agentclientprotocol/sdk` 可以快速构建 ACP 客户端：
+`@agentclientprotocol/sdk` makes it quick to build an ACP client:
 
 ```typescript
 import { ClientSideConnection, ndJsonStream } from '@agentclientprotocol/sdk'
 
-// 创建连接（将 ccb --acp 作为子进程启动）
+// Create the connection (launch ccb --acp as a child process)
 const child = spawn('ccb', ['--acp'])
 const stream = ndJsonStream(
   Writable.toWeb(child.stdin),
@@ -135,55 +135,55 @@ const stream = ndJsonStream(
 
 const client = new ClientSideConnection(stream)
 
-// 初始化
+// Initialize
 await client.initialize({ clientCapabilities: {} })
 
-// 创建会话
+// Create a session
 const { sessionId } = await client.newSession({
   cwd: '/path/to/project',
 })
 
-// 发送 prompt
+// Send a prompt
 const response = await client.prompt({
   sessionId,
   prompt: [{ type: 'text', text: 'Hello, explain this project' }],
 })
 
-// 监听 session 更新
+// Listen for session updates
 client.on('sessionUpdate', (update) => {
   console.log('Update:', update)
 })
 ```
 
-## 五、ACP 协议支持矩阵
+## 5. ACP Protocol Support Matrix
 
-| 方法 | 状态 | 说明 |
-|------|------|------|
-| `initialize` | ✅ | 返回 agent 信息和能力 |
-| `authenticate` | ✅ | 无需认证（自托管） |
-| `newSession` | ✅ | 创建新会话 |
-| `resumeSession` | ✅ | 恢复已有会话（含历史回放） |
-| `loadSession` | ✅ | 加载指定会话（含历史回放） |
-| `listSessions` | ✅ | 列出可用会话 |
-| `forkSession` | ✅ | 分叉会话 |
-| `closeSession` | ✅ | 关闭会话 |
-| `prompt` | ✅ | 发送消息，支持排队 |
-| `cancel` | ✅ | 取消当前/排队的 prompt |
-| `setSessionMode` | ✅ | 切换权限模式 |
-| `setSessionModel` | ✅ | 切换 AI 模型 |
-| `setSessionConfigOption` | ✅ | 动态修改配置 |
+| Method | Status | Notes |
+|--------|--------|-------|
+| `initialize` | ✅ | Returns agent info and capabilities |
+| `authenticate` | ✅ | No authentication needed (self-hosted) |
+| `newSession` | ✅ | Creates a new session |
+| `resumeSession` | ✅ | Resumes an existing session (with history replay) |
+| `loadSession` | ✅ | Loads a specific session (with history replay) |
+| `listSessions` | ✅ | Lists available sessions |
+| `forkSession` | ✅ | Forks a session |
+| `closeSession` | ✅ | Closes a session |
+| `prompt` | ✅ | Sends a message; supports queueing |
+| `cancel` | ✅ | Cancels the current/queued prompt |
+| `setSessionMode` | ✅ | Switches the permission mode |
+| `setSessionModel` | ✅ | Switches the AI model |
+| `setSessionConfigOption` | ✅ | Changes configuration dynamically |
 
-### SessionUpdate 类型
+### SessionUpdate Types
 
-| 类型 | 状态 | 说明 |
-|------|------|------|
-| `agent_message_chunk` | ✅ | 助手文本消息 |
-| `agent_thought_chunk` | ✅ | 思考/推理内容 |
-| `user_message_chunk` | ✅ | 用户消息（历史回放） |
-| `tool_call` | ✅ | 工具调用开始 |
-| `tool_call_update` | ✅ | 工具调用结果/状态更新 |
-| `usage_update` | ✅ | token 用量 + context window |
+| Type | Status | Notes |
+|------|--------|-------|
+| `agent_message_chunk` | ✅ | Assistant text message |
+| `agent_thought_chunk` | ✅ | Thinking/reasoning content |
+| `user_message_chunk` | ✅ | User message (history replay) |
+| `tool_call` | ✅ | Tool call start |
+| `tool_call_update` | ✅ | Tool call result/status update |
+| `usage_update` | ✅ | Token usage + context window |
 | `plan` | ✅ | TodoWrite → plan entries |
-| `available_commands_update` | ✅ | 斜杠命令 & skills 列表 |
-| `current_mode_update` | ✅ | 模式切换通知 |
-| `config_option_update` | ✅ | 配置更新通知 |
+| `available_commands_update` | ✅ | Slash command & skill list |
+| `current_mode_update` | ✅ | Mode change notification |
+| `config_option_update` | ✅ | Configuration update notification |

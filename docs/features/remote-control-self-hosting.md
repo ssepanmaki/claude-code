@@ -1,17 +1,17 @@
-# Remote Control Server 私有化部署指南
+# Remote Control Server Self-Hosting Guide
 
-本指南说明如何将 Remote Control Server (RCS) 部署到私有环境，并通过 Claude Code CLI 连接使用。
+This guide explains how to deploy the Remote Control Server (RCS) to a private environment and connect to it with the Claude Code CLI.
 
-## 架构概览
+## Architecture overview
 
 ```
 ┌──────────────────┐                    ┌──────────────────────┐
 │  Claude Code CLI  │ ◄── HTTP/SSE/WS ─►│  Remote Control      │
-│  (Bridge Worker)  │     长轮询 + 心跳   │  Server (RCS)        │
+│  (Bridge Worker)  │  long poll + heartbeat│  Server (RCS)      │
 └──────────────────┘                    │                      │
                                         │  ┌──────────────┐    │
 ┌──────────────────┐   HTTP/SSE        │  │ In-Memory    │    │
-│  Web UI 控制面板  │ ◄─────────────── │  │ Store        │    │
+│  Web UI dashboard │ ◄─────────────── │  │ Store        │    │
 │  (/code/*)       │                   │  └──────────────┘    │
 │  (React + Vite)  │                   │  ┌──────────────┐    │
 └──────────────────┘                   │  │ JWT Auth     │    │
@@ -22,31 +22,31 @@
 └──────────────────┘                   └──────────────────────┘
 ```
 
-**RCS 是一个纯内存的中间服务**，它的职责是：
-- 接收 Claude Code CLI 的环境注册和工作轮询
-- 接收 acp-link 的 ACP agent 注册，支持 WebSocket relay 桥接
-- 提供 Web UI 供操作者远程监控和审批
-- 通过 WebSocket/SSE 双向传输消息
-- 管理会话、环境、权限请求
-- 提供 ACP SSE event stream 供外部消费者订阅 channel group 事件
+**RCS is a purely in-memory intermediary service.** Its responsibilities are:
+- Accept environment registration and work polling from the Claude Code CLI
+- Accept ACP agent registration from acp-link, with WebSocket relay bridging
+- Provide a Web UI for operators to monitor and approve remotely
+- Carry messages in both directions over WebSocket/SSE
+- Manage sessions, environments, and permission requests
+- Provide an ACP SSE event stream so external consumers can subscribe to channel group events
 
-## 前置条件
+## Prerequisites
 
-- 一台可被 Claude Code CLI 和 Web 浏览器同时访问的服务器（物理机、VM、容器均可）
+- A server reachable by both the Claude Code CLI and a web browser (physical machine, VM, or container)
 - [Docker](https://www.docker.com/)
-- 启用 `BRIDGE_MODE` feature flag 的 Claude Code 构建
+- A Claude Code build with the `BRIDGE_MODE` feature flag enabled
 
-## 部署
+## Deployment
 
-### 构建 Docker 镜像
+### Build the Docker image
 
-在项目根目录执行：
+From the project root:
 
 ```bash
 docker build -t rcs:latest -f packages/remote-control-server/Dockerfile .
 ```
 
-### 启动容器
+### Start the container
 
 ```bash
 docker run -d \
@@ -83,275 +83,275 @@ volumes:
   rcs-data:
 ```
 
-启动：
+Start it:
 
 ```bash
 docker compose up -d
 ```
 
-## 环境变量参考
+## Environment variable reference
 
-### 服务器端
+### Server side
 
-| 变量 | 必填 | 默认值 | 说明 |
+| Variable | Required | Default | Description |
 |------|------|--------|------|
-| `RCS_API_KEYS` | **是** | _(空)_ | API 密钥列表，逗号分隔。用于客户端认证和 JWT 签名。**务必设置强密钥** |
-| `RCS_PORT` | 否 | `3000` | 服务监听端口 |
-| `RCS_HOST` | 否 | `0.0.0.0` | 服务监听地址 |
-| `RCS_BASE_URL` | 否 | `http://localhost:3000` | 外部访问 URL。用于生成 WebSocket 连接地址，必须与客户端实际访问的地址一致 |
-| `RCS_VERSION` | 否 | `0.1.0` | 版本号，显示在 `/health` 响应中 |
-| `RCS_POLL_TIMEOUT` | 否 | `8` | V1 工作轮询超时（秒） |
-| `RCS_HEARTBEAT_INTERVAL` | 否 | `20` | 心跳间隔（秒） |
-| `RCS_JWT_EXPIRES_IN` | 否 | `3600` | JWT 令牌有效期（秒） |
-| `RCS_DISCONNECT_TIMEOUT` | 否 | `300` | 断线判定超时（秒） |
-| `RCS_WS_IDLE_TIMEOUT` | 否 | `30` | WebSocket 空闲超时（秒），Bun 发送协议级 ping |
-| `RCS_WS_KEEPALIVE_INTERVAL` | 否 | `20` | 服务端→客户端 keep_alive 帧间隔（秒），防止反向代理关闭空闲连接 |
+| `RCS_API_KEYS` | **Yes** | _(empty)_ | Comma-separated list of API keys. Used for client authentication and JWT signing. **Be sure to set a strong key** |
+| `RCS_PORT` | No | `3000` | Port the service listens on |
+| `RCS_HOST` | No | `0.0.0.0` | Address the service listens on |
+| `RCS_BASE_URL` | No | `http://localhost:3000` | External access URL. Used to generate WebSocket connection addresses and must match the address clients actually use |
+| `RCS_VERSION` | No | `0.1.0` | Version number, shown in the `/health` response |
+| `RCS_POLL_TIMEOUT` | No | `8` | V1 work poll timeout (seconds) |
+| `RCS_HEARTBEAT_INTERVAL` | No | `20` | Heartbeat interval (seconds) |
+| `RCS_JWT_EXPIRES_IN` | No | `3600` | JWT token lifetime (seconds) |
+| `RCS_DISCONNECT_TIMEOUT` | No | `300` | Timeout for deciding a client has disconnected (seconds) |
+| `RCS_WS_IDLE_TIMEOUT` | No | `30` | WebSocket idle timeout (seconds); Bun sends protocol-level pings |
+| `RCS_WS_KEEPALIVE_INTERVAL` | No | `20` | Interval of server→client keep_alive frames (seconds), preventing reverse proxies from closing idle connections |
 
-### 客户端（Claude Code CLI）
+### Client side (Claude Code CLI)
 
-| 变量 | 必填 | 说明 |
+| Variable | Required | Description |
 |------|------|------|
-| `CLAUDE_BRIDGE_BASE_URL` | **是** | RCS 服务器地址，例如 `https://rcs.example.com`。设置此变量即启用自托管模式，跳过 GrowthBook 门控 |
-| `CLAUDE_BRIDGE_OAUTH_TOKEN` | **是** | 认证令牌，必须与服务器端 `RCS_API_KEYS` 中的某个值匹配 |
-| `CLAUDE_BRIDGE_SESSION_INGRESS_URL` | 否 | WebSocket 入口地址（默认与 `CLAUDE_BRIDGE_BASE_URL` 相同） |
-| `CLAUDE_CODE_REMOTE` | 否 | 设为 `1` 时标记为远程执行模式 |
+| `CLAUDE_BRIDGE_BASE_URL` | **Yes** | RCS server address, e.g. `https://rcs.example.com`. Setting this variable enables self-hosted mode and skips the GrowthBook gate |
+| `CLAUDE_BRIDGE_OAUTH_TOKEN` | **Yes** | Authentication token; must match one of the values in the server's `RCS_API_KEYS` |
+| `CLAUDE_BRIDGE_SESSION_INGRESS_URL` | No | WebSocket ingress address (defaults to the same as `CLAUDE_BRIDGE_BASE_URL`) |
+| `CLAUDE_CODE_REMOTE` | No | When set to `1`, marks remote execution mode |
 
-## Claude Code 客户端连接
+## Connecting the Claude Code client
 
-### 1. 设置环境变量
+### 1. Set the environment variables
 
-在运行 Claude Code 的机器上设置：
+On the machine running Claude Code:
 
 ```bash
 export CLAUDE_BRIDGE_BASE_URL="https://rcs.example.com"
 export CLAUDE_BRIDGE_OAUTH_TOKEN="sk-rcs-your-secret-key-here"
 ```
 
-### 2. 启动 Claude Code
+### 2. Start Claude Code
 
 ```bash
-# 使用 dev 模式（BRIDGE_MODE 默认启用）
+# Use dev mode (BRIDGE_MODE is enabled by default)
 bun run dev
 
-# 或使用构建产物
+# Or use the build output
 bun run dist/cli.js
 ```
 
-### 3. 执行 /remote-control 命令
+### 3. Run the /remote-control command
 
-在 Claude Code 的 REPL 中输入：
+In the Claude Code REPL, type:
 
 ```
 /remote-control
 ```
 
-环境型 Remote Control（例如 `claude remote-control` 子命令）会向 RCS 注册环境，注册成功后在终端显示连接 URL：
+Environment-style Remote Control (for example the `claude remote-control` subcommand) registers an environment with RCS, and on success the terminal shows a connection URL:
 
 ```
 https://rcs.example.com/code?bridge=<environmentId>
 ```
 
-交互式 REPL 方式（`--remote-control` 或 `/remote-control`）在某些桥接模式下也可能直接给出会话 URL：
+The interactive REPL approach (`--remote-control` or `/remote-control`) may also give a session URL directly in some bridge modes:
 
 ```
 https://rcs.example.com/code/session_<id>
 ```
 
-两种 URL 都可以直接在浏览器打开并远程操控当前会话；只有 environment 模式才会出现在 Web UI 的环境列表中。
+Either URL can be opened directly in a browser to remotely control the current session; only environment mode appears in the Web UI's environment list.
 
-若已连接，再次执行 `/remote-control` 会显示对话框，包含以下选项：
-- **Disconnect this session** — 断开远程连接
-- **Show QR code** — 显示/隐藏二维码
-- **Continue** — 保持连接，继续使用
+If already connected, running `/remote-control` again shows a dialog with these options:
+- **Disconnect this session** — disconnect the remote connection
+- **Show QR code** — show/hide the QR code
+- **Continue** — stay connected and keep working
 
-也可通过 CLI 参数直接启动：
+You can also start it directly with CLI arguments:
 
 ```bash
 claude remote-control
-# 或简写
+# or the short form
 claude rc
-# 或
+# or
 claude bridge
 ```
 
-## Web UI 控制面板
+## Web UI dashboard
 
-通过 `/remote-control` 命令获取 URL 后，在浏览器打开即可使用。
+After getting the URL from the `/remote-control` command, open it in a browser to use it.
 
-### 技术栈（v2，2026-04-18 重构）
+### Tech stack (v2, refactored 2026-04-18)
 
-Web UI 已从原生 JS 重构为 **React + Vite + Radix UI**：
+The Web UI was refactored from vanilla JS to **React + Vite + Radix UI**:
 
-- **框架**: React 19 + Vite 构建，TypeScript
-- **UI 组件**: Radix UI primitives（Dialog、Tabs、Select、Popover 等）
-- **聊天组件**: 完整的 ACP 聊天界面，支持 Plan 可视化、工具调用展示、权限审批
-- **AI Elements**: 独立的 AI 交互组件库（message、reasoning、tool、code-block、prompt-input 等）
-- **ACP 直连**: 支持 QR 码扫描自动跳转 ACP 直连视图（`ACPDirectView`）
-- **主题系统**: 暗色/亮色主题切换，遵循 Impeccable 设计系统
+- **Framework**: React 19 + Vite build, TypeScript
+- **UI components**: Radix UI primitives (Dialog, Tabs, Select, Popover, etc.)
+- **Chat components**: a complete ACP chat interface supporting Plan visualization, tool call display, and permission approval
+- **AI Elements**: a standalone AI interaction component library (message, reasoning, tool, code-block, prompt-input, etc.)
+- **Direct ACP connection**: scanning a QR code automatically jumps to the direct ACP view (`ACPDirectView`)
+- **Theme system**: dark/light theme switching, following the Impeccable design system
 
-### 功能
+### Features
 
-- 查看已注册的运行环境（environment 模式），区分 ACP Agent 和 Claude Code 类型
-- 创建和管理会话
-- 实时查看对话消息和工具调用
-- 查看 Autopilot 状态（`standby` / `sleeping`）和自动运行指示
-- 查看 authoritative task snapshots 驱动的 Tasks 面板
-- 审批 Claude Code 的工具权限请求
-- 权限模式选择器（6 种模式：默认/自动接受编辑/跳过权限/规划/不询问/自动判断）
-- 模型选择器（可选可用模型）
-- Plan 可视化（进度条、状态图标、优先级标签）
-- ACP QR 扫描自动跳转到 ACP 聊天界面
+- View registered runtime environments (environment mode), distinguishing ACP Agent and Claude Code types
+- Create and manage sessions
+- View conversation messages and tool calls in real time
+- View Autopilot state (`standby` / `sleeping`) and auto-run indicators
+- View the Tasks panel driven by authoritative task snapshots
+- Approve Claude Code's tool permission requests
+- Permission mode selector (6 modes: default / auto-accept edits / bypass permissions / plan / don't ask / auto)
+- Model selector (choose from available models)
+- Plan visualization (progress bar, status icons, priority tags)
+- ACP QR scan automatically jumps to the ACP chat interface
 
-Web UI 使用 UUID 认证（无需用户账户），适合受信任网络环境。
+The Web UI uses UUID authentication (no user accounts), which suits trusted network environments.
 
-## ACP 支持
+## ACP support
 
-RCS 支持 ACP (Agent Client Protocol) agent 通过 `acp-link` 包接入。
+RCS supports ACP (Agent Client Protocol) agents connecting through the `acp-link` package.
 
-### 架构
+### Architecture
 
 ```
-acp-link ──REST注册──► RCS POST /v1/environments/bridge
-acp-link ──WS identify──► RCS WebSocket (携带 agentId)
-acp-link ◄──ACP relay──► RCS ◄──Web UI WS──► 浏览器
+acp-link ──REST register──► RCS POST /v1/environments/bridge
+acp-link ──WS identify──► RCS WebSocket (carrying agentId)
+acp-link ◄──ACP relay──► RCS ◄──Web UI WS──► browser
 ```
 
-### 后端组件
+### Backend components
 
-| 文件 | 职责 |
+| File | Responsibility |
 |------|------|
-| `src/routes/acp/index.ts` | ACP REST 路由：agents 列表、channel groups、relay |
-| `src/transport/acp-ws-handler.ts` | ACP WebSocket 处理：agent 注册、心跳、消息转发 |
-| `src/transport/acp-relay-handler.ts` | 前端 WS → acp-link 透传 + EventBus inbound 转发 |
-| `src/transport/acp-sse-writer.ts` | SSE event stream 供外部消费者订阅 |
+| `src/routes/acp/index.ts` | ACP REST routes: agent list, channel groups, relay |
+| `src/transport/acp-ws-handler.ts` | ACP WebSocket handling: agent registration, heartbeat, message forwarding |
+| `src/transport/acp-relay-handler.ts` | Frontend WS → acp-link passthrough + EventBus inbound forwarding |
+| `src/transport/acp-sse-writer.ts` | SSE event stream for external consumers to subscribe to |
 
-ACP 的 agents、channel groups、relay 和 channel-group SSE 端点都要求有效
-API key。浏览器 `EventSource` 不能发送 `Authorization` header，外部订阅
-`/acp/channel-groups/:id/events` 时需要使用 `fetch` + `ReadableStream` 并带
-`Authorization: Bearer <api-key>`。
+The ACP agents, channel groups, relay, and channel-group SSE endpoints all require a valid
+API key. A browser `EventSource` cannot send an `Authorization` header, so external subscribers to
+`/acp/channel-groups/:id/events` need to use `fetch` + `ReadableStream` with
+`Authorization: Bearer <api-key>`.
 
-### acp-link 连接
+### Connecting acp-link
 
-详见 [acp-link 文档](./acp-link.md)。
+See the [acp-link documentation](./acp-link.md) for details.
 
 ```bash
-# 在 RCS 环境中启动 acp-link
-# 注意：claude 本身不支持 ACP，需要用 ccb-bun --acp
+# Start acp-link in the RCS environment
+# Note: claude itself does not support ACP; use ccb-bun --acp
 ACP_RCS_URL=http://localhost:3000 \
 ACP_RCS_TOKEN=sk-rcs-your-key \
 acp-link ccb-bun -- --acp
 ```
 
-ACP session 在 Web UI 中显示品牌色标签，与普通 Claude Code session 区分。
+ACP sessions show a brand-colored tag in the Web UI to distinguish them from ordinary Claude Code sessions.
 
-## 工作流程详解
+## Workflow in detail
 
 ```
 ┌──────────────────────────────────────────────────────────┐
-│                    完整工作流程                            │
+│                    Complete workflow                      │
 └──────────────────────────────────────────────────────────┘
 
- 1. Claude Code CLI 启动，设置环境变量指向自托管 RCS
+ 1. The Claude Code CLI starts, with environment variables pointing at the self-hosted RCS
 
- 2. 用户执行 /remote-control 命令
+ 2. The user runs the /remote-control command
 
- 3. 注册环境
+ 3. Register the environment
     CLI ──POST /v1/environments/bridge──► RCS
     CLI ◄── { environment_id, environment_secret } ── RCS
 
- 4. 终端显示连接 URL
+ 4. The terminal shows the connection URL
     https://rcs.example.com/code?bridge=<environmentId>
 
- 5. 开始工作轮询（循环）
+ 5. Start work polling (loop)
     CLI ──GET /v1/environments/:id/work/poll──► RCS
-         （长轮询，等待任务分配，超时 8 秒后重试）
+         (long poll, waiting for task assignment, retry after an 8 second timeout)
 
- 6. 浏览器打开 URL → Web UI 创建任务
+ 6. Open the URL in a browser → the Web UI creates a task
     Browser ──POST /web/sessions──► RCS
-    RCS 分配 work 给正在轮询的 CLI
+    RCS assigns the work to the polling CLI
 
- 7. CLI 收到任务并确认
+ 7. The CLI receives the task and acknowledges it
     CLI ◄── { id, data: { type, sessionId } } ── RCS
     CLI ──POST /v1/environments/:id/work/:workId/ack──► RCS
 
- 8. 建立会话连接
+ 8. Establish the session connection
     CLI ──WebSocket /v1/session_ingress──► RCS
-         （或使用 V2 的 SSE + HTTP POST）
+         (or use V2's SSE + HTTP POST)
 
- 9. 双向通信
-    CLI ──消息/工具调用结果──► RCS ──► Browser
-    CLI ◄──权限审批/指令───── RCS ◄──── Browser
+ 9. Two-way communication
+    CLI ──messages/tool call results──► RCS ──► Browser
+    CLI ◄──permission approvals/instructions───── RCS ◄──── Browser
     CLI ──automation_state / task_state──► RCS ──► Browser
 
-10. 心跳保活（每 20 秒）
+10. Heartbeat keep-alive (every 20 seconds)
     CLI ──POST /v1/environments/:id/work/:workId/heartbeat──► RCS
 
-11. 任务完成 → 归档会话 → 注销环境
+11. Task completes → archive session → deregister environment
 ```
 
-## 故障排查
+## Troubleshooting
 
-### Web UI 看不到当前 Autopilot 状态
+### The Web UI doesn't show the current Autopilot state
 
-- `standby`：proactive 已开启，正在等待下一个 tick
-- `sleeping`：模型正在 `SleepTool` 等待窗口中
+- `standby`: proactive is on and waiting for the next tick
+- `sleeping`: the model is in a `SleepTool` wait window
 
-这两个状态通过 worker `external_metadata.automation_state` 上报。如果页面只显示普通 working spinner，优先检查 CLI 和 RCS 之间的 worker metadata PUT 是否成功。
+These two states are reported through the worker's `external_metadata.automation_state`. If the page only shows an ordinary working spinner, first check whether the worker metadata PUT between the CLI and RCS succeeds.
 
-### CLI 无法连接
+### The CLI cannot connect
 
 ```
 Error: Remote Control is not available in this build.
 ```
 
-**原因**：`BRIDGE_MODE` feature flag 未启用。
+**Cause**: the `BRIDGE_MODE` feature flag is not enabled.
 
-**解决**：使用 dev 模式（默认启用）或确保构建时包含 `BRIDGE_MODE` flag。
+**Fix**: use dev mode (enabled by default) or make sure the build includes the `BRIDGE_MODE` flag.
 
-### 认证失败 (401)
+### Authentication failure (401)
 
 ```
 Error: Unauthorized
 ```
 
-**检查项**：
-1. `CLAUDE_BRIDGE_OAUTH_TOKEN` 是否与 `RCS_API_KEYS` 中的值匹配
-2. API Key 是否包含多余的空格或换行
-3. 两个环境变量是否都已正确设置
+**Things to check**:
+1. Whether `CLAUDE_BRIDGE_OAUTH_TOKEN` matches a value in `RCS_API_KEYS`
+2. Whether the API key contains extra spaces or newlines
+3. Whether both environment variables are set correctly
 
-### WebSocket 连接中断
+### WebSocket connection drops
 
-**检查项**：
-1. 如果使用反向代理，确认已正确配置 WebSocket 升级（`Upgrade` / `Connection` 头）
-2. 代理的 `proxy_read_timeout` 是否足够大（建议 86400 秒）
-3. 网络防火墙是否允许 WebSocket 流量
+**Things to check**:
+1. If you use a reverse proxy, confirm WebSocket upgrade is configured correctly (`Upgrade` / `Connection` headers)
+2. Whether the proxy's `proxy_read_timeout` is large enough (86400 seconds recommended)
+3. Whether the network firewall allows WebSocket traffic
 
-### 健康检查
+### Health check
 
 ```bash
 curl https://rcs.example.com/health
-# 预期: {"status":"ok","version":"0.1.0"}
+# Expected: {"status":"ok","version":"0.1.0"}
 ```
 
-## 限制与注意事项
+## Limitations and notes
 
-| 项目 | 说明 |
+| Item | Description |
 |------|------|
-| 存储 | 纯内存存储（Map），服务器重启后所有会话和环境数据丢失 |
-| 扩展 | 不支持水平扩展（无共享状态），单实例部署 |
-| 并发 | 适合中小规模使用，大量并发会话可能需要性能调优 |
-| 数据持久化 | `/app/data` 卷已预留但当前未使用，未来可能用于持久化 |
-| Web UI 认证 | 基于 UUID，无用户账户系统，适合受信任网络环境 |
+| Storage | Purely in-memory storage (Map); all session and environment data is lost when the server restarts |
+| Scaling | Horizontal scaling is not supported (no shared state); single-instance deployment |
+| Concurrency | Suited to small and medium scale; a large number of concurrent sessions may need performance tuning |
+| Data persistence | The `/app/data` volume is reserved but currently unused; it may be used for persistence in the future |
+| Web UI authentication | UUID-based, with no user account system, suited to trusted network environments |
 
-## 与云端模式对比
+## Comparison with cloud mode
 
-| 特性 | 云端 (Anthropic CCR) | 自托管 (RCS) |
+| Feature | Cloud (Anthropic CCR) | Self-hosted (RCS) |
 |------|---------------------|--------------|
-| 认证方式 | claude.ai OAuth 订阅 | API Key |
-| GrowthBook 门控 | 需要 `tengu_ccr_bridge` 通过 | 自动跳过 |
-| 功能标志 | 需要 `BRIDGE_MODE=1` | 同样需要 |
-| 部署位置 | Anthropic 云端 | 用户自有服务器 |
-| 数据流经 | Anthropic 基础设施 | 用户私有网络 |
-| 依赖 | claude.ai 订阅 + OAuth | 仅需 API Key |
+| Authentication | claude.ai OAuth subscription | API key |
+| GrowthBook gate | Requires `tengu_ccr_bridge` to pass | Skipped automatically |
+| Feature flag | Requires `BRIDGE_MODE=1` | Also required |
+| Deployment location | Anthropic cloud | The user's own server |
+| Data flows through | Anthropic infrastructure | The user's private network |
+| Dependencies | claude.ai subscription + OAuth | Only an API key |
 
-自托管模式的核心优势是：设置 `CLAUDE_BRIDGE_BASE_URL` 后，代码自动调用 `isSelfHostedBridge()` 返回 `true`，跳过所有 GrowthBook 和订阅检查，无需 claude.ai 账户即可使用。
+The core advantage of self-hosted mode is that once `CLAUDE_BRIDGE_BASE_URL` is set, the code automatically makes `isSelfHostedBridge()` return `true`, skipping all GrowthBook and subscription checks, so it can be used without a claude.ai account.

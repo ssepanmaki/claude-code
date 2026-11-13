@@ -1,57 +1,57 @@
-# WEB_SEARCH_TOOL — 网页搜索工具
+# WEB_SEARCH_TOOL — Web Search Tool
 
-> 实现状态：适配器架构完成，支持 API / Bing / Brave 三种后端
-> 引用数：核心工具，无 feature flag 门控（始终启用）
+> Status: adapter architecture complete; supports API / Bing / Brave backends
+> References: core tool, no feature flag gating (always enabled)
 
-## 一、功能概述
+## 1. Overview
 
-WebSearchTool 让模型可以搜索互联网获取最新信息。原始实现仅支持 Anthropic API 服务端搜索（`web_search_20250305` server tool），在第三方代理端点下不可用。现已重构为适配器架构，支持 API 服务端搜索，以及 Bing / Brave 两个 HTML 解析后端，确保任何 API 端点都能使用搜索功能。
+WebSearchTool lets the model search the internet for up-to-date information. The original implementation only supported Anthropic API server-side search (the `web_search_20250305` server tool), which is unavailable behind third-party proxy endpoints. It has been refactored into an adapter architecture that supports API server-side search plus two HTML-parsing backends, Bing and Brave, so search works with any API endpoint.
 
-## 二、实现架构
+## 2. Architecture
 
-### 2.1 适配器模式
+### 2.1 Adapter Pattern
 
 ```
 WebSearchTool.call()
        │
        ▼
-  createAdapter()  ← 适配器工厂
+  createAdapter()  ← adapter factory
        │
-       ├── ApiSearchAdapter  — Anthropic 官方 API 服务端搜索
-       │     └── 使用 web_search_20250305 server tool
-       │         通过 queryModelWithStreaming 二次调用 API
+       ├── ApiSearchAdapter  — Anthropic official API server-side search
+       │     └── uses the web_search_20250305 server tool
+       │         makes a second API call via queryModelWithStreaming
        │
-       ├── BingSearchAdapter  — Bing HTML 抓取 + 正则提取
-       │     └── 直接抓取 Bing 搜索页 HTML
-       │         正则提取 b_algo 块中的标题/URL/摘要
+       ├── BingSearchAdapter  — Bing HTML scraping + regex extraction
+       │     └── fetches the Bing results page HTML directly
+       │         extracts title/URL/snippet from b_algo blocks with regexes
        │
        └── BraveSearchAdapter — Brave LLM Context API
-             └── 调用 Brave HTTPS GET 接口
-                 将 grounding payload 映射为标题/URL/摘要
+             └── calls the Brave HTTPS GET endpoint
+                 maps the grounding payload to title/URL/snippet
 ```
 
-### 2.2 模块结构
+### 2.2 Module Structure
 
-| 模块 | 文件 | 说明 |
-|------|------|------|
-| 工具入口 | `packages/builtin-tools/src/tools/WebSearchTool/WebSearchTool.ts` | `buildTool()` 定义：schema、权限、执行、输出格式化 |
-| 工具 prompt | `packages/builtin-tools/src/tools/WebSearchTool/prompt.ts` | 搜索工具的系统提示词 |
-| UI 渲染 | `packages/builtin-tools/src/tools/WebSearchTool/UI.tsx` | 搜索结果的终端渲染组件 |
-| 适配器接口 | `packages/builtin-tools/src/tools/WebSearchTool/adapters/types.ts` | `WebSearchAdapter` 接口、`SearchResult`/`SearchOptions`/`SearchProgress` 类型 |
-| 适配器工厂 | `packages/builtin-tools/src/tools/WebSearchTool/adapters/index.ts` | `createAdapter()` 工厂函数，选择后端 |
-| API 适配器 | `packages/builtin-tools/src/tools/WebSearchTool/adapters/apiAdapter.ts` | 封装原有 `queryModelWithStreaming` 逻辑，使用 server tool |
-| Bing 适配器 | `packages/builtin-tools/src/tools/WebSearchTool/adapters/bingAdapter.ts` | Bing HTML 抓取 + 正则解析 |
-| Brave 适配器 | `packages/builtin-tools/src/tools/WebSearchTool/adapters/braveAdapter.ts` | Brave LLM Context API 适配与结果映射 |
-| 单元测试 | `packages/builtin-tools/src/tools/WebSearchTool/__tests__/bingAdapter.test.ts`, `packages/builtin-tools/src/tools/WebSearchTool/__tests__/braveAdapter*.test.ts`, `packages/builtin-tools/src/tools/WebSearchTool/__tests__/adapterFactory.test.ts` | Bing / Brave 解析与工厂逻辑测试 |
-| 集成测试 | `packages/builtin-tools/src/tools/WebSearchTool/__tests__/bingAdapter.integration.ts`, `packages/builtin-tools/src/tools/WebSearchTool/__tests__/braveAdapter.integration.ts` | 真实网络请求验证 |
+| Module | File | Description |
+|--------|------|-------------|
+| Tool entry | `packages/builtin-tools/src/tools/WebSearchTool/WebSearchTool.ts` | `buildTool()` definition: schema, permissions, execution, output formatting |
+| Tool prompt | `packages/builtin-tools/src/tools/WebSearchTool/prompt.ts` | System prompt for the search tool |
+| UI rendering | `packages/builtin-tools/src/tools/WebSearchTool/UI.tsx` | Terminal rendering component for search results |
+| Adapter interface | `packages/builtin-tools/src/tools/WebSearchTool/adapters/types.ts` | `WebSearchAdapter` interface, `SearchResult`/`SearchOptions`/`SearchProgress` types |
+| Adapter factory | `packages/builtin-tools/src/tools/WebSearchTool/adapters/index.ts` | `createAdapter()` factory that selects the backend |
+| API adapter | `packages/builtin-tools/src/tools/WebSearchTool/adapters/apiAdapter.ts` | Wraps the original `queryModelWithStreaming` logic using the server tool |
+| Bing adapter | `packages/builtin-tools/src/tools/WebSearchTool/adapters/bingAdapter.ts` | Bing HTML scraping + regex parsing |
+| Brave adapter | `packages/builtin-tools/src/tools/WebSearchTool/adapters/braveAdapter.ts` | Brave LLM Context API adaptation and result mapping |
+| Unit tests | `packages/builtin-tools/src/tools/WebSearchTool/__tests__/bingAdapter.test.ts`, `packages/builtin-tools/src/tools/WebSearchTool/__tests__/braveAdapter*.test.ts`, `packages/builtin-tools/src/tools/WebSearchTool/__tests__/adapterFactory.test.ts` | Bing / Brave parsing and factory logic tests |
+| Integration tests | `packages/builtin-tools/src/tools/WebSearchTool/__tests__/bingAdapter.integration.ts`, `packages/builtin-tools/src/tools/WebSearchTool/__tests__/braveAdapter.integration.ts` | Real network request verification |
 
-### 2.3 数据流
+### 2.3 Data Flow
 
 ```
-模型调用 WebSearchTool(query, allowed_domains, blocked_domains)
+Model calls WebSearchTool(query, allowed_domains, blocked_domains)
        │
        ▼
-  validateInput() — 校验 query 非空、allowed/block 不共存
+  validateInput() — checks query is non-empty and allowed/blocked don't coexist
        │
        ▼
   createAdapter() → ApiSearchAdapter | BingSearchAdapter | BraveSearchAdapter
@@ -62,24 +62,24 @@ WebSearchTool.call()
        ├── onProgress({ type: 'query_update', query })
        │
        ├── axios.get(search-engine-url)
-       │     └── API 鉴权请求头
+       │     └── API auth headers
        │
-       ├── extractResults(payload) — 按后端提取结果
-       │     └── grounding → SearchResult[] 映射
+       ├── extractResults(payload) — extract results per backend
+       │     └── grounding → SearchResult[] mapping
        │
-       ├── 客户端域名过滤 (allowedDomains / blockedDomains)
+       ├── client-side domain filtering (allowedDomains / blockedDomains)
        │
        ├── onProgress({ type: 'search_results_received', resultCount })
        │
        ▼
-  格式化为 markdown 链接列表返回给模型
+  Formatted as a markdown link list and returned to the model
 ```
 
-## 三、Bing 适配器技术细节
+## 3. Bing Adapter Details
 
-### 3.1 反爬绕过
+### 3.1 Anti-Bot Workaround
 
-使用 13 个 Edge 浏览器请求头（含 `Sec-Ch-Ua`、`Sec-Fetch-*` 等），避免 Bing 返回 JS 渲染的空页面：
+Uses 13 Edge browser request headers (including `Sec-Ch-Ua`, `Sec-Fetch-*`, etc.) so Bing doesn't return an empty JS-rendered page:
 
 ```typescript
 const BROWSER_HEADERS = {
@@ -89,51 +89,51 @@ const BROWSER_HEADERS = {
   'Sec-Fetch-Mode': 'navigate',
   'Sec-Fetch-Site': 'none',
   'Sec-Fetch-User': '?1',
-  // ... 共 13 个标头
+  // ... 13 headers in total
 }
 ```
 
-`setmkt=en-US` 参数强制美式英语市场，避免 IP 地理定位导致区域化结果。
+The `setmkt=en-US` parameter forces the US English market, avoiding regionalized results caused by IP geolocation.
 
-### 3.2 URL 解码（`resolveBingUrl()`）
+### 3.2 URL Decoding (`resolveBingUrl()`)
 
-Bing 返回的重定向 URL 格式：`bing.com/ck/a?...&u=a1aHR0cHM6Ly9...`
+Bing returns redirect URLs in the form `bing.com/ck/a?...&u=a1aHR0cHM6Ly9...`
 
-- `u` 参数前 2 字符为协议前缀：`a1` = https，`a0` = http
-- 剩余部分为 base64url 编码的真实 URL
-- Bing 内部链接和相对路径被过滤返回 `undefined`
+- The first 2 characters of the `u` parameter are a protocol prefix: `a1` = https, `a0` = http
+- The remainder is the real URL, base64url-encoded
+- Bing-internal links and relative paths are filtered out and return `undefined`
 
-### 3.3 摘要提取（`extractSnippet()`）
+### 3.3 Snippet Extraction (`extractSnippet()`)
 
-三级降级策略：
+A three-level fallback strategy:
 
-1. `<p class="b_lineclamp...">` — Bing 的搜索摘要段落
-2. `<div class="b_caption">` 内的 `<p>` — 备选摘要位置
-3. `<div class="b_caption">` 直接文本 — 最终 fallback
+1. `<p class="b_lineclamp...">` — Bing's search snippet paragraph
+2. `<p>` inside `<div class="b_caption">` — alternate snippet location
+3. Direct text of `<div class="b_caption">` — final fallback
 
-### 3.4 域名过滤
+### 3.4 Domain Filtering
 
-客户端侧实现，支持子域名匹配：
-- `allowedDomains`：白名单，结果域名必须匹配列表中的某项（含子域名）
-- `blockedDomains`：黑名单，匹配的结果被过滤
-- 两者不可同时使用（`validateInput` 校验）
+Implemented client-side, with subdomain matching:
+- `allowedDomains`: allowlist; a result's domain must match one of the entries (subdomains included)
+- `blockedDomains`: blocklist; matching results are filtered out
+- The two cannot be used together (enforced by `validateInput`)
 
-## 四、适配器选择逻辑
+## 4. Adapter Selection Logic
 
-`createAdapter()` 按以下优先级选择后端，并按选中的后端 key 缓存适配器实例：
+`createAdapter()` picks the backend in the following priority order and caches the adapter instance by the selected backend key:
 
 ```typescript
 export function createAdapter(): WebSearchAdapter {
-  // 1. WEB_SEARCH_ADAPTER=api|bing|brave 显式指定
-  // 2. Anthropic 官方 API Base URL → ApiSearchAdapter
-  // 3. 第三方代理 / 非官方端点 → BingSearchAdapter
+  // 1. Explicitly set via WEB_SEARCH_ADAPTER=api|bing|brave
+  // 2. Official Anthropic API base URL → ApiSearchAdapter
+  // 3. Third-party proxy / non-official endpoint → BingSearchAdapter
 }
 ```
 
-显式指定 `WEB_SEARCH_ADAPTER=brave` 时，会改用 Brave LLM Context API 后端，并要求
-`BRAVE_SEARCH_API_KEY` 或 `BRAVE_API_KEY`。
+Setting `WEB_SEARCH_ADAPTER=brave` explicitly switches to the Brave LLM Context API backend, which requires
+`BRAVE_SEARCH_API_KEY` or `BRAVE_API_KEY`.
 
-## 五、接口定义
+## 5. Interface Definitions
 
 ### WebSearchAdapter
 
@@ -162,27 +162,27 @@ interface SearchProgress {
 }
 ```
 
-### 工具 Input Schema
+### Tool Input Schema
 
 ```typescript
 {
-  query: string              // 搜索关键词，最少 2 字符
-  allowed_domains?: string[] // 域名白名单
-  blocked_domains?: string[] // 域名黑名单
+  query: string              // search keywords, at least 2 characters
+  allowed_domains?: string[] // domain allowlist
+  blocked_domains?: string[] // domain blocklist
 }
 ```
 
-## 六、文件索引
+## 6. File Index
 
-| 文件 | 职责 |
-|------|------|
-| `packages/builtin-tools/src/tools/WebSearchTool/WebSearchTool.ts` | 工具定义入口 |
-| `packages/builtin-tools/src/tools/WebSearchTool/prompt.ts` | 搜索工具 prompt |
-| `packages/builtin-tools/src/tools/WebSearchTool/UI.tsx` | 终端 UI 渲染 |
-| `packages/builtin-tools/src/tools/WebSearchTool/adapters/types.ts` | 适配器接口 |
-| `packages/builtin-tools/src/tools/WebSearchTool/adapters/index.ts` | 适配器工厂 |
-| `packages/builtin-tools/src/tools/WebSearchTool/adapters/apiAdapter.ts` | API 服务端搜索适配器 |
-| `packages/builtin-tools/src/tools/WebSearchTool/adapters/bingAdapter.ts` | Bing HTML 解析适配器 |
-| `packages/builtin-tools/src/tools/WebSearchTool/__tests__/bingAdapter.test.ts` | 单元测试 (32 cases) |
-| `packages/builtin-tools/src/tools/WebSearchTool/__tests__/bingAdapter.integration.ts` | 集成测试 |
-| `src/tools.ts` | 工具注册 |
+| File | Responsibility |
+|------|----------------|
+| `packages/builtin-tools/src/tools/WebSearchTool/WebSearchTool.ts` | Tool definition entry |
+| `packages/builtin-tools/src/tools/WebSearchTool/prompt.ts` | Search tool prompt |
+| `packages/builtin-tools/src/tools/WebSearchTool/UI.tsx` | Terminal UI rendering |
+| `packages/builtin-tools/src/tools/WebSearchTool/adapters/types.ts` | Adapter interface |
+| `packages/builtin-tools/src/tools/WebSearchTool/adapters/index.ts` | Adapter factory |
+| `packages/builtin-tools/src/tools/WebSearchTool/adapters/apiAdapter.ts` | API server-side search adapter |
+| `packages/builtin-tools/src/tools/WebSearchTool/adapters/bingAdapter.ts` | Bing HTML parsing adapter |
+| `packages/builtin-tools/src/tools/WebSearchTool/__tests__/bingAdapter.test.ts` | Unit tests (32 cases) |
+| `packages/builtin-tools/src/tools/WebSearchTool/__tests__/bingAdapter.integration.ts` | Integration tests |
+| `src/tools.ts` | Tool registration |

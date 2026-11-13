@@ -1,231 +1,231 @@
-# VOICE_MODE — 语音输入
+# VOICE_MODE — Voice Input
 
 > Feature Flag: `FEATURE_VOICE_MODE=1`
-> 实现状态：完整可用（双后端：Anthropic OAuth / 豆包 ASR）
-> 引用数：46
+> Status: fully working (two backends: Anthropic OAuth / Doubao ASR)
+> References: 46
 
-## 一、功能概述
+## 1. Overview
 
-VOICE_MODE 实现"按键说话"（Push-to-Talk）语音输入。用户按住空格键录音，音频流式传输到 STT 后端，实时转录显示在终端中。支持两个后端：
+VOICE_MODE implements Push-to-Talk voice input. The user holds the space bar to record, the audio streams to an STT backend, and the live transcription appears in the terminal. Two backends are supported:
 
-- **Anthropic STT（默认）**：通过 WebSocket 流式传输到 Nova 3 端点，需要 Anthropic OAuth
-- **豆包 ASR（Doubao）**：通过 `doubaoime-asr` 包的 AsyncGenerator 协议流式识别，使用独立凭证文件，无需 Anthropic OAuth
+- **Anthropic STT (default)**: streams over WebSocket to the Nova 3 endpoint; requires Anthropic OAuth
+- **Doubao ASR**: streaming recognition through the AsyncGenerator protocol of the `doubaoime-asr` package, using a separate credentials file and no Anthropic OAuth
 
-### 核心特性
+### Key Features
 
-- **Push-to-Talk**：长按空格键录音，释放后自动发送
-- **流式转录**：录音过程中实时显示中间转录结果
-- **无缝集成**：转录文本直接作为用户消息提交到对话
-- **双后端切换**：通过 `/voice` 命令参数选择 STT 后端，持久化到 settings.json
+- **Push-to-Talk**: hold the space bar to record; the message is sent automatically on release
+- **Streaming transcription**: interim transcription results appear in real time during recording
+- **Seamless integration**: transcribed text is submitted directly as a user message in the conversation
+- **Switchable backends**: choose the STT backend with a `/voice` command argument, persisted to settings.json
 
-## 二、用户交互
+## 2. User Interaction
 
-| 操作 | 行为 |
-|------|------|
-| 长按空格 | 开始录音，显示录音状态 |
-| 释放空格 | 停止录音，转录结果自动提交 |
-| `/voice` | 切换语音模式开关（默认使用 Anthropic 后端） |
-| `/voice doubao` | 启用语音模式并使用豆包 ASR 后端 |
-| `/voice anthropic` | 切换回 Anthropic STT 后端 |
+| Action | Behavior |
+|--------|----------|
+| Hold space | Start recording and show the recording state |
+| Release space | Stop recording; the transcription is submitted automatically |
+| `/voice` | Toggle voice mode (uses the Anthropic backend by default) |
+| `/voice doubao` | Enable voice mode with the Doubao ASR backend |
+| `/voice anthropic` | Switch back to the Anthropic STT backend |
 
-### UI 反馈
+### UI Feedback
 
-- **录音指示器**：录音时显示红色/脉冲动画
-- **中间转录**：录音过程中显示 STT 实时识别文本
-- **最终转录**：完成后替换中间结果
+- **Recording indicator**: a red/pulsing animation while recording
+- **Interim transcription**: live STT text shown during recording
+- **Final transcription**: replaces the interim result when finished
 
-## 三、实现架构
+## 3. Implementation
 
-### 3.1 门控逻辑
+### 3.1 Gating Logic
 
-文件：`src/voice/voiceModeEnabled.ts`
+File: `src/voice/voiceModeEnabled.ts`
 
-两层检查函数：
+Two layers of check functions:
 
 ```ts
-// Anthropic 后端（需要 OAuth）
+// Anthropic backend (requires OAuth)
 isVoiceModeEnabled() = hasVoiceAuth() && isVoiceGrowthBookEnabled()
 
-// 豆包后端 / 通用可用性检查（不需要 OAuth）
+// Doubao backend / general availability check (no OAuth needed)
 isVoiceAvailable() = isVoiceGrowthBookEnabled()
 ```
 
-1. **Feature Flag**：`feature('VOICE_MODE')` — 编译时/运行时开关
-2. **GrowthBook Kill-Switch**：`!getFeatureValue_CACHED_MAY_BE_STALE('tengu_amber_quartz_disabled', false)` — 紧急关闭开关（默认 false = 未禁用）
-3. **Auth 检查（仅 Anthropic）**：`hasVoiceAuth()` — 需要 Anthropic OAuth token（非 API key）
-4. **Provider 检查**：`voiceProvider` 设置决定使用哪个后端，豆包后端跳过 OAuth 检查
+1. **Feature Flag**: `feature('VOICE_MODE')` — compile-time/runtime switch
+2. **GrowthBook Kill-Switch**: `!getFeatureValue_CACHED_MAY_BE_STALE('tengu_amber_quartz_disabled', false)` — emergency off switch (default false = not disabled)
+3. **Auth check (Anthropic only)**: `hasVoiceAuth()` — requires an Anthropic OAuth token (not an API key)
+4. **Provider check**: the `voiceProvider` setting decides which backend is used; the Doubao backend skips the OAuth check
 
-### 3.2 核心模块
+### 3.2 Core Modules
 
-| 模块 | 职责 |
-|------|------|
-| `src/voice/voiceModeEnabled.ts` | Feature flag + GrowthBook + Auth 三层门控 |
-| `src/hooks/useVoice.ts` | React hook 管理录音状态和后端连接 |
-| `src/services/voiceStreamSTT.ts` | Anthropic WebSocket 流式 STT |
-| `src/services/doubaoSTT.ts` | 豆包 ASR 适配器（AsyncGenerator → VoiceStreamConnection） |
-| `src/commands/voice/voice.ts` | `/voice` 命令实现，处理后端选择和持久化 |
-| `src/hooks/useVoiceEnabled.ts` | 语音启用状态 hook，根据 provider 决定是否跳过 OAuth |
-| `src/utils/settings/types.ts` | `voiceProvider: 'anthropic' | 'doubao'` 设置类型定义 |
+| Module | Responsibility |
+|--------|----------------|
+| `src/voice/voiceModeEnabled.ts` | Three-layer gating: feature flag + GrowthBook + auth |
+| `src/hooks/useVoice.ts` | React hook managing recording state and backend connections |
+| `src/services/voiceStreamSTT.ts` | Anthropic WebSocket streaming STT |
+| `src/services/doubaoSTT.ts` | Doubao ASR adapter (AsyncGenerator → VoiceStreamConnection) |
+| `src/commands/voice/voice.ts` | `/voice` command implementation, handling backend selection and persistence |
+| `src/hooks/useVoiceEnabled.ts` | Voice-enabled state hook; decides whether to skip OAuth based on the provider |
+| `src/utils/settings/types.ts` | `voiceProvider: 'anthropic' | 'doubao'` setting type definition |
 
-### 3.3 数据流
+### 3.3 Data Flow
 
-#### Anthropic 后端
-
-```
-用户按下空格键
-      │
-      ▼
-useVoice hook 激活
-      │
-      ▼
-macOS 原生音频 / SoX 开始录音
-      │
-      ▼
-WebSocket 连接到 Anthropic STT 端点
-      │
-      ├──→ 中间转录结果 → 实时显示
-      │
-      ▼
-用户释放空格键
-      │
-      ▼
-停止录音，等待最终转录
-      │
-      ▼
-转录文本 → 插入输入框 → 自动提交
-```
-
-#### 豆包 ASR 后端
+#### Anthropic Backend
 
 ```
-用户按下空格键
+User presses space
       │
       ▼
-useVoice hook 激活（检测到 voiceProvider === 'doubao'）
+useVoice hook activates
       │
       ▼
-macOS 原生音频 / SoX 开始录音
+macOS native audio / SoX starts recording
       │
       ▼
-connectDoubaoStream() 创建 AudioChunkQueue + VoiceStreamConnection
+WebSocket connection to the Anthropic STT endpoint
       │
-      ├──→ onReady 立即触发（无需等待握手）
-      │
-      ▼
-音频数据通过 AudioChunkQueue 传入 transcribeRealtime()
-      │
-      ├──→ INTERIM_RESULT → 实时显示中间转录
-      ├──→ FINAL_RESULT   → 显示最终转录
+      ├──→ interim transcription → shown live
       │
       ▼
-用户释放空格键
+User releases space
       │
       ▼
-finalize() 立即返回（豆包在录音过程中已返回结果，无需等待）
+Recording stops, wait for the final transcription
       │
       ▼
-转录文本 → 插入输入框 → 自动提交
+Transcribed text → inserted into input box → submitted automatically
 ```
 
-### 3.4 音频录制
+#### Doubao ASR Backend
 
-支持两种音频后端（两个 STT 后端共享）：
-- **macOS 原生音频**：优先使用，低延迟
-- **SoX（Sound eXchange）**：回退方案，跨平台
+```
+User presses space
+      │
+      ▼
+useVoice hook activates (voiceProvider === 'doubao' detected)
+      │
+      ▼
+macOS native audio / SoX starts recording
+      │
+      ▼
+connectDoubaoStream() creates an AudioChunkQueue + VoiceStreamConnection
+      │
+      ├──→ onReady fires immediately (no handshake to wait for)
+      │
+      ▼
+Audio data flows through AudioChunkQueue into transcribeRealtime()
+      │
+      ├──→ INTERIM_RESULT → interim transcription shown live
+      ├──→ FINAL_RESULT   → final transcription shown
+      │
+      ▼
+User releases space
+      │
+      ▼
+finalize() returns immediately (Doubao already returned results during recording)
+      │
+      ▼
+Transcribed text → inserted into input box → submitted automatically
+```
 
-### 3.5 豆包 ASR 适配器设计
+### 3.4 Audio Recording
 
-文件：`src/services/doubaoSTT.ts`
+Two audio backends are supported (shared by both STT backends):
+- **macOS native audio**: preferred, low latency
+- **SoX (Sound eXchange)**: fallback, cross-platform
 
-豆包后端使用适配器模式，将 `doubaoime-asr` 的 AsyncGenerator 协议桥接到 `VoiceStreamConnection` 接口：
+### 3.5 Doubao ASR Adapter Design
 
-**AudioChunkQueue** — push 式异步队列：
-- 实现 `AsyncIterable<Uint8Array>` 接口
-- `push(chunk)` 将音频数据入队，`push(null)` 发送结束信号
-- 内部维护等待者（waiting）和缓冲队列（chunks）两个状态
+File: `src/services/doubaoSTT.ts`
 
-**connectDoubaoStream()** — 连接入口：
-- 动态导入 `doubaoime-asr`（optionalDependencies）
-- 从 `~/.claude/tts/doubao/credentials.json` 加载凭证
-- 创建 AudioChunkQueue 和 VoiceStreamConnection
-- 立即触发 `onReady`（避免与 useVoice 的音频缓冲死锁）
-- `finalize()` 立即返回（豆包在录音过程中已返回结果）
-- 后台 async IIFE 消费 `transcribeRealtime` generator，映射响应类型到回调
+The Doubao backend uses the adapter pattern to bridge the `doubaoime-asr` AsyncGenerator protocol to the `VoiceStreamConnection` interface:
 
-**响应类型映射**：
+**AudioChunkQueue** — a push-style async queue:
+- Implements the `AsyncIterable<Uint8Array>` interface
+- `push(chunk)` enqueues audio data, `push(null)` sends the end signal
+- Internally maintains two pieces of state: waiters and a buffer queue (chunks)
 
-| doubaoime-asr ResponseType | 回调映射 |
-|----------------------------|----------|
-| SESSION_STARTED | 日志记录 |
-| VAD_START | 日志记录 |
+**connectDoubaoStream()** — the connection entry point:
+- Dynamically imports `doubaoime-asr` (optionalDependencies)
+- Loads credentials from `~/.claude/tts/doubao/credentials.json`
+- Creates the AudioChunkQueue and VoiceStreamConnection
+- Fires `onReady` immediately (avoiding a deadlock with useVoice's audio buffering)
+- `finalize()` returns immediately (Doubao already returned results during recording)
+- A background async IIFE consumes the `transcribeRealtime` generator, mapping response types to callbacks
+
+**Response type mapping**:
+
+| doubaoime-asr ResponseType | Callback mapping |
+|----------------------------|------------------|
+| SESSION_STARTED | Logged |
+| VAD_START | Logged |
 | INTERIM_RESULT | `onTranscript(text, false)` |
 | FINAL_RESULT | `onTranscript(text, true)` |
 | ERROR | `onError(errorMsg)` |
-| SESSION_FINISHED | 日志记录 |
+| SESSION_FINISHED | Logged |
 
-### 3.6 后端选择逻辑
+### 3.6 Backend Selection Logic
 
-文件：`src/hooks/useVoice.ts`
+File: `src/hooks/useVoice.ts`
 
 ```ts
-// 判断当前 provider
-isDoubaoProvider() → 读取 settings.voiceProvider
+// Determine the current provider
+isDoubaoProvider() → reads settings.voiceProvider
 
-// handleKeyEvent 中的可用性检查
+// Availability check in handleKeyEvent
 const sttAvailable = isDoubaoProvider()
-  ? isDoubaoAvailableSync()    // 乐观检查（首次返回 true）
-  : isVoiceStreamAvailable()   // Anthropic WebSocket 检查
+  ? isDoubaoAvailableSync()    // optimistic check (returns true the first time)
+  : isVoiceStreamAvailable()   // Anthropic WebSocket check
 
-// attemptConnect 中的连接函数选择
+// Connect function selection in attemptConnect
 const connectFn = isDoubaoProvider()
   ? connectDoubaoStream
   : connectVoiceStream
 ```
 
-豆包后端的特殊处理：
-- 跳过 `getVoiceKeyterms()` 调用（豆包无需关键词提示）
-- 跳过 Focus Mode（`if (!enabled || !focusMode || isDoubaoProvider())`）
+Special handling for the Doubao backend:
+- Skips the `getVoiceKeyterms()` call (Doubao needs no keyword hints)
+- Skips Focus Mode (`if (!enabled || !focusMode || isDoubaoProvider())`)
 
-## 四、关键设计决策
+## 4. Key Design Decisions
 
-1. **双后端共存**：豆包后端作为独立适配器与 Anthropic 后端并存，不替换原有流程，通过 `voiceProvider` 设置切换
-2. **设置持久化**：`voiceProvider` 存储在 `settings.json`，通过 `/voice` 命令修改，跨会话生效
-3. **OAuth 独占（Anthropic）**：Anthropic 后端使用 `voice_stream` 端点（claude.ai），仅 OAuth 用户可用
-4. **豆包无需 OAuth**：豆包后端使用独立凭证文件，不依赖 Anthropic 认证，通过 `isVoiceAvailable()` 放宽门控
-5. **GrowthBook 负向门控**：`tengu_amber_quartz_disabled` 默认 `false`，新安装自动可用
-6. **onReady 立即触发**：豆包后端在连接建立后立即触发 `onReady`，避免与 useVoice 音频缓冲的时序死锁（Anthropic 需要等待 WebSocket 握手）
-7. **finalize() 立即返回**：豆包在录音过程中已返回所有结果，用户抬手时无需等待处理
-8. **乐观可用性检查**：`isDoubaoAvailableSync()` 在首次调用时返回 `true`，实际导入错误在 `connectDoubaoStream` 中处理
-9. **optionalDependencies**：`doubaoime-asr` 作为可选依赖，安装失败不影响 Anthropic 后端
+1. **Two backends coexist**: the Doubao backend is a separate adapter alongside the Anthropic backend, doesn't replace the existing flow, and is selected through the `voiceProvider` setting
+2. **Setting persistence**: `voiceProvider` is stored in `settings.json`, changed through the `/voice` command, and applies across sessions
+3. **OAuth-only (Anthropic)**: the Anthropic backend uses the `voice_stream` endpoint (claude.ai), available only to OAuth users
+4. **No OAuth for Doubao**: the Doubao backend uses a separate credentials file, doesn't depend on Anthropic authentication, and relaxes the gate through `isVoiceAvailable()`
+5. **GrowthBook negative gate**: `tengu_amber_quartz_disabled` defaults to `false`, so new installs work out of the box
+6. **onReady fires immediately**: the Doubao backend fires `onReady` as soon as the connection is set up, avoiding a timing deadlock with useVoice's audio buffering (Anthropic must wait for the WebSocket handshake)
+7. **finalize() returns immediately**: Doubao has already returned all results during recording, so there is nothing to wait for when the user lets go
+8. **Optimistic availability check**: `isDoubaoAvailableSync()` returns `true` on the first call, and real import errors are handled in `connectDoubaoStream`
+9. **optionalDependencies**: `doubaoime-asr` is an optional dependency, so a failed install doesn't affect the Anthropic backend
 
-## 五、使用方式
+## 5. Usage
 
 ```bash
-# 启用 feature
+# Enable the feature
 FEATURE_VOICE_MODE=1 bun run dev
 
-# 在 REPL 中使用 Anthropic 后端
-# 1. 确保已通过 OAuth 登录（claude.ai 订阅）
-# 2. 输入 /voice 启用
-# 3. 按住空格键说话
-# 4. 释放空格键等待转录
+# Using the Anthropic backend in the REPL
+# 1. Make sure you're logged in via OAuth (claude.ai subscription)
+# 2. Type /voice to enable
+# 3. Hold the space bar and speak
+# 4. Release the space bar and wait for the transcription
 
-# 在 REPL 中使用豆包 ASR 后端
-# 1. 确保 doubaoime-asr 已安装（bun add doubaoime-asr）
-# 2. 配置凭证文件：~/.claude/tts/doubao/credentials.json
-# 3. 输入 /voice doubao 启用
-# 4. 按住空格键说话
-# 5. 释放空格键，转录结果即刻显示
+# Using the Doubao ASR backend in the REPL
+# 1. Make sure doubaoime-asr is installed (bun add doubaoime-asr)
+# 2. Configure the credentials file: ~/.claude/tts/doubao/credentials.json
+# 3. Type /voice doubao to enable
+# 4. Hold the space bar and speak
+# 5. Release the space bar; the transcription appears immediately
 
-# 切换后端
-/voice doubao      # 切换到豆包 ASR
-/voice anthropic   # 切换回 Anthropic STT
-/voice             # 关闭语音模式
+# Switching backends
+/voice doubao      # switch to Doubao ASR
+/voice anthropic   # switch back to Anthropic STT
+/voice             # turn voice mode off
 ```
 
-### 豆包凭证配置
+### Doubao Credentials
 
-凭证文件路径：`~/.claude/tts/doubao/credentials.json`
+Credentials file path: `~/.claude/tts/doubao/credentials.json`
 
 ```json
 {
@@ -238,26 +238,26 @@ FEATURE_VOICE_MODE=1 bun run dev
 }
 ```
 
-## 六、外部依赖
+## 6. External Dependencies
 
-| 依赖 | 说明 | 适用后端 |
-|------|------|----------|
-| Anthropic OAuth | claude.ai 订阅登录，非 API key | Anthropic |
-| GrowthBook | `tengu_amber_quartz_disabled` 紧急关闭 | 通用 |
-| macOS 原生音频 或 SoX | 音频录制 | 通用 |
-| Nova 3 STT | Anthropic 语音转文本模型 | Anthropic |
-| doubaoime-asr | 豆包 ASR SDK（optionalDependencies） | 豆包 |
-| 凭证文件 | `~/.claude/tts/doubao/credentials.json` | 豆包 |
+| Dependency | Description | Applies to |
+|------------|-------------|------------|
+| Anthropic OAuth | claude.ai subscription login, not an API key | Anthropic |
+| GrowthBook | `tengu_amber_quartz_disabled` emergency off switch | Both |
+| macOS native audio or SoX | Audio recording | Both |
+| Nova 3 STT | Anthropic speech-to-text model | Anthropic |
+| doubaoime-asr | Doubao ASR SDK (optionalDependencies) | Doubao |
+| Credentials file | `~/.claude/tts/doubao/credentials.json` | Doubao |
 
-## 七、文件索引
+## 7. File Index
 
-| 文件 | 职责 |
-|------|------|
-| `src/voice/voiceModeEnabled.ts` | 三层门控逻辑 + `isVoiceAvailable()` |
-| `src/hooks/useVoice.ts` | React hook（录音状态 + 后端选择 + 连接管理） |
-| `src/hooks/useVoiceEnabled.ts` | 语音启用状态 hook（按 provider 决定 OAuth 检查） |
-| `src/services/voiceStreamSTT.ts` | Anthropic STT WebSocket 流式传输 |
-| `src/services/doubaoSTT.ts` | 豆包 ASR 适配器（AudioChunkQueue + connectDoubaoStream） |
-| `src/commands/voice/voice.ts` | `/voice` 命令（开关 + 后端选择） |
-| `src/commands/voice/index.ts` | 命令注册（去除 availability 限制） |
-| `src/utils/settings/types.ts` | `voiceProvider` 类型定义 |
+| File | Responsibility |
+|------|----------------|
+| `src/voice/voiceModeEnabled.ts` | Three-layer gating logic + `isVoiceAvailable()` |
+| `src/hooks/useVoice.ts` | React hook (recording state + backend selection + connection management) |
+| `src/hooks/useVoiceEnabled.ts` | Voice-enabled state hook (decides the OAuth check by provider) |
+| `src/services/voiceStreamSTT.ts` | Anthropic STT WebSocket streaming |
+| `src/services/doubaoSTT.ts` | Doubao ASR adapter (AudioChunkQueue + connectDoubaoStream) |
+| `src/commands/voice/voice.ts` | `/voice` command (toggle + backend selection) |
+| `src/commands/voice/index.ts` | Command registration (availability restriction removed) |
+| `src/utils/settings/types.ts` | `voiceProvider` type definition |

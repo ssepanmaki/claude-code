@@ -1,34 +1,34 @@
-# Langfuse 监控集成
+# Langfuse Monitoring Integration
 
-> 实现状态：已完成，通过环境变量启用
-> 依赖：`@langfuse/otel`、`@langfuse/tracing`、`@opentelemetry/sdk-trace-base`
+> Status: complete, enabled through environment variables
+> Dependencies: `@langfuse/otel`, `@langfuse/tracing`, `@opentelemetry/sdk-trace-base`
 
-## 一、功能概述
+## 1. Overview
 
-Langfuse 是一个开源的 LLM 可观测性平台，用于追踪、监控和调试 AI 应用的请求链路。CCB 通过 OpenTelemetry (OTel) 桥接层将 Langfuse 集成到查询流程中，实现：
+Langfuse is an open-source LLM observability platform for tracing, monitoring and debugging the request chains of AI applications. CCB integrates Langfuse into the query flow through an OpenTelemetry (OTel) bridge layer, providing:
 
-- **LLM 调用追踪** — 记录每次 API 请求的模型、Provider、输入/输出、Token 用量
-- **工具执行追踪** — 记录每个工具调用的名称、输入、输出、耗时和错误
-- **多 Agent 追踪** — 主 Agent 和子 Agent 各自独立的 Trace 链路
-- **数据脱敏** — 自动遮蔽敏感信息（API Key、文件内容、Shell 输出等）
+- **LLM call tracing** — records the model, provider, input/output and token usage of every API request
+- **Tool execution tracing** — records the name, input, output, duration and errors of every tool call
+- **Multi-agent tracing** — the main agent and each sub-agent get their own independent trace chain
+- **Data redaction** — automatically masks sensitive information (API keys, file contents, shell output, etc.)
 
-## 二、启用方式
+## 2. Enabling
 
-Langfuse 是开源项目，你可以 **自部署**（Docker / Kubernetes），也可以使用官方提供的 **[Langfuse Cloud](https://cloud.langfuse.com)** 免费测试。注册后在 Project Settings → API Keys 页面获取密钥。
+Langfuse is open source, so you can **self-host** it (Docker / Kubernetes) or try the official **[Langfuse Cloud](https://cloud.langfuse.com)** for free. After signing up, get your keys from Project Settings → API Keys.
 
-核心只需要三个环境变量：
+Only three environment variables are needed:
 
-| 环境变量 | 说明 |
-|---------|------|
-| `LANGFUSE_PUBLIC_KEY` | Langfuse 公钥（必填） |
-| `LANGFUSE_SECRET_KEY` | Langfuse 密钥（必填） |
-| `LANGFUSE_BASE_URL` | 服务地址，默认 `https://cloud.langfuse.com`；自部署时改为你的地址（必填） |
+| Environment variable | Description |
+|----------------------|-------------|
+| `LANGFUSE_PUBLIC_KEY` | Langfuse public key (required) |
+| `LANGFUSE_SECRET_KEY` | Langfuse secret key (required) |
+| `LANGFUSE_BASE_URL` | Service URL, default `https://cloud.langfuse.com`; change it to your own address when self-hosting (required) |
 
-未配置时所有追踪函数为 no-op，零开销。
+When unconfigured, all tracing functions are no-ops with zero overhead.
 
-### 通过 settings.json 配置（推荐）
+### Configure Through settings.json (Recommended)
 
-在 `.claude/settings.json` 的 `env` 字段中添加，这样每次启动自动生效：
+Add these to the `env` field of `.claude/settings.json` so they take effect on every launch:
 
 ```json
 {
@@ -40,82 +40,82 @@ Langfuse 是开源项目，你可以 **自部署**（Docker / Kubernetes），�
 }
 ```
 
-### 其他可选参数
+### Other Optional Parameters
 
-| 环境变量 | 默认值 | 说明 |
-|---------|--------|------|
-| `LANGFUSE_TRACING_ENVIRONMENT` | `development` | 环境标签，用于 Langfuse 面板筛选 |
-| `LANGFUSE_FLUSH_AT` | `20` | 批量发送的 span 数量阈值 |
-| `LANGFUSE_FLUSH_INTERVAL` | `10` | 定时刷新间隔（秒） |
-| `LANGFUSE_EXPORT_MODE` | `batched` | 导出模式：`batched`（批量）或 `immediate`（即时） |
-| `LANGFUSE_TIMEOUT` | `5` | 请求超时（秒） |
+| Environment variable | Default | Description |
+|----------------------|---------|-------------|
+| `LANGFUSE_TRACING_ENVIRONMENT` | `development` | Environment label, used for filtering in the Langfuse dashboard |
+| `LANGFUSE_FLUSH_AT` | `20` | Span count threshold for batched sending |
+| `LANGFUSE_FLUSH_INTERVAL` | `10` | Periodic flush interval (seconds) |
+| `LANGFUSE_EXPORT_MODE` | `batched` | Export mode: `batched` or `immediate` |
+| `LANGFUSE_TIMEOUT` | `5` | Request timeout (seconds) |
 
-## 四、架构
+## 4. Architecture
 
-### 4.1 模块结构
+### 4.1 Module Structure
 
 ```
 src/services/langfuse/
-├── index.ts          # 统一导出
-├── client.ts         # OTel Provider + LangfuseSpanProcessor 初始化
-├── tracing.ts        # Trace/Span 创建、LLM 和工具观察记录
-├── convert.ts        # 内部 Message 类型 → Langfuse OpenAI 兼容格式转换
-└── sanitize.ts       # 数据脱敏（敏感字段、文件路径、工具输出）
+├── index.ts          # Unified exports
+├── client.ts         # OTel Provider + LangfuseSpanProcessor initialization
+├── tracing.ts        # Trace/Span creation, LLM and tool observation recording
+├── convert.ts        # Internal Message types → Langfuse OpenAI-compatible format
+└── sanitize.ts       # Data redaction (sensitive fields, file paths, tool output)
 ```
 
-### 4.2 追踪层级
+### 4.2 Trace Hierarchy
 
 ```
 Trace (Agent Span)                    ← createTrace() / createSubagentTrace()
-  ├── Generation (LLM 调用)           ← recordLLMObservation()
-  ├── Tool Observation (工具调用)      ← recordToolObservation()
-  ├── Tool Observation (工具调用)      ← recordToolObservation()
+  ├── Generation (LLM call)           ← recordLLMObservation()
+  ├── Tool Observation (tool call)    ← recordToolObservation()
+  ├── Tool Observation (tool call)    ← recordToolObservation()
   └── ...
 ```
 
-### 4.3 数据流
+### 4.3 Data Flow
 
 ```
-query.ts  ──→  createTrace()           # 每个 query turn 创建根 trace
+query.ts  ──→  createTrace()           # a root trace per query turn
   │
-  ├── claude.ts  ──→  recordLLMObservation()   # API 调用完成后记录 LLM 观察
+  ├── claude.ts  ──→  recordLLMObservation()   # record the LLM observation after an API call completes
   │
-  ├── toolExecution.ts  ──→  recordToolObservation()  # 每个工具执行记录
+  ├── toolExecution.ts  ──→  recordToolObservation()  # record each tool execution
   │
-  └── query.ts  ──→  endTrace()         # turn 结束时关闭 trace
+  └── query.ts  ──→  endTrace()         # close the trace when the turn ends
 
-runAgent.ts  ──→  createSubagentTrace()  # 子 Agent 有独立 trace
+runAgent.ts  ──→  createSubagentTrace()  # sub-agents get their own trace
 ```
 
-## 五、追踪详情
+## 5. Tracing Details
 
-### 5.1 主 Agent Trace
+### 5.1 Main Agent Trace
 
-每次 `query()` 调用（即用户一次对话 turn）创建一个类型为 `agent` 的根 Span：
+Each `query()` call (one user conversation turn) creates a root Span of type `agent`:
 
-- **名称**: `agent-run` 或 `agent-run:<querySource>`
-- **元数据**: `provider`、`model`、`agentType: "main"`
-- **Session ID**: 关联到 Langfuse 的 Session 功能，支持按会话聚合
+- **Name**: `agent-run` or `agent-run:<querySource>`
+- **Metadata**: `provider`, `model`, `agentType: "main"`
+- **Session ID**: linked to Langfuse's Session feature, allowing aggregation by session
 
-### 5.2 子 Agent Trace
+### 5.2 Sub-Agent Trace
 
-通过 `AgentTool` 启动的子 Agent 创建独立 Trace：
+Sub-agents launched through `AgentTool` create their own Trace:
 
-- **名称**: `agent:<agentType>`
-- **元数据**: `provider`、`model`、`agentType`、`agentId`
-- 独立于主 Trace，有自己的 Session 关联
+- **Name**: `agent:<agentType>`
+- **Metadata**: `provider`, `model`, `agentType`, `agentId`
+- Independent of the main Trace, with its own Session link
 
 ### 5.3 LLM Generation
 
-每次 API 调用记录为一个 `generation` 类型的 Span：
+Each API call is recorded as a Span of type `generation`:
 
-- **名称**: 按 Provider 映射（如 `ChatAnthropic`、`ChatOpenAI`、`ChatBedrockAnthropic` 等）
-- **记录内容**: 输入消息、输出消息、Token 用量（input/output）
-- **时间**: 精确记录 `startTime`、`endTime`、`completionStartTime`（TTFT 指标）
+- **Name**: mapped by provider (e.g. `ChatAnthropic`, `ChatOpenAI`, `ChatBedrockAnthropic`)
+- **Recorded content**: input messages, output messages, token usage (input/output)
+- **Timing**: precise `startTime`, `endTime` and `completionStartTime` (the TTFT metric)
 
-Provider 名称映射：
+Provider name mapping:
 
-| Provider | Generation 名称 |
+| Provider | Generation name |
 |----------|-----------------|
 | `firstParty` | `ChatAnthropic` |
 | `bedrock` | `ChatBedrockAnthropic` |
@@ -125,59 +125,59 @@ Provider 名称映射：
 | `gemini` | `ChatGoogleGenerativeAI` |
 | `grok` | `ChatXAI` |
 
-### 5.4 工具执行
+### 5.4 Tool Execution
 
-每个工具调用记录为一个 `tool` 类型的 Span：
+Each tool call is recorded as a Span of type `tool`:
 
-- **名称**: 工具名（如 `FileEditTool`、`BashTool`）
-- **记录内容**: 输入（经脱敏）、输出（经脱敏）、`toolUseId`
-- **错误标记**: `isError` 标志 + `level: ERROR`
+- **Name**: the tool name (e.g. `FileEditTool`, `BashTool`)
+- **Recorded content**: input (redacted), output (redacted), `toolUseId`
+- **Error marking**: `isError` flag + `level: ERROR`
 
-## 六、数据脱敏
+## 6. Data Redaction
 
-所有上传到 Langfuse 的数据都会经过脱敏处理（`sanitize.ts`），确保敏感信息不会泄露：
+All data uploaded to Langfuse passes through redaction (`sanitize.ts`) so sensitive information doesn't leak:
 
-### 6.1 全局脱敏（`sanitizeGlobal`）
+### 6.1 Global Redaction (`sanitizeGlobal`)
 
-- **Home 路径替换** — `/Users/xxx` → `~`
-- **敏感字段遮蔽** — 匹配 `api_key`、`token`、`secret`、`password`、`credential`、`auth_header` 等关键字的字段值替换为 `[REDACTED]`
+- **Home path replacement** — `/Users/xxx` → `~`
+- **Sensitive field masking** — values of fields whose names match keywords such as `api_key`, `token`, `secret`, `password`, `credential`, `auth_header` are replaced with `[REDACTED]`
 
-### 6.2 工具输入脱敏（`sanitizeToolInput`）
+### 6.2 Tool Input Redaction (`sanitizeToolInput`)
 
-- 敏感字段遮蔽（同全局）
-- `file_path`、`path`、`directory` 路径中的 Home 目录替换
+- Sensitive field masking (same as global)
+- Home directory replacement in `file_path`, `path` and `directory` paths
 
-### 6.3 工具输出脱敏（`sanitizeToolOutput`）
+### 6.3 Tool Output Redaction (`sanitizeToolOutput`)
 
-| 工具 | 脱敏策略 |
-|------|---------|
-| `FileReadTool`、`FileWriteTool`、`FileEditTool` | 完全遮蔽，仅保留字符数：`[file content redacted, N chars]` |
-| `BashTool`、`PowerShellTool` | 截断至 500 字符 |
-| `ConfigTool`、`MCPTool` | 完全遮蔽 |
-| 其他工具 | 原样保留 |
+| Tool | Redaction strategy |
+|------|--------------------|
+| `FileReadTool`, `FileWriteTool`, `FileEditTool` | Fully masked, only the character count is kept: `[file content redacted, N chars]` |
+| `BashTool`, `PowerShellTool` | Truncated to 500 characters |
+| `ConfigTool`, `MCPTool` | Fully masked |
+| Other tools | Kept as is |
 
-## 七、消息格式转换
+## 7. Message Format Conversion
 
-`convert.ts` 将 CCB 内部的 Message 类型转换为 Langfuse 期望的 OpenAI 兼容格式：
+`convert.ts` converts CCB's internal Message types into the OpenAI-compatible format Langfuse expects:
 
-- **输入**: `UserMessage | AssistantMessage[]` + 可选 system prompt → `{ role, content }[]`
-- **输出**: `AssistantMessage[]` → `{ role: 'assistant', content }`
-- **Content Block 映射**:
+- **Input**: `UserMessage | AssistantMessage[]` + optional system prompt → `{ role, content }[]`
+- **Output**: `AssistantMessage[]` → `{ role: 'assistant', content }`
+- **Content block mapping**:
   - `text` → `{ type: 'text', text }`
   - `thinking` / `redacted_thinking` → `{ type: 'thinking', thinking }`
   - `tool_use` → `{ type: 'tool_use', id, name, input }`
   - `tool_result` → `{ type: 'tool_result', tool_use_id, content }`
-  - `image` / `document` → 占位标记 `[image]` / `[document: name]`
+  - `image` / `document` → placeholder markers `[image]` / `[document: name]`
 
-## 八、生命周期
+## 8. Lifecycle
 
-1. **初始化** — `initLangfuse()` 在 `src/entrypoints/init.ts` 启动时调用，创建 `LangfuseSpanProcessor` 和 `BasicTracerProvider`
-2. **运行时** — 各追踪函数通过 `isLangfuseEnabled()` 检查，未配置时直接返回 `null`/跳过
-3. **关闭** — `shutdownLangfuse()` 在进程退出时调用，强制 flush 并关闭 Processor
+1. **Initialization** — `initLangfuse()` is called at startup in `src/entrypoints/init.ts` and creates the `LangfuseSpanProcessor` and `BasicTracerProvider`
+2. **Runtime** — each tracing function checks `isLangfuseEnabled()` and returns `null`/skips when unconfigured
+3. **Shutdown** — `shutdownLangfuse()` is called at process exit, forcing a flush and closing the Processor
 
-## 九、自部署 Langfuse
+## 9. Self-Hosting Langfuse
 
-Langfuse 是开源项目，支持 Docker / Kubernetes 自部署：
+Langfuse is open source and supports Docker / Kubernetes self-hosting:
 
 ```bash
 docker run -d \
@@ -187,19 +187,19 @@ docker run -d \
   langfuse/langfuse:latest
 ```
 
-自部署后，将 `LANGFUSE_BASE_URL` 指向你的实例地址即可。详见 [Langfuse 自部署文档](https://langfuse.com/docs/deployment/self-host)。
+After self-hosting, point `LANGFUSE_BASE_URL` at your instance. See the [Langfuse self-hosting docs](https://langfuse.com/docs/deployment/self-host) for details.
 
-如果没有自部署需求，可以直接使用 [Langfuse Cloud](https://cloud.langfuse.com)，提供免费额度可用于测试。
+If you don't need to self-host, you can use [Langfuse Cloud](https://cloud.langfuse.com) directly; it offers a free tier suitable for testing.
 
-## 十、相关文件
+## 10. Related Files
 
-| 文件 | 说明 |
-|------|------|
-| `src/services/langfuse/client.ts` | OTel Provider 初始化、生命周期管理 |
-| `src/services/langfuse/tracing.ts` | Trace/Span 创建和观察记录 |
-| `src/services/langfuse/convert.ts` | Message 格式转换 |
-| `src/services/langfuse/sanitize.ts` | 数据脱敏 |
-| `src/services/langfuse/__tests__/langfuse.test.ts` | 测试（568 行） |
-| `src/query.ts` | 主查询流程中的 Trace 集成 |
-| `src/services/tools/toolExecution.ts` | 工具执行中的观察记录 |
-| `packages/builtin-tools/src/tools/AgentTool/runAgent.ts` | 子 Agent Trace 创建 |
+| File | Description |
+|------|-------------|
+| `src/services/langfuse/client.ts` | OTel Provider initialization, lifecycle management |
+| `src/services/langfuse/tracing.ts` | Trace/Span creation and observation recording |
+| `src/services/langfuse/convert.ts` | Message format conversion |
+| `src/services/langfuse/sanitize.ts` | Data redaction |
+| `src/services/langfuse/__tests__/langfuse.test.ts` | Tests (568 lines) |
+| `src/query.ts` | Trace integration in the main query flow |
+| `src/services/tools/toolExecution.ts` | Observation recording during tool execution |
+| `packages/builtin-tools/src/tools/AgentTool/runAgent.ts` | Sub-agent trace creation |

@@ -1,29 +1,29 @@
 ---
-title: "子 Agent 机制 - 权限、流程、同步/异步与 Fork"
-description: "从源码角度解析 Claude Code 子 Agent：AgentTool 的执行链路、权限模式、同步与异步生命周期、任务通知队列、AgentTool fork、slash command fork 与 runForkedAgent 的边界。"
-keywords: ["子 Agent", "AgentTool", "权限模式", "同步子 Agent", "异步子 Agent", "forkSubagent", "runForkedAgent"]
+title: "Sub-Agent Mechanics - Permissions, Flow, Sync/Async, and Fork"
+description: "A source-level look at Claude Code sub-agents: the AgentTool execution chain, permission modes, sync and async lifecycles, the task notification queue, AgentTool fork, slash command fork, and where runForkedAgent fits."
+keywords: ["sub-agent", "AgentTool", "permission mode", "sync sub-agent", "async sub-agent", "forkSubagent", "runForkedAgent"]
 ---
 
-{/* 本章目标：把子 Agent 的几条容易混淆的执行链路拆开说明，并给出源码入口。 */}
+{/* Goal of this chapter: separate the easily confused sub-agent execution paths and point to the source entry for each. */}
 
-## 先分清四个概念
+## Four concepts to tell apart
 
-Claude Code 里常被一起称为"子 Agent"的东西，其实有四类执行路径：
+What Claude Code loosely calls a "sub-agent" is actually four different execution paths:
 
-| 类型 | 谁触发 | 是否经过 Tool 协议 | 结果怎么回来 | 典型入口 |
-|------|--------|--------------------|--------------|----------|
-| 命名子 Agent | 主模型调用 `Agent(...)`，并提供 `subagent_type` | 是，属于一次 `tool_use` | 当前 turn 的 `tool_result`，或后台完成后的 `<task-notification>` | `src/tools/AgentTool/AgentTool.tsx` |
-| AgentTool fork | 主模型调用 `Agent(...)`，省略 `subagent_type`，且 fork gate 开启 | 是，仍然是 `Agent` 工具 | 先返回 `async_launched`，完成后通过任务通知回到主模型 | `src/tools/AgentTool/AgentTool.tsx`、`src/tools/AgentTool/forkSubagent.ts` |
-| Slash command fork | 用户执行 `context: fork` 的 slash command / skill | 否，不是模型发出的 `Agent` tool_use | 普通模式同步返回命令输出；assistant 模式后台回注隐藏 prompt | `src/utils/processUserInput/processSlashCommand.tsx` |
-| `runForkedAgent()` | 运行时内部服务直接分叉一条执行支线 | 否，内部 API | 调用方内部消费结果 | `src/utils/forkedAgent.ts` |
+| Type | Triggered by | Goes through the Tool protocol? | How the result returns | Typical entry |
+|------|--------------|---------------------------------|------------------------|---------------|
+| Named sub-agent | The main model calls `Agent(...)` with `subagent_type` | Yes, it is a `tool_use` | The current turn's `tool_result`, or a `<task-notification>` after background completion | `src/tools/AgentTool/AgentTool.tsx` |
+| AgentTool fork | The main model calls `Agent(...)` without `subagent_type`, and the fork gate is on | Yes, still the `Agent` tool | Returns `async_launched` first, then comes back to the main model as a task notification | `src/tools/AgentTool/AgentTool.tsx`, `src/tools/AgentTool/forkSubagent.ts` |
+| Slash command fork | The user runs a slash command / skill with `context: fork` | No, it is not an `Agent` tool_use issued by the model | Normal mode returns the command output synchronously; assistant mode re-injects a hidden prompt in the background | `src/utils/processUserInput/processSlashCommand.tsx` |
+| `runForkedAgent()` | A runtime-internal service forks off an execution branch directly | No, internal API | The caller consumes the result internally | `src/utils/forkedAgent.ts` |
 
-一句话记忆：
+One-line summary:
 
-`AgentTool` fork 是给模型使用的工具语义；`runForkedAgent()` 是给运行时内部能力使用的实现细节；slash command fork 是 skill / command 的执行模式。
+AgentTool fork is tool semantics for the model; `runForkedAgent()` is an implementation detail for internal runtime features; slash command fork is an execution mode for skills / commands.
 
-## AgentTool 主流程
+## AgentTool main flow
 
-模型看到的 `Agent` 工具最终会进入 `AgentTool.call()`。一条普通命名子 Agent 的执行链如下：
+The `Agent` tool the model sees ends up in `AgentTool.call()`. A normal named sub-agent runs through this chain:
 
 ```text
 assistant message
@@ -39,92 +39,92 @@ assistant message
   -> query.ts starts next model turn with that tool_result
 ```
 
-关键源码入口：
+Key source entries:
 
-| 代码 | 作用 |
+| Code | Role |
 |------|------|
-| `src/tools/AgentTool/AgentTool.tsx` | `Agent` 工具定义、路由、同步/异步生命周期 |
-| `src/tools/AgentTool/runAgent.ts` | 子 Agent 的 query loop、system prompt、MCP、sidechain transcript |
-| `src/services/tools/toolExecution.ts` | 外层工具执行器，`await tool.call(...)` 的地方 |
-| `src/query.ts` | 主 agentic loop，收集 tool results 并进入下一轮模型调用 |
-| `src/tasks/LocalAgentTask/LocalAgentTask.tsx` | 后台本地 Agent task 的注册、状态更新、完成通知 |
+| `src/tools/AgentTool/AgentTool.tsx` | `Agent` tool definition, routing, sync/async lifecycle |
+| `src/tools/AgentTool/runAgent.ts` | The sub-agent's query loop, system prompt, MCP, sidechain transcript |
+| `src/services/tools/toolExecution.ts` | Outer tool executor, where `await tool.call(...)` happens |
+| `src/query.ts` | Main agentic loop; collects tool results and starts the next model call |
+| `src/tasks/LocalAgentTask/LocalAgentTask.tsx` | Registration, state updates, and completion notification for background local agent tasks |
 
-## AgentTool 输入参数
+## AgentTool input parameters
 
-`Agent` 工具的输入 schema 定义在 `AgentTool.tsx` 的 `baseInputSchema()` 和 `fullInputSchema()`。有些字段会被 feature gate 从模型可见 schema 中隐藏，但 `call()` 的实现会按统一的 `AgentToolInput` 类型处理这些可选字段。
+The input schema of the `Agent` tool is defined by `baseInputSchema()` and `fullInputSchema()` in `AgentTool.tsx`. Some fields are hidden from the model-visible schema by feature gates, but `call()` handles those optional fields through a single `AgentToolInput` type.
 
-### 基础参数
+### Basic parameters
 
-| 参数 | 类型 | 必填 | 作用 | 影响路径 |
-|------|------|------|------|----------|
-| `description` | `string` | 是 | 3-5 个词的任务短描述，用于 UI、任务列表、日志、后台通知和输出摘要 | 不参与子 Agent 的实际 prompt 推理，但会影响 task 展示和通知 |
-| `prompt` | `string` | 是 | 子 Agent 要执行的完整任务说明 | 普通 agent 会变成子 Agent 的 user message；fork path 会嵌入 fork directive；remote path 会作为远程初始消息 |
-| `subagent_type` | `string` | 否 | 指定命名 agent 类型 | 有值时走命名 agent；省略时 fork gate 开启则走 AgentTool fork，否则回退到 `general-purpose` |
-| `model` | `'sonnet' \| 'opus' \| 'haiku'` | 否 | 这次调用的模型覆盖 | 普通命名 agent 中优先级高于 agent definition 的 `model`；coordinator mode 下忽略；fork path 继承父模型 |
-| `run_in_background` | `boolean` | 否 | 请求后台运行 | 为 `true` 时走异步 task；如果后台任务被禁用或 fork gate 开启，这个字段会从 schema 中隐藏 |
+| Parameter | Type | Required | Purpose | Affected path |
+|-----------|------|----------|---------|---------------|
+| `description` | `string` | Yes | A 3-5 word task summary used in the UI, task list, logs, background notifications, and output summaries | Not part of the sub-agent's actual prompt reasoning, but affects task display and notifications |
+| `prompt` | `string` | Yes | The full task description for the sub-agent | A normal agent receives it as its user message; the fork path embeds it in a fork directive; the remote path sends it as the remote initial message |
+| `subagent_type` | `string` | No | Selects a named agent type | When set, a named agent runs; when omitted, AgentTool fork runs if the fork gate is on, otherwise it falls back to `general-purpose` |
+| `model` | `'sonnet' \| 'opus' \| 'haiku'` | No | Model override for this call | For named agents it takes priority over the agent definition's `model`; ignored in coordinator mode; the fork path inherits the parent model |
+| `run_in_background` | `boolean` | No | Request background execution | When `true`, runs as an async task; hidden from the schema if background tasks are disabled or the fork gate is on |
 
-### 多 Agent / Teammate 参数
+### Multi-agent / teammate parameters
 
-| 参数 | 类型 | 必填 | 作用 | 影响路径 |
-|------|------|------|------|----------|
-| `name` | `string` | 否 | 给 spawned agent 命名，使其可被 `SendMessage({ to: name })` 定向 | 与 `team_name` 或当前 team context 一起出现时触发 teammate spawn；普通后台子 Agent 中也会注册 `name -> agentId` 方便后续发送消息 |
-| `team_name` | `string` | 否 | 指定要加入或使用的 team | 与 `name` 一起触发 `spawnTeammate()`；省略时可继承当前 `appState.teamContext.teamName` |
-| `mode` | permission mode | 否 | teammate spawn 的权限模式提示 | 当前实现只用于 teammate 的 `plan_mode_required: spawnMode === 'plan'`；它不是普通本地子 Agent 的 `permissionMode` 覆盖 |
+| Parameter | Type | Required | Purpose | Affected path |
+|-----------|------|----------|---------|---------------|
+| `name` | `string` | No | Names the spawned agent so it can be addressed with `SendMessage({ to: name })` | Together with `team_name` or the current team context it triggers a teammate spawn; for ordinary background sub-agents it also registers `name -> agentId` to make later messaging easier |
+| `team_name` | `string` | No | The team to join or use | Together with `name` it triggers `spawnTeammate()`; when omitted it can inherit the current `appState.teamContext.teamName` |
+| `mode` | permission mode | No | Permission mode hint for a teammate spawn | Currently only used for the teammate's `plan_mode_required: spawnMode === 'plan'`; it does not override the `permissionMode` of an ordinary local sub-agent |
 
-`name + team_name` 是一条独立分支：它不会进入普通 `runAgent()` 本地子 Agent 路径，而是调用 `spawnTeammate()`，返回 `teammate_spawned`。如果在 teammate 内继续带 `name` spawn teammate，会被拒绝，因为 team roster 是扁平结构。
+`name + team_name` is a separate branch: it does not enter the normal `runAgent()` local sub-agent path, but calls `spawnTeammate()` and returns `teammate_spawned`. Spawning another teammate with `name` from inside a teammate is rejected, because the team roster is flat.
 
-### 隔离与工作目录参数
+### Isolation and working-directory parameters
 
-| 参数 | 类型 | 必填 | 作用 | 影响路径 |
-|------|------|------|------|----------|
-| `isolation` | `'worktree'`，内部构建还支持 `'remote'` | 否 | 覆盖 agent definition 的隔离模式 | `worktree` 创建临时 git worktree；`remote` 委派到 CCR，直接返回 `remote_launched` |
-| `cwd` | `string` | 否 | 指定子 Agent 的运行目录 | 仅在 `KAIROS` schema 中暴露；会通过 `runWithCwdOverride()` 改变文件和 shell 操作的 cwd |
+| Parameter | Type | Required | Purpose | Affected path |
+|-----------|------|----------|---------|---------------|
+| `isolation` | `'worktree'`; internal builds also support `'remote'` | No | Overrides the agent definition's isolation mode | `worktree` creates a temporary git worktree; `remote` delegates to CCR and returns `remote_launched` directly |
+| `cwd` | `string` | No | The directory the sub-agent runs in | Only exposed in the `KAIROS` schema; changes the cwd of file and shell operations through `runWithCwdOverride()` |
 
-`isolation` 入参优先级高于 agent definition 里的 `isolation`。`cwd` 的 schema 文案要求不要和 `isolation: "worktree"` 同时使用；实现上如果两者同时出现，`cwd` 会优先成为运行目录，但仍可能创建 worktree，因此调用方应视为互斥参数。
+The `isolation` input takes priority over the `isolation` in the agent definition. The schema text for `cwd` says not to combine it with `isolation: "worktree"`; in the implementation, if both appear, `cwd` takes precedence as the run directory but a worktree may still be created, so callers should treat the two as mutually exclusive.
 
-### 参数可见性与实际效果
+### Parameter visibility and actual effect
 
-| 参数 | 可能不可见的情况 | 说明 |
-|------|------------------|------|
-| `run_in_background` | `DISABLE_BACKGROUND_TASKS` 生效，或 `isForkSubagentEnabled()` 为 true | fork gate 开启时所有 `AgentTool` spawn 都会被强制异步，所以不需要让模型再选择 |
-| `cwd` | 非 `KAIROS` 构建 / 模式 | schema 会 omit 掉，但实现类型仍保留该字段 |
-| `isolation: "remote"` | 非内部构建 | 外部构建只接受 `worktree` |
-| `model` | coordinator mode 或 fork path | coordinator 会清空 model override；fork 需要继承父模型以保持请求前缀和行为一致 |
+| Parameter | When it may be hidden | Notes |
+|-----------|-----------------------|-------|
+| `run_in_background` | `DISABLE_BACKGROUND_TASKS` is in effect, or `isForkSubagentEnabled()` is true | When the fork gate is on, every `AgentTool` spawn is forced async, so the model need not choose |
+| `cwd` | Non-`KAIROS` build / mode | Omitted from the schema, though the implementation type keeps the field |
+| `isolation: "remote"` | Non-internal builds | External builds accept only `worktree` |
+| `model` | Coordinator mode or fork path | The coordinator clears the model override; fork must inherit the parent model to keep the request prefix and behavior consistent |
 
-### 参数与 agent definition 的优先级
+### Priority between call parameters and the agent definition
 
-| 配置项 | 调用参数 | agent definition | 最终规则 |
-|--------|----------|------------------|----------|
-| agent 类型 | `subagent_type` | 默认 / active agents | 显式 `subagent_type` 优先；省略时由 fork gate 决定 fork 或 `general-purpose` |
-| 模型 | `model` | `selectedAgent.model` | 普通命名 agent 中调用参数优先；没有参数则用定义；再没有则继承父模型 |
-| 后台运行 | `run_in_background` | `selectedAgent.background` | 任一为 true 都会异步；还有 coordinator、assistant、fork gate 等强制异步条件 |
-| 隔离 | `isolation` | `selectedAgent.isolation` | 调用参数优先 |
-| 权限模式 | 无本地覆盖参数 | `selectedAgent.permissionMode` | 普通子 Agent 用 definition 的 `permissionMode`，默认 `acceptEdits`；fork 使用 `bubble` |
-| 工具集合 | 无调用参数 | `selectedAgent.tools` | 普通子 Agent 在 `runAgent()` 里按 definition 过滤；fork 使用父级 exact tools |
+| Setting | Call parameter | Agent definition | Final rule |
+|---------|----------------|------------------|------------|
+| Agent type | `subagent_type` | Default / active agents | An explicit `subagent_type` wins; when omitted, the fork gate decides between fork and `general-purpose` |
+| Model | `model` | `selectedAgent.model` | For named agents the call parameter wins; otherwise the definition; otherwise inherit the parent model |
+| Background | `run_in_background` | `selectedAgent.background` | Either being true makes it async; coordinator, assistant, and fork gate also force async |
+| Isolation | `isolation` | `selectedAgent.isolation` | The call parameter wins |
+| Permission mode | No local override parameter | `selectedAgent.permissionMode` | A normal sub-agent uses the definition's `permissionMode`, default `acceptEdits`; fork uses `bubble` |
+| Tool set | No call parameter | `selectedAgent.tools` | A normal sub-agent is filtered by the definition inside `runAgent()`; fork uses the parent's exact tools |
 
-## Agent Definition 字段
+## Agent definition fields
 
-`AgentTool` 的调用参数只描述"这一次怎么 spawn"。真正决定 agent 默认能力的是 agent definition。自定义 agent 可以来自用户 / 项目目录、JSON 配置、插件或内置定义，核心字段最终都会归一到 `AgentDefinition`。
+The `AgentTool` call parameters only describe "how to spawn this time". What determines an agent's default capabilities is the agent definition. Custom agents can come from user / project directories, JSON config, plugins, or built-in definitions, and their core fields all normalize into `AgentDefinition`.
 
-### 常用 frontmatter
+### Common frontmatter
 
-| 字段 | 类型 | 作用 | 运行时影响 |
-|------|------|------|------------|
-| `name` | `string` | agent 类型名 | 模型通过 `subagent_type` 匹配它；插件 agent 可能带命名空间前缀 |
-| `description` | `string` | 使用场景说明 | 进入可用 agent 列表，帮助主模型选择 |
-| `tools` | `string[]` | 允许的工具集合 | `runAgent()` 内经 `resolveAgentTools()` 过滤；`['*']` 表示全量可用工具 |
-| `disallowedTools` | `string[]` | 禁用工具集合 | JSON agent 支持该字段，用于从允许集合中排除 |
-| `prompt` | `string` | agent system prompt 主体 | 普通命名子 Agent 会用它构建自己的 system prompt |
-| `model` | `string` | 默认模型 | 可被 `Agent({ model })` 覆盖；`inherit` 表示继承父模型 |
-| `effort` | effort level 或 number | 推理努力级别 | 传给 agent 运行配置 |
-| `permissionMode` | permission mode | 默认权限模式 | 普通子 Agent 工具池组装时使用；省略则默认 `acceptEdits` |
-| `background` | `boolean` | 是否总是后台运行 | 为 true 时，即使调用参数没有 `run_in_background` 也走异步 |
-| `isolation` | `'worktree'` / `'remote'` | 默认隔离模式 | 可被调用参数 `isolation` 覆盖 |
-| `maxTurns` | positive integer | 最大 agentic turns | 传给 `query()`，防止子 Agent 无限循环 |
-| `color` | agent color | UI 颜色 | 用于 grouped UI、任务面板、teammate 展示 |
-| `memory` | `'user' \| 'project' \| 'local'` | 持久记忆作用域 | 在 system prompt 中追加 agent memory，并按 scope 读写目录 |
+| Field | Type | Purpose | Runtime effect |
+|-------|------|---------|----------------|
+| `name` | `string` | Agent type name | The model matches it through `subagent_type`; plugin agents may carry a namespace prefix |
+| `description` | `string` | Description of when to use it | Appears in the available agents list to help the main model choose |
+| `tools` | `string[]` | Allowed tool set | Filtered inside `runAgent()` via `resolveAgentTools()`; `['*']` means all available tools |
+| `disallowedTools` | `string[]` | Disallowed tool set | Supported by JSON agents to exclude tools from the allowed set |
+| `prompt` | `string` | Body of the agent system prompt | A named sub-agent uses it to build its own system prompt |
+| `model` | `string` | Default model | Can be overridden by `Agent({ model })`; `inherit` means inherit the parent model |
+| `effort` | effort level or number | Reasoning effort level | Passed to the agent run configuration |
+| `permissionMode` | permission mode | Default permission mode | Used when assembling a normal sub-agent's tool pool; defaults to `acceptEdits` when omitted |
+| `background` | `boolean` | Whether to always run in the background | When true, runs async even without `run_in_background` in the call |
+| `isolation` | `'worktree'` / `'remote'` | Default isolation mode | Can be overridden by the `isolation` call parameter |
+| `maxTurns` | positive integer | Maximum agentic turns | Passed to `query()` to keep the sub-agent from looping forever |
+| `color` | agent color | UI color | Used in grouped UI, the task panel, and teammate display |
+| `memory` | `'user' \| 'project' \| 'local'` | Persistent memory scope | Appends agent memory to the system prompt and reads/writes the directory for that scope |
 
-示例：
+Example:
 
 ```md
 ---
@@ -144,69 +144,69 @@ memory: project
 You are a focused code reviewer. Prioritize bugs, regressions, and missing tests.
 ```
 
-### MCP、Hooks、Skills
+### MCP, hooks, skills
 
-| 字段 | 作用 | 说明 |
-|------|------|------|
-| `requiredMcpServers` | 启动前必须存在的 MCP server 模式 | `AgentTool.call()` 会等待 pending server，最长约 30 秒；没有可用工具则报错 |
-| `mcpServers` | agent 专属 MCP server | `runAgent()` 初始化，生命周期跟随该子 Agent |
-| `hooks` | agent 生命周期内注册的 hooks | `runAgent()` 会注册 frontmatter hooks；agent 停止时清理 session hooks |
-| `skills` | 预加载 skill 名称 | `runAgent()` 会解析并注入对应 skill；插件 skill 支持命名空间或后缀匹配 |
-| `initialPrompt` | 首个 user turn 前置内容 | 可用于启动时固定注入额外说明 |
+| Field | Purpose | Notes |
+|-------|---------|-------|
+| `requiredMcpServers` | MCP server patterns that must exist before startup | `AgentTool.call()` waits for pending servers for up to about 30 seconds; errors if no tools are available |
+| `mcpServers` | Agent-specific MCP servers | Initialized by `runAgent()`; lifecycle follows the sub-agent |
+| `hooks` | Hooks registered for the agent's lifetime | `runAgent()` registers frontmatter hooks; session hooks are cleaned up when the agent stops |
+| `skills` | Names of skills to preload | `runAgent()` resolves and injects them; plugin skills support namespaced or suffix matching |
+| `initialPrompt` | Content prepended to the first user turn | Can be used to inject extra instructions at startup |
 
-这些字段属于 agent definition，不是 `Agent(...)` 调用参数。调用方不能在一次 `Agent` tool_use 里临时传入 `tools`、`hooks` 或 `skills` 来覆盖 agent 定义。
+These fields belong to the agent definition, not to the `Agent(...)` call parameters. A caller cannot pass `tools`, `hooks`, or `skills` in a single `Agent` tool_use to override the agent definition.
 
-### runAgent() 扩展点
+### runAgent() extension points
 
-`runAgent()` 不只是把 prompt 丢给模型。它会在进入 query loop 前后挂载一组 agent 级扩展点：
+`runAgent()` does more than hand a prompt to the model. Before and after entering the query loop it attaches a set of agent-level extension points:
 
-| 扩展点 | 时机 | 作用 |
-|--------|------|------|
-| `SubagentStart` hooks | 子 Agent query loop 启动前 | 允许 hook 修改或补充启动上下文 |
-| frontmatter `hooks` | agent session 初始化时注册 | 只在这个子 Agent 的 session 内生效，结束后清理 |
-| preload `skills` | system prompt / skill 解析阶段 | 把指定 skill 的说明和资源注入 agent 可见上下文 |
-| agent `memory` | system prompt 构建时 | 按 `user` / `project` / `local` scope 读取 agent memory，并追加到 agent prompt |
-| sidechain transcript | query loop 运行时 | 记录子 Agent 的独立消息链，供恢复、调试和 `SendMessage` 续跑使用 |
+| Extension point | When | Purpose |
+|-----------------|------|---------|
+| `SubagentStart` hooks | Before the sub-agent's query loop starts | Lets hooks modify or add to the startup context |
+| frontmatter `hooks` | Registered when the agent session is initialized | Effective only within this sub-agent's session, cleaned up afterward |
+| preload `skills` | System prompt / skill resolution stage | Injects the specified skills' instructions and resources into the agent-visible context |
+| agent `memory` | When the system prompt is built | Reads agent memory by `user` / `project` / `local` scope and appends it to the agent prompt |
+| sidechain transcript | While the query loop runs | Records the sub-agent's independent message chain for recovery, debugging, and `SendMessage` continuation |
 
-这些扩展点解释了为什么同样是 `runAgent()`，不同 agent definition 会表现出不同的工具边界、启动行为和长期上下文。
+These extension points explain why, with the same `runAgent()`, different agent definitions show different tool boundaries, startup behavior, and long-term context.
 
-## 路由规则
+## Routing rules
 
-`AgentTool.call()` 首先决定这次调用到底要跑哪一种 agent：
+`AgentTool.call()` first decides which kind of agent this call should run:
 
 ```text
-subagent_type 有值
-  -> 使用命名 agent
+subagent_type set
+  -> use the named agent
 
-subagent_type 省略 && isForkSubagentEnabled() 为 true
-  -> 使用 fork agent
+subagent_type omitted && isForkSubagentEnabled() is true
+  -> use the fork agent
 
-subagent_type 省略 && fork gate 关闭
-  -> 回退到 general-purpose
+subagent_type omitted && fork gate off
+  -> fall back to general-purpose
 ```
 
-命名 agent 来自内置 agent、用户配置目录、插件 agent 等定义。fork agent 是代码里内置的特殊 agent，定义在 `forkSubagent.ts`，它不是普通专业角色，而是"继承父上下文的 worker"。
+Named agents come from built-in agents, the user config directory, plugin agents, and similar definitions. The fork agent is a special built-in agent defined in `forkSubagent.ts`; it is not an ordinary specialist role but a "worker that inherits the parent context".
 
-## 权限模型
+## Permission model
 
-子 Agent 权限要分成三层看：能不能启动这个 agent、这个 agent 有哪些工具、工具执行时如何处理权限请求。
+Sub-agent permissions are best viewed in three layers: whether this agent may be launched, which tools it has, and how permission requests are handled when tools run.
 
-### 启动权限
+### Launch permissions
 
-`AgentTool` 自身是一个工具调用，因此先经过普通工具权限系统。随后 `AgentTool.call()` 还会做 agent 级过滤：
+`AgentTool` is itself a tool call, so it first goes through the normal tool permission system. Then `AgentTool.call()` applies agent-level filtering:
 
-| 检查 | 说明 |
-|------|------|
-| `filterDeniedAgents()` | 根据权限规则过滤被禁止的 agent 类型 |
-| `requiredMcpServers` | 如果 agent 声明必需 MCP server，会等待它们连接，失败或超时则停止 |
-| teammate 限制 | in-process teammate 不能继续 spawn teammate，也不能 spawn 后台 agent |
-| fork 递归保护 | fork worker 里不能再次 fork |
+| Check | Notes |
+|-------|-------|
+| `filterDeniedAgents()` | Filters out agent types forbidden by permission rules |
+| `requiredMcpServers` | If an agent declares required MCP servers, waits for them to connect and stops on failure or timeout |
+| Teammate restrictions | An in-process teammate cannot spawn further teammates or background agents |
+| Fork recursion guard | A fork worker cannot fork again |
 
-被权限规则 deny 的命名 agent 会直接报错，而不是退回到别的 agent。这样可以避免模型绕过用户或配置里的拒绝规则。
+A named agent denied by permission rules fails with an error rather than falling back to another agent. This stops the model from bypassing deny rules from the user or configuration.
 
-### 工具池权限
+### Tool pool permissions
 
-普通命名子 Agent 不直接继承父 agent 当前那一轮的工具池限制。它会用自己的权限模式重新组装工具池：
+A normal named sub-agent does not directly inherit the parent agent's tool-pool restrictions for the current turn. It reassembles its tool pool using its own permission mode:
 
 ```ts
 const workerPermissionContext = {
@@ -220,64 +220,64 @@ const workerTools = assembleToolPool(
 )
 ```
 
-这里有几个重要含义：
+Several implications follow:
 
-| 维度 | 行为 |
-|------|------|
-| 默认权限模式 | 如果 agent 定义没有写 `permissionMode`，默认使用 `acceptEdits` |
-| 全局 allow / deny 规则 | 仍然来自 `appState.toolPermissionContext` |
-| agent 自己的 `tools` 字段 | 在 `runAgent()` 内通过 `resolveAgentTools()` 继续过滤 |
-| MCP 工具 | 来自当前 AppState 中已经连接的 MCP 工具；agent 也可以声明专属 MCP server |
+| Dimension | Behavior |
+|-----------|----------|
+| Default permission mode | If the agent definition has no `permissionMode`, `acceptEdits` is used |
+| Global allow / deny rules | Still come from `appState.toolPermissionContext` |
+| The agent's own `tools` field | Further filtered inside `runAgent()` via `resolveAgentTools()` |
+| MCP tools | Come from the MCP tools already connected in the current AppState; an agent may also declare its own MCP servers |
 
-fork agent 是例外。它为了保持父子请求的 prompt cache 前缀一致，会使用父级 exact tools：
+The fork agent is the exception. To keep the parent and child request prompt-cache prefix identical, it uses the parent's exact tools:
 
 ```text
 useExactTools: true
 availableTools: toolUseContext.options.tools
 ```
 
-因此 fork 的权限策略不是"重新组装工具池"，而是"继承父工具定义，并用 `bubble` 权限模式把权限请求上浮到父终端"。
+So the fork permission strategy is not "reassemble the tool pool" but "inherit the parent tool definitions and bubble permission requests up to the parent terminal using the `bubble` permission mode".
 
-### 权限模式速览
+### Permission modes at a glance
 
-| 模式 | 子 Agent 中的意义 |
-|------|------------------|
-| `acceptEdits` | 默认模式。通常允许读和编辑类安全路径，危险操作仍走权限系统 |
-| `default` / 其他普通模式 | 按主权限系统规则询问或放行 |
-| `bypassPermissions` | 显式危险模式，只有用户启用跳过权限时才应出现 |
-| `bubble` | fork 专用思路：权限请求冒泡到父级会话处理 |
+| Mode | Meaning in a sub-agent |
+|------|------------------------|
+| `acceptEdits` | The default. Generally allows reads and edits on safe paths; dangerous operations still go through the permission system |
+| `default` / other normal modes | Ask or allow according to the main permission system's rules |
+| `bypassPermissions` | An explicit dangerous mode; should appear only when the user has enabled skipping permissions |
+| `bubble` | Fork-specific: permission requests bubble up to the parent session |
 
-## 同步子 Agent
+## Synchronous sub-agents
 
-同步子 Agent 是默认路径：没有显式 `run_in_background: true`，agent 定义也没有 `background: true`，并且没有被 coordinator / assistant mode / fork gate 等机制强制异步。
+A synchronous sub-agent is the default path: no explicit `run_in_background: true`, no `background: true` in the agent definition, and not forced async by the coordinator / assistant mode / fork gate.
 
-同步等待发生在普通工具调用链里。外层 `toolExecution.ts` 会执行：
+The synchronous wait happens inside the normal tool call chain. The outer `toolExecution.ts` runs:
 
 ```ts
 const result = await tool.call(...)
 ```
 
-如果这个工具是 `AgentTool`，那么 `AgentTool.call()` 会在内部跑完整个子 Agent：
+If the tool is `AgentTool`, then `AgentTool.call()` runs the whole sub-agent internally:
 
 ```text
 AgentTool.call()
   -> agentIterator = runAgent(...)[Symbol.asyncIterator]()
   -> while true:
        await agentIterator.next()
-       收集 assistant / user 消息
-       转发 progress 给 UI / SDK
-       如果 result.done，跳出
+       collect assistant / user messages
+       forward progress to UI / SDK
+       break if result.done
   -> finalizeAgentTool(agentMessages, ...)
   -> return { data: { status: "completed", ...agentResult } }
 ```
 
-返回后，`mapToolResultToToolResultBlockParam()` 把 `completed` 结果转成当前 turn 的 `tool_result`。然后 `query.ts` 把这个 tool result 放进消息列表，进入下一轮模型调用。
+After it returns, `mapToolResultToToolResultBlockParam()` turns the `completed` result into the current turn's `tool_result`. Then `query.ts` puts that tool result into the message list and enters the next model call.
 
-也就是说，同步子 Agent 不通过统一队列回注结果。主模型是在这次 `Agent` tool call 上等待，直到拿到最终 `tool_result` 才继续。
+In other words, a synchronous sub-agent does not return its result through the unified queue. The main model waits on this `Agent` tool call until the final `tool_result` arrives.
 
-### 同步子 Agent 的可后台化
+### Backgrounding a synchronous sub-agent
 
-同步子 Agent 注册为 foreground task，因此它可以中途被后台化。循环里会同时等待下一条子 Agent 消息和后台化信号：
+A synchronous sub-agent is registered as a foreground task, so it can be moved to the background midway. The loop waits on both the next sub-agent message and a backgrounding signal:
 
 ```ts
 const raceResult = await Promise.race([
@@ -286,22 +286,22 @@ const raceResult = await Promise.race([
 ])
 ```
 
-如果后台化信号先到，当前前台 iterator 会被清理，新的后台 `runAgent(..., isAsync: true)` 接管剩余工作。此时 `AgentTool.call()` 不再等待最终结果，而是返回 `async_launched`，后续完成结果走任务通知队列。
+If the backgrounding signal arrives first, the current foreground iterator is cleaned up and a new background `runAgent(..., isAsync: true)` takes over the remaining work. At that point `AgentTool.call()` no longer waits for the final result; it returns `async_launched`, and the completion result later arrives through the task notification queue.
 
-## 异步子 Agent
+## Asynchronous sub-agents
 
-异步子 Agent 的触发条件包括：
+Triggers for an asynchronous sub-agent:
 
-| 条件 | 说明 |
-|------|------|
-| `run_in_background: true` | 模型显式要求后台运行 |
-| agent 定义 `background: true` | 该 agent 总是后台运行 |
-| coordinator mode | worker 统一异步，方便编排 |
-| fork subagent gate 开启 | 当前实现会强制所有 `AgentTool` spawn 使用异步通知模型 |
-| assistant / kairos mode | 避免同步子任务阻塞输入队列 |
-| proactive active | 主动循环下也可能强制异步 |
+| Condition | Notes |
+|-----------|-------|
+| `run_in_background: true` | The model explicitly asks for background execution |
+| Agent definition `background: true` | This agent always runs in the background |
+| coordinator mode | Workers are uniformly async to ease orchestration |
+| fork subagent gate on | The current implementation forces every `AgentTool` spawn to use the async notification model |
+| assistant / kairos mode | Keeps synchronous subtasks from blocking the input queue |
+| proactive active | Async may also be forced under the proactive loop |
 
-异步路径不会等待子 Agent 完成：
+The async path does not wait for the sub-agent to finish:
 
 ```text
 AgentTool.call()
@@ -310,7 +310,7 @@ AgentTool.call()
   -> return { status: "async_launched", agentId, outputFile }
 ```
 
-后台生命周期在 `runAsyncAgentLifecycle()` 中完成：
+The background lifecycle completes in `runAsyncAgentLifecycle()`:
 
 ```text
 runAsyncAgentLifecycle()
@@ -321,11 +321,11 @@ runAsyncAgentLifecycle()
   -> enqueueAgentNotification(...)
 ```
 
-异步 Agent 使用独立 `AbortController`。普通 ESC 取消主线程不会自动杀掉后台 Agent；后台 Agent 需要通过任务停止、bulk kill 或 task 管理命令显式结束。
+An async agent uses its own `AbortController`. A plain ESC that cancels the main thread does not automatically kill a background agent; background agents must be ended explicitly through task stop, bulk kill, or task management commands.
 
-## 完成通知与统一队列
+## Completion notifications and the unified queue
 
-后台 Agent 完成后，`enqueueAgentNotification()` 会生成一条 XML 形态的 `<task-notification>`：
+When a background agent finishes, `enqueueAgentNotification()` generates an XML-shaped `<task-notification>`:
 
 ```xml
 <task-notification>
@@ -339,180 +339,180 @@ runAsyncAgentLifecycle()
 </task-notification>
 ```
 
-这条消息通过 `enqueuePendingNotification({ mode: 'task-notification' })` 进入统一 command queue。
+This message enters the unified command queue through `enqueuePendingNotification({ mode: 'task-notification' })`.
 
-### 队列什么时候消费
+### When the queue is consumed
 
-| 场景 | 消费方式 |
-|------|----------|
-| REPL / TUI | `useQueueProcessor()` 订阅队列；当 query 空闲且没有本地 JSX UI 阻塞时，调用 `processQueueIfReady()` |
-| CLI / SDK headless | `print.ts` 中的 `drainCommandQueue()` 在 turn 之间持续消费；如果还有后台任务运行，会继续等待并 drain 新通知 |
-| 子 Agent 内部 | `query.ts` 会消费带有当前 `agentId` 的 `task-notification`，主线程只消费 `agentId === undefined` 的消息 |
+| Scenario | How it is consumed |
+|----------|--------------------|
+| REPL / TUI | `useQueueProcessor()` subscribes to the queue; when the query is idle and no local JSX UI is blocking, it calls `processQueueIfReady()` |
+| CLI / SDK headless | `drainCommandQueue()` in `print.ts` keeps consuming between turns; if background tasks are still running, it keeps waiting and drains new notifications |
+| Inside a sub-agent | `query.ts` consumes `task-notification` messages carrying the current `agentId`; the main thread consumes only messages with `agentId === undefined` |
 
-`task-notification` 最终会作为 user-role 消息或 attachment 进入下一轮模型上下文。模型因此能看到后台结果，并决定是否综合、继续行动或回复用户。
+A `task-notification` ultimately enters the next model turn's context as a user-role message or attachment. The model can therefore see the background result and decide whether to synthesize it, act further, or reply to the user.
 
-### 还有哪些消息走同一队列
+### What else goes through the same queue
 
-统一队列不只用于后台 Agent。常见来源包括：
+The unified queue is not only for background agents. Common sources include:
 
-| 来源 | mode | 用途 |
-|------|------|------|
-| 用户在当前 turn 未结束时继续输入 | `prompt` / `bash` | 排队到下一轮处理 |
-| 后台 shell / monitor 结束或卡住提醒 | `task-notification` | 通知模型命令状态 |
-| remote agent / ultraplan / ultrareview 完成 | `task-notification` | 把远程结果交给本地模型 |
-| scheduled task / cron | `prompt` | 定时触发主模型任务 |
-| Chrome / MCP channel 推送 | `prompt` | 外部系统主动注入消息 |
-| hook 阻塞错误 | `task-notification` | 唤醒模型处理 stop hook 错误 |
-| orphaned permission response | `orphaned-permission` | 处理工具权限回复比原请求更晚到达的情况 |
+| Source | mode | Purpose |
+|--------|------|---------|
+| The user keeps typing before the current turn ends | `prompt` / `bash` | Queued for the next turn |
+| Background shell / monitor finished or stuck reminder | `task-notification` | Tells the model the command status |
+| Remote agent / ultraplan / ultrareview completed | `task-notification` | Hands remote results to the local model |
+| Scheduled task / cron | `prompt` | Triggers a main-model task on a schedule |
+| Chrome / MCP channel push | `prompt` | An external system injects a message |
+| Hook blocking error | `task-notification` | Wakes the model to handle a stop hook error |
+| Orphaned permission response | `orphaned-permission` | Handles a tool permission reply that arrives later than its original request |
 
-队列优先级是 `now > next > later`。`enqueue()` 默认 `next`，`enqueuePendingNotification()` 默认 `later`，这样系统通知不会抢在用户输入前面。
+Queue priority is `now > next > later`. `enqueue()` defaults to `next` and `enqueuePendingNotification()` defaults to `later`, so system notifications never jump ahead of user input.
 
-## 继续通信与任务控制
+## Continued communication and task control
 
-后台子 Agent 返回 `async_launched` 后，主模型不应该直接假装已经知道最终答案。它有三种后续操作面：发消息、读输出、停止任务。
+After a background sub-agent returns `async_launched`, the main model should not pretend it already knows the final answer. It has three follow-up surfaces: send a message, read output, and stop the task.
 
 ### SendMessage
 
-`SendMessage` 用来给运行中或曾经启动过的 agent 追加消息。它可以通过两种地址找到本地后台 agent：
+`SendMessage` appends a message to an agent that is running or has been started before. It can find a local background agent by two kinds of address:
 
-| 地址 | 来源 | 行为 |
-|------|------|------|
-| `name` | `Agent({ name, ... })` 注册到 `agentNameRegistry` | 先解析成 agentId，再发送 |
-| raw `agentId` | `async_launched` 或 `completed` tool result 中返回 | 直接定位对应 task 或 transcript |
+| Address | Source | Behavior |
+|---------|--------|----------|
+| `name` | Registered in `agentNameRegistry` by `Agent({ name, ... })` | Resolved to an agentId first, then sent |
+| raw `agentId` | Returned in the `async_launched` or `completed` tool result | Locates the task or transcript directly |
 
-发送 plain text message 时必须提供 `summary`，因为 UI 和权限摘要需要一个短描述。`to: "*"` 表示广播给 teammate team；结构化消息不能广播。
+Sending a plain text message requires a `summary`, because the UI and permission summaries need a short description. `to: "*"` broadcasts to the teammate team; structured messages cannot be broadcast.
 
-`SendMessage` 对本地后台 agent 的行为分三种：
+`SendMessage` behaves in three ways for a local background agent:
 
-| 目标状态 | 行为 | 结果 |
-|----------|------|------|
-| task 仍在 `running` | 调用 `queuePendingMessage(agentId, message, ...)` | 消息进入该 task 的 `pendingMessages`，在子 Agent 下一次 tool round / loop 边界被投递 |
-| task 已停止但还在 AppState | 调用 `resumeAgentBackground(...)` | 用这条消息把 agent 后台恢复运行，完成后仍通过通知回来 |
-| task 已从 AppState 清掉 | 仍尝试 `resumeAgentBackground(...)` | 如果 sidechain transcript 还在，就从 transcript 恢复；否则返回失败 |
+| Target state | Behavior | Result |
+|--------------|----------|--------|
+| Task still `running` | Calls `queuePendingMessage(agentId, message, ...)` | The message goes into the task's `pendingMessages` and is delivered at the sub-agent's next tool round / loop boundary |
+| Task stopped but still in AppState | Calls `resumeAgentBackground(...)` | Resumes the agent in the background with this message; completion still comes back through a notification |
+| Task already cleared from AppState | Still tries `resumeAgentBackground(...)` | If the sidechain transcript still exists, resumes from the transcript; otherwise returns a failure |
 
-这意味着 `SendMessage` 不是只能在 agent 正在跑时使用。隔了很久以后，只要调用方还知道 `name` 或 `agentId`，并且对应 transcript 没被清理，就可能恢复并继续这个 agent。反过来，如果 task 状态和 transcript 都没了，`SendMessage` 无法凭空重建上下文。
+This means `SendMessage` is not limited to the time an agent is running. Long afterward, as long as the caller still knows the `name` or `agentId` and the transcript has not been cleaned up, the agent may be resumed and continued. Conversely, if both the task state and the transcript are gone, `SendMessage` cannot rebuild the context from nothing.
 
-几个容易误会的点：
+A few easily misunderstood points:
 
-| 点 | 说明 |
-|----|------|
-| running agent 不会立刻中断当前工具调用 | 消息先排进 `pendingMessages`，等 agent loop 到安全边界再处理 |
-| stopped agent 会变成新的后台运行 | `resumeAgentBackground()` 返回 output file，之后靠完成通知回注 |
-| `name` 只在注册还在时可靠 | name registry 是运行时状态；跨很久恢复时 raw `agentId` 更稳定 |
-| cross-session send 有额外限制 | `bridge:` / `uds:` 地址只支持 plain text，且可能需要显式权限或连接状态 |
+| Point | Notes |
+|-------|-------|
+| A running agent does not immediately interrupt its current tool call | The message is queued in `pendingMessages` and handled when the agent loop reaches a safe boundary |
+| A stopped agent becomes a new background run | `resumeAgentBackground()` returns an output file, and completion notification re-injects the result later |
+| `name` is reliable only while its registration lives | The name registry is runtime state; for a long-delayed resume the raw `agentId` is more stable |
+| Cross-session send has extra limits | `bridge:` / `uds:` addresses support plain text only and may need explicit permission or a live connection |
 
 ### TaskOutput
 
-`TaskOutput` 是旧式读取后台任务输出的工具，当前 prompt 明确建议优先使用 `Read` 读取任务返回的 `output_file`。它仍然可用，主要行为如下：
+`TaskOutput` is the legacy tool for reading background task output; the current prompt explicitly recommends using `Read` on the `output_file` returned by the task instead. It still works, with this behavior:
 
-| 参数 | 行为 |
-|------|------|
-| `task_id` | 要读取的后台任务 id |
-| `block: false` | 非阻塞读取当前状态和已有输出 |
-| `block: true` | 等待任务完成，默认行为 |
-| `timeout` | 阻塞等待的最大时长 |
+| Parameter | Behavior |
+|-----------|----------|
+| `task_id` | The id of the background task to read |
+| `block: false` | Non-blocking read of the current status and existing output |
+| `block: true` | Wait for the task to finish; the default |
+| `timeout` | Maximum time to block |
 
-如果 `block: true` 等到任务完成，`TaskOutput` 会把 task 标记为 `notified`，避免再重复发送完成通知。因为这个工具已经 deprecated，新代码和模型提示都更推荐直接读 `output_file`。
+If `block: true` waits until the task completes, `TaskOutput` marks the task as `notified` to avoid sending the completion notification again. Because this tool is deprecated, new code and model prompts both prefer reading `output_file` directly.
 
 ### TaskStop
 
-`TaskStop` 停止运行中的后台任务。它接受 `task_id`，也兼容旧的 `shell_id`。校验规则很直接：任务必须存在且状态是 `running`，否则报错。
+`TaskStop` stops a running background task. It takes `task_id` and also accepts the legacy `shell_id`. The validation rule is simple: the task must exist and be `running`, otherwise it errors.
 
-停止后会调用统一的 `stopTask()`，具体 task 类型再映射到各自 kill 逻辑，例如本地 agent 会 abort 自己的 `AbortController`，shell task 会停止进程，remote task 会走 remote 停止路径。
+After stopping it calls the unified `stopTask()`, and each task type maps to its own kill logic: a local agent aborts its own `AbortController`, a shell task stops the process, and a remote task takes the remote stop path.
 
-## 失败、取消与清理
+## Failure, cancellation, and cleanup
 
-子 Agent 的异常路径主要分同步和异步看。
+Sub-agent error paths split into sync and async.
 
-### 同步路径
+### Synchronous path
 
-同步子 Agent 抛出 `AbortError` 时，`AgentTool.call()` 会把它继续抛给外层工具框架，主 turn 进入正常的中断处理。非 abort 错误会先记录；如果已经收集到 assistant 消息，会尽量 `finalizeAgentTool()` 返回部分结果，让主模型看到已有进展。如果完全没有 assistant 消息，则重新抛出错误。
+When a synchronous sub-agent throws an `AbortError`, `AgentTool.call()` rethrows it to the outer tool framework, and the main turn goes through normal interrupt handling. A non-abort error is logged first; if assistant messages have already been collected, it tries to `finalizeAgentTool()` and return a partial result so the main model can see the progress made. If there are no assistant messages at all, the error is rethrown.
 
-同步 finally 会做这些清理：
+The synchronous `finally` performs this cleanup:
 
-| 清理 | 作用 |
-|------|------|
-| 清空 background hint UI | 避免前台提示残留 |
-| `stopForegroundSummarization()` | 停止前台摘要定时器 |
-| `unregisterAgentForeground()` | 子 Agent 未后台化时，从 foreground task 注册表移除 |
-| SDK task notification | 给 SDK / VS Code 面板发完成、失败或 stopped 事件 |
-| `clearInvokedSkillsForAgent()` | 清理 agent 作用域 skill 状态 |
-| `clearDumpState()` | 清理 dump/transcript 调试状态 |
-| `cleanupWorktreeIfNeeded()` | 未后台化时清理或保留 worktree |
+| Cleanup | Purpose |
+|---------|---------|
+| Clear background hint UI | Avoid leftover foreground hints |
+| `stopForegroundSummarization()` | Stop the foreground summarization timer |
+| `unregisterAgentForeground()` | If the sub-agent was not backgrounded, remove it from the foreground task registry |
+| SDK task notification | Sends completed, failed, or stopped events to the SDK / VS Code panel |
+| `clearInvokedSkillsForAgent()` | Clear agent-scoped skill state |
+| `clearDumpState()` | Clear dump/transcript debug state |
+| `cleanupWorktreeIfNeeded()` | Clean up or keep the worktree when not backgrounded |
 
-### 异步路径
+### Asynchronous path
 
-异步路径由 `runAsyncAgentLifecycle()` 兜住异常：
+The async path catches exceptions in `runAsyncAgentLifecycle()`:
 
-| 情况 | 状态更新 | 通知 |
-|------|----------|------|
-| 正常完成 | `completeAsyncAgent(...)` | `enqueueAgentNotification(status: completed)` |
-| `AbortError` | `killAsyncAgent(...)` | `enqueueAgentNotification(status: killed)`，带 partial result |
-| 其他错误 | `failAsyncAgent(...)` | `enqueueAgentNotification(status: failed)`，带 error |
+| Case | State update | Notification |
+|------|--------------|--------------|
+| Normal completion | `completeAsyncAgent(...)` | `enqueueAgentNotification(status: completed)` |
+| `AbortError` | `killAsyncAgent(...)` | `enqueueAgentNotification(status: killed)`, with partial result |
+| Other error | `failAsyncAgent(...)` | `enqueueAgentNotification(status: failed)`, with the error |
 
-代码会先更新 task 状态，再做 handoff classifier 或 worktree cleanup 这类可能较慢的附加工作。这个顺序很重要：`TaskOutput(block=true)` 等待的是 task 进入 terminal status，不能被后续分类器或 git 清理卡住。
+The code updates the task state first, and only then does potentially slow extras such as the handoff classifier or worktree cleanup. This order matters: `TaskOutput(block=true)` waits for the task to reach a terminal status and must not be stalled by the classifier or git cleanup that follows.
 
-通知也有防重机制。`enqueueAgentNotification()` 会先原子检查并设置 `task.notified`；如果已经通知过，就不再重复入队。
+Notifications also have de-duplication. `enqueueAgentNotification()` atomically checks and sets `task.notified` first; if it was already notified, it does not enqueue again.
 
 ## AgentTool fork
 
-AgentTool fork 是 `Agent` 工具的一种特殊路由，不是普通命名 agent。
+AgentTool fork is a special route of the `Agent` tool, not a normal named agent.
 
 ### Gate
 
-fork 默认关闭。需要构建/运行时启用 `FORK_SUBAGENT` feature，例如开发时显式设置：
+Fork is off by default. The `FORK_SUBAGENT` feature must be enabled at build/run time, for example by setting it explicitly during development:
 
 ```powershell
 $env:FEATURE_FORK_SUBAGENT='1'; bun run dev
 ```
 
-即使 feature 打开，以下场景也会强制关闭：
+Even with the feature on, these scenarios force it off:
 
-| 场景 | 原因 |
-|------|------|
-| coordinator mode | coordinator 已有自己的委派模型 |
-| non-interactive session | pipe / SDK 场景下避免不可见的 fork 嵌套 |
+| Scenario | Reason |
+|----------|--------|
+| coordinator mode | The coordinator already has its own delegation model |
+| non-interactive session | Avoids invisible fork nesting in pipe / SDK scenarios |
 
-### 路径
+### Path
 
 ```text
-主模型
-  -> Agent({ prompt })，没有 subagent_type
+main model
+  -> Agent({ prompt }), no subagent_type
   -> AgentTool.call()
   -> isForkSubagentEnabled()
   -> selectedAgent = FORK_AGENT
   -> buildForkedMessages(...)
   -> runAgent(... useExactTools: true, forkContextMessages: parent messages)
-  -> 注册 task / transcript / notification
+  -> register task / transcript / notification
 ```
 
-fork 的目标是让多个 worker 共享父请求的 prompt cache 前缀。它会：
+The goal of fork is to let multiple workers share the parent request's prompt-cache prefix. It does the following:
 
-| 维度 | fork 行为 |
-|------|-----------|
-| system prompt | 使用父级已经渲染好的 system prompt |
-| 对话历史 | 传入父级完整 `toolUseContext.messages` |
-| tools | 使用父级 exact tools，不重新过滤 |
-| thinking config | 继承父级配置，避免 cache key 变化 |
-| placeholder tool_result | 多个 fork 使用相同占位文本，只有最后 directive 不同 |
-| 权限 | `permissionMode: 'bubble'` |
+| Dimension | Fork behavior |
+|-----------|---------------|
+| system prompt | Uses the parent's already-rendered system prompt |
+| Conversation history | Passes in the parent's full `toolUseContext.messages` |
+| tools | Uses the parent's exact tools, with no re-filtering |
+| thinking config | Inherits the parent's config so the cache key does not change |
+| placeholder tool_result | Multiple forks use identical placeholder text; only the final directive differs |
+| Permissions | `permissionMode: 'bubble'` |
 
-这就是为什么 fork path 和普通 agent path 在 tool pool、prompt 构造、模型继承上都不同。
+This is why the fork path differs from the normal agent path in tool pool, prompt construction, and model inheritance.
 
-### 递归保护
+### Recursion guard
 
-fork worker 保留 `Agent` 工具是为了让工具定义字节和父级一致，但代码会拒绝 fork 内再次 fork：
+A fork worker keeps the `Agent` tool so its tool definition bytes match the parent's, but the code rejects forking again inside a fork:
 
-| 保护 | 说明 |
-|------|------|
-| `querySource === 'agent:builtin:fork'` | 直接识别当前已经在 fork worker 内 |
-| `<fork-boilerplate>` 扫描 | 兜底识别 fork 指令已经存在于上下文 |
+| Guard | Notes |
+|-------|-------|
+| `querySource === 'agent:builtin:fork'` | Directly detects that we are already inside a fork worker |
+| `<fork-boilerplate>` scan | A fallback that detects a fork directive already present in the context |
 
-fork worker 应该直接完成任务，而不是继续委派。
+A fork worker should complete its task directly rather than delegate further.
 
 ## Slash command fork
 
-slash command fork 是 skill / command 的执行模式。它由 skill frontmatter 控制：
+Slash command fork is an execution mode for skills / commands. It is controlled by skill frontmatter:
 
 ```md
 ---
@@ -525,10 +525,10 @@ allowed-tools:
 ---
 ```
 
-加载 skill 时，`frontmatter.context === 'fork'` 会被解析成 command 的 `context: 'fork'`。执行 slash command 时：
+When a skill is loaded, `frontmatter.context === 'fork'` is parsed into the command's `context: 'fork'`. When the slash command runs:
 
 ```text
-用户输入 /code-review
+user types /code-review
   -> processSlashCommand(...)
   -> command.context === 'fork'
   -> executeForkedSlashCommand(...)
@@ -536,162 +536,162 @@ allowed-tools:
   -> runAgent(...)
 ```
 
-普通交互模式下，`executeForkedSlashCommand()` 会同步跑完子 Agent，显示 progress UI，然后把结果作为本地命令输出返回给主对话。
+In normal interactive mode, `executeForkedSlashCommand()` runs the sub-agent to completion synchronously, shows a progress UI, and then returns the result to the main conversation as local command output.
 
-assistant / kairos 模式下，它会 fire-and-forget：后台 runner 完成后，把结果包装成隐藏 prompt 重新放入 command queue。这样多个 scheduled task 不会在启动时串行阻塞用户输入。
+In assistant / kairos mode it is fire-and-forget: when the background runner finishes, it wraps the result as a hidden prompt and puts it back into the command queue. This keeps multiple scheduled tasks from blocking user input serially at startup.
 
 ## `runForkedAgent()`
 
-`runForkedAgent()` 是内部服务用的执行器，不暴露给模型，也不产生 `Agent` tool_result。
+`runForkedAgent()` is the executor for internal services. It is not exposed to the model and produces no `Agent` tool_result.
 
-它的输入是 `cacheSafeParams`、`promptMessages`、`canUseTool` 等运行时对象，直接跑 query loop：
+Its inputs are runtime objects such as `cacheSafeParams`, `promptMessages`, and `canUseTool`, and it runs the query loop directly:
 
 ```text
-内部服务
+internal service
   -> runForkedAgent({ promptMessages, cacheSafeParams, ... })
   -> createSubagentContext(...)
   -> query(...)
-  -> 返回 ForkedAgentResult
+  -> return ForkedAgentResult
 ```
 
-常见调用方：
+Common callers:
 
-| 调用方 | 用途 |
-|--------|------|
-| compact | 对话压缩 |
-| extractMemories / sessionMemory | 记忆抽取和维护 |
-| promptSuggestion / speculation | 提示建议和预测 |
-| sideQuestion | 不打扰主上下文的临时问答 |
-| agentSummary | 后台 agent 摘要 |
-| autoDream | 后台记忆整合 |
+| Caller | Purpose |
+|--------|---------|
+| compact | Conversation compaction |
+| extractMemories / sessionMemory | Memory extraction and maintenance |
+| promptSuggestion / speculation | Prompt suggestions and prediction |
+| sideQuestion | Ad-hoc Q&A that does not disturb the main context |
+| agentSummary | Background agent summaries |
+| autoDream | Background memory consolidation |
 
-它和 AgentTool fork 的共同点是"分叉执行"，但边界完全不同：
+What it shares with AgentTool fork is "forked execution", but the boundaries are entirely different:
 
-| 维度 | AgentTool fork | `runForkedAgent()` |
-|------|----------------|--------------------|
-| 调用者 | 模型通过 `Agent` 工具调用 | 运行时服务直接调用 |
-| 协议层 | 经过 Tool schema / tool_use / tool_result | 不经过 Tool 协议 |
-| 可见性 | 主模型会先看到 `async_launched`，完成后看到通知 | 结果由内部调用方处理 |
-| 主要目标 | 并行 worker + prompt cache 共享 | 内部辅助任务复用 query loop |
+| Dimension | AgentTool fork | `runForkedAgent()` |
+|-----------|----------------|--------------------|
+| Caller | The model, through the `Agent` tool | Runtime services, directly |
+| Protocol layer | Goes through Tool schema / tool_use / tool_result | Does not use the Tool protocol |
+| Visibility | The main model first sees `async_launched`, then a notification on completion | The internal caller handles the result |
+| Main goal | Parallel workers + prompt cache sharing | Internal helper tasks reusing the query loop |
 
-## Worktree 隔离
+## Worktree isolation
 
-`Agent` 工具支持 `isolation: "worktree"`。启用后，子 Agent 在临时 git worktree 中运行，适合实现型或实验型任务。
+The `Agent` tool supports `isolation: "worktree"`. When enabled, the sub-agent runs in a temporary git worktree, which suits implementation or experimental tasks.
 
-生命周期：
+Lifecycle:
 
-| 阶段 | 行为 |
-|------|------|
-| 创建 | 使用 agent id 派生 slug，创建独立 worktree |
-| CWD 覆盖 | `runWithCwdOverride(worktreePath, fn)` 让工具在 worktree 内执行 |
-| fork + worktree | 额外注入路径翻译提示，提醒 worker 重新读取文件 |
-| 清理 | 无变更则移除 worktree；有变更则保留并把路径返回给主模型 |
+| Phase | Behavior |
+|-------|----------|
+| Creation | Derives a slug from the agent id and creates an independent worktree |
+| CWD override | `runWithCwdOverride(worktreePath, fn)` makes tools execute inside the worktree |
+| fork + worktree | Injects an extra path-translation hint to remind the worker to re-read files |
+| Cleanup | If there are no changes the worktree is removed; if there are changes it is kept and its path is returned to the main model |
 
-如果 worktree 是 hook-based，代码会保留它，因为无法可靠判断 VCS 变更。
+If the worktree is hook-based, the code keeps it, because VCS changes cannot be reliably determined.
 
-## 结果格式
+## Result format
 
-`AgentTool.mapToolResultToToolResultBlockParam()` 根据状态返回不同 tool result：
+`AgentTool.mapToolResultToToolResultBlockParam()` returns a different tool result depending on status:
 
-| 状态 | 结果 |
-|------|------|
-| `completed` | 子 Agent 输出内容，可附带 `agentId`、worktree 信息和 usage |
-| `async_launched` | 后台 agent id、output file 路径、等待完成通知的说明 |
-| `teammate_spawned` | teammate id、name、team name |
-| `remote_launched` | remote task id、session URL、output file |
+| Status | Result |
+|--------|--------|
+| `completed` | The sub-agent's output, optionally with `agentId`, worktree info, and usage |
+| `async_launched` | The background agent id, the output file path, and a note to wait for the completion notification |
+| `teammate_spawned` | teammate id, name, team name |
+| `remote_launched` | remote task id, session URL, output file |
 
-同步子 Agent 的 `completed` 结果直接成为当前 `Agent` tool call 的 `tool_result`。异步子 Agent 的首次 tool result 是 `async_launched`，最终输出通过 `<task-notification>` 回到模型。
+A synchronous sub-agent's `completed` result becomes the `tool_result` of the current `Agent` tool call directly. An async sub-agent's first tool result is `async_launched`, and the final output returns to the model through `<task-notification>`.
 
-### 输出字段
+### Output fields
 
-| 状态 | 关键字段 | 说明 |
-|------|----------|------|
-| `completed` | `content`、`agentId`、`totalTokens`、`totalToolUseCount`、`totalDurationMs` | 同步子 Agent 的最终结果；普通 agent 会附带可继续通信的 `agentId` |
-| `async_launched` | `agentId`、`description`、`prompt`、`outputFile`、`canReadOutputFile` | 后台 agent 已启动；最终结果稍后通过通知到达 |
-| `teammate_spawned` | `teammate_id`、`name`、`team_name` | teammate 已启动，后续通过 mailbox / SendMessage 协作 |
-| `remote_launched` | `taskId`、`sessionUrl`、`outputFile`、`description` | remote CCR agent 已启动，完成后走 remote task 通知 |
+| Status | Key fields | Notes |
+|--------|------------|-------|
+| `completed` | `content`, `agentId`, `totalTokens`, `totalToolUseCount`, `totalDurationMs` | The sync sub-agent's final result; a normal agent includes an `agentId` for continued communication |
+| `async_launched` | `agentId`, `description`, `prompt`, `outputFile`, `canReadOutputFile` | The background agent has started; the final result arrives later through a notification |
+| `teammate_spawned` | `teammate_id`, `name`, `team_name` | The teammate has started; later collaboration goes through the mailbox / SendMessage |
+| `remote_launched` | `taskId`, `sessionUrl`, `outputFile`, `description` | The remote CCR agent has started; completion goes through a remote task notification |
 
-一次性内置 agent 可以省略 `agentId` / `SendMessage` hint 和 usage trailer，避免把不会继续通信的信息塞进上下文。
+One-shot built-in agents can omit the `agentId` / `SendMessage` hint and the usage trailer, to avoid stuffing the context with information about communication that will never continue.
 
-### outputSchema 与 tool_result
+### outputSchema and tool_result
 
-`AgentTool` 的 `outputSchema` 描述的是 `call()` 返回的结构化 data；`mapToolResultToToolResultBlockParam()` 再把这些 data 映射成模型实际看到的 `tool_result` 文本块。读代码时可以按这个顺序看：
+`AgentTool`'s `outputSchema` describes the structured data returned by `call()`; `mapToolResultToToolResultBlockParam()` then maps that data into the `tool_result` text block the model actually sees. When reading the code, follow this order:
 
 ```text
 AgentTool.call()
   -> return { data: { status, ...fields } }
   -> mapToolResultToToolResultBlockParam(data, toolUseID)
   -> ToolResultBlockParam
-  -> query.ts 把 tool_result 放进下一轮消息
+  -> query.ts puts the tool_result into the next turn's messages
 ```
 
-四类结果的字段重点：
+Focus fields of the four result kinds:
 
-| status | data 字段 | 模型可见信息 |
-|--------|-----------|--------------|
-| `completed` | `content`、`agentId`、usage、可选 worktree result | 子 Agent 最终输出；如果可继续通信，会提示可用 `SendMessage` |
-| `async_launched` | `agentId`、`description`、`prompt`、`outputFile`、`canReadOutputFile` | 后台已启动；提示等待通知或读取 output file |
-| `teammate_spawned` | `teammate_id`、`name`、`team_name` | teammate 已加入 team；后续通过 mailbox / `SendMessage` 协作 |
-| `remote_launched` | `taskId`、`sessionUrl`、`outputFile`、`description` | remote task 已启动；本地模型等待 remote task notification |
+| status | data fields | What the model sees |
+|--------|-------------|---------------------|
+| `completed` | `content`, `agentId`, usage, optional worktree result | The sub-agent's final output; if it can continue communicating, a hint that `SendMessage` is available |
+| `async_launched` | `agentId`, `description`, `prompt`, `outputFile`, `canReadOutputFile` | Started in the background; a hint to wait for a notification or read the output file |
+| `teammate_spawned` | `teammate_id`, `name`, `team_name` | The teammate joined the team; later collaboration goes through the mailbox / `SendMessage` |
+| `remote_launched` | `taskId`, `sessionUrl`, `outputFile`, `description` | The remote task has started; the local model waits for a remote task notification |
 
-这里的 `status` 是结果分发的主轴。后面 catch / finally 中的 failed、killed、cleanup 逻辑不会改写已经返回的同步 `tool_result`；后台路径会通过 task state 和 notification 把终态再交给主模型。
+Here `status` is the main axis of result dispatch. The failed, killed, and cleanup logic in the later catch / finally does not rewrite a sync `tool_result` that has already been returned; the background paths hand the terminal state back to the main model through task state and notifications.
 
-## 生命周期状态机
+## Lifecycle state machine
 
-把本地子 Agent 当成 task 看，核心状态可以这样理解：
+Viewing a local sub-agent as a task, the core states can be understood like this:
 
 ```text
 AgentTool.call()
   -> resolve route
   -> create optional worktree
-  -> register foreground 或 register async task
+  -> register foreground or register async task
   -> runAgent()
   -> completed / failed / killed
-  -> tool_result 或 task-notification
+  -> tool_result or task-notification
   -> cleanup agent-scoped state
 ```
 
-同步和异步的差别不在于是否调用 `runAgent()`，而在于谁等待 `runAgent()`：
+The difference between sync and async is not whether `runAgent()` is called, but who waits for `runAgent()`:
 
-| 路径 | 谁等待 | 主模型什么时候继续 |
-|------|--------|--------------------|
-| 同步子 Agent | `AgentTool.call()` 自己 `for await` 子 Agent 消息流 | 子 Agent 完成并返回 `tool_result` 后 |
-| 自动后台化 | 前台先等；超时后前台 iterator 退出，后台 lifecycle 接管 | `AgentTool.call()` 返回 `async_launched` 后 |
-| 异步子 Agent | `runAsyncAgentLifecycle()` 在后台等 | 主模型收到 `async_launched` 后立即继续 |
-| slash command fork 普通交互 | `executeForkedSlashCommand()` 等 | slash command 完成后 |
-| slash command fork assistant / kairos | fire-and-forget 后台 runner 等 | 启动后主输入流程继续，完成后隐藏 prompt 回注 |
-| `runForkedAgent()` | 内部调用方自己等 | 不进入主模型 tool_result 协议 |
+| Path | Who waits | When the main model continues |
+|------|-----------|-------------------------------|
+| Sync sub-agent | `AgentTool.call()` itself, via `for await` over the sub-agent message stream | After the sub-agent finishes and returns a `tool_result` |
+| Auto-backgrounding | The foreground waits first; on timeout the foreground iterator exits and the background lifecycle takes over | After `AgentTool.call()` returns `async_launched` |
+| Async sub-agent | `runAsyncAgentLifecycle()` waits in the background | Immediately after the main model receives `async_launched` |
+| Slash command fork, normal interactive | `executeForkedSlashCommand()` waits | After the slash command completes |
+| Slash command fork, assistant / kairos | A fire-and-forget background runner waits | The main input flow continues after launch; a hidden prompt is re-injected on completion |
+| `runForkedAgent()` | The internal caller waits | Never enters the main model's tool_result protocol |
 
-所以“同步子 Agent 怎么等完成”最短答案是：外层工具执行器 `await tool.call()`，而 `AgentTool.call()` 内部持续消费 `runAgent()` 的 async iterator，直到 iterator `done` 或异常。
+So the shortest answer to "how does a sync sub-agent wait for completion" is: the outer tool executor does `await tool.call()`, and inside `AgentTool.call()` keeps consuming the `runAgent()` async iterator until the iterator is `done` or throws.
 
-## 等待与回注方式对照
+## Comparing wait and re-injection mechanisms
 
-子 Agent 结果回到主模型有三种主要机制：
+A sub-agent result returns to the main model through three main mechanisms:
 
-| 机制 | 适用路径 | 回注载体 | 是否阻塞当前 turn |
-|------|----------|----------|-------------------|
-| `tool_result` | 同步命名子 Agent | 当前 `Agent` tool_use 对应的 tool result | 是 |
-| `<task-notification>` | 异步 / 后台本地 Agent、remote task、后台 shell 等 | 统一 command queue 中的 task notification | 否 |
-| hidden prompt / command queue prompt | assistant / kairos 的 slash command fork、scheduled task 等 | queue 中的 prompt 类消息 | 否 |
+| Mechanism | Applicable path | Carrier | Blocks the current turn? |
+|-----------|-----------------|---------|--------------------------|
+| `tool_result` | Sync named sub-agent | The tool result for the current `Agent` tool_use | Yes |
+| `<task-notification>` | Async / background local agents, remote tasks, background shells, etc. | A task notification in the unified command queue | No |
+| hidden prompt / command queue prompt | Assistant / kairos slash command fork, scheduled tasks, etc. | A prompt-type message in the queue | No |
 
-这里容易混淆的是：后台子 Agent 完成后不会“补写”原来的 `tool_result`。原来的 `Agent` tool call 已经返回了 `async_launched`；最终结果是新的一条队列消息，下一轮模型看到后再决定怎么整合。
+The easy confusion here: when a background sub-agent finishes, it does not "backfill" the original `tool_result`. The original `Agent` tool call already returned `async_launched`; the final result is a new queue message, and the model sees it in the next turn and decides how to integrate it.
 
-## Progress、UI 与 Transcript
+## Progress, UI, and transcript
 
-子 Agent 有三条并行的“可观察输出”：给用户看的 progress、给模型看的最终结果、给系统恢复用的 transcript。
+A sub-agent has three parallel "observable outputs": progress for the user, the final result for the model, and the transcript for system recovery.
 
-| 输出 | 同步路径 | 异步路径 | 用途 |
-|------|----------|----------|------|
-| progress UI | `AgentTool.call()` 消费子 Agent 消息时实时转发给 UI / SDK | `runAsyncAgentLifecycle()` 更新 task progress state | 让用户看到子 Agent 正在做什么 |
-| output file | 同步路径也会写入 side output，方便调试和恢复 | 后台 task 的主要可读输出，`async_launched` 会返回路径 | 主模型可用 `Read(outputFile)` 查看 |
-| sidechain transcript | `runAgent()` 记录独立消息链 | 同样记录，且用于后台恢复 | `SendMessage`、resume、debug、summary 都依赖它 |
-| task state | foreground task 注册表记录同步运行状态 | LocalAgentTask 记录 running / completed / failed / killed | UI、`TaskOutput`、通知防重都看这里 |
+| Output | Sync path | Async path | Purpose |
+|--------|-----------|------------|---------|
+| progress UI | `AgentTool.call()` forwards sub-agent messages to the UI / SDK in real time as it consumes them | `runAsyncAgentLifecycle()` updates the task progress state | Lets the user see what the sub-agent is doing |
+| output file | The sync path also writes a side output for debugging and recovery | The main readable output of a background task; `async_launched` returns its path | The main model can view it with `Read(outputFile)` |
+| sidechain transcript | `runAgent()` records an independent message chain | Recorded the same way, and used for background recovery | `SendMessage`, resume, debug, and summary all depend on it |
+| task state | The foreground task registry records sync run state | LocalAgentTask records running / completed / failed / killed | The UI, `TaskOutput`, and notification de-dup all look here |
 
-同步 progress 是“边跑边展示，最后一次性返回 tool_result”。异步 progress 是“边跑边写 task state，最后入队 task notification”。sidechain transcript 不等同于用户可见输出；它是系统用来重建 agent 上下文的消息日志。
+Sync progress is "display as it runs, return the tool_result all at once at the end". Async progress is "write task state as it runs, enqueue a task notification at the end". The sidechain transcript is not the same as user-visible output; it is the message log the system uses to rebuild the agent's context.
 
-## 典型调用示例
+## Typical call examples
 
-### 同步命名子 Agent
+### Synchronous named sub-agent
 
 ```json
 {
@@ -701,9 +701,9 @@ AgentTool.call()
 }
 ```
 
-适合短任务或必须立即拿结果才能继续的任务。主模型会等到子 Agent 输出 `completed`。
+Suited to short tasks, or tasks whose result is needed before continuing. The main model waits until the sub-agent outputs `completed`.
 
-### 后台命名子 Agent
+### Background named sub-agent
 
 ```json
 {
@@ -714,9 +714,9 @@ AgentTool.call()
 }
 ```
 
-适合长任务。主模型先收到 `async_launched`，其中会包含 `agentId` 和 `outputFile`。之后可以等待 `<task-notification>`，也可以用 `Read(outputFile)` 主动查看已有结果。
+Suited to long tasks. The main model first receives `async_launched`, which includes the `agentId` and `outputFile`. It can then wait for a `<task-notification>`, or proactively check existing results with `Read(outputFile)`.
 
-### 可继续通信的后台 Agent
+### Background agent that can keep communicating
 
 ```json
 {
@@ -728,7 +728,7 @@ AgentTool.call()
 }
 ```
 
-后续可以用：
+You can follow up with:
 
 ```json
 {
@@ -738,9 +738,9 @@ AgentTool.call()
 }
 ```
 
-如果时间隔得很久，优先使用 `async_launched` 或 `completed` 里返回的 raw `agentId`，因为 `name` registry 是运行时状态，而 sidechain transcript 更可能通过 `agentId` 被恢复。
+If a long time passes, prefer the raw `agentId` returned in `async_launched` or `completed`, because the `name` registry is runtime state while the sidechain transcript is more likely to be recoverable through the `agentId`.
 
-### Worktree 隔离实现
+### Worktree isolation in practice
 
 ```json
 {
@@ -751,7 +751,7 @@ AgentTool.call()
 }
 ```
 
-适合让子 Agent 动手改代码但不污染主工作区。主模型拿到结果后，需要根据 worktree path 决定是否合并、复查或丢弃。
+Suited to letting a sub-agent change code without polluting the main workspace. After getting the result, the main model must use the worktree path to decide whether to merge, review, or discard.
 
 ### AgentTool fork
 
@@ -762,7 +762,7 @@ AgentTool.call()
 }
 ```
 
-只有 fork gate 开启且省略 `subagent_type` 时才是 fork。fork worker 继承父上下文和 exact tools，目标是并行分析和 prompt cache 复用，不适合写成长期稳定的专业角色。
+It is a fork only when the fork gate is on and `subagent_type` is omitted. A fork worker inherits the parent context and exact tools; the goal is parallel analysis and prompt-cache reuse, and it is not suited to being written up as a long-lived, stable specialist role.
 
 ### Slash command fork
 
@@ -779,80 +779,80 @@ allowed-tools:
 Audit the authentication flow and return only correctness risks.
 ```
 
-结果流：
+Result flow:
 
 ```text
-用户输入 /audit-auth
+user types /audit-auth
   -> processSlashCommand()
   -> executeForkedSlashCommand()
   -> runAgent()
-  -> 普通交互：命令输出直接回到对话
-  -> assistant / kairos：完成后 hidden prompt 入队，下一轮模型消费
+  -> normal interactive: command output returns directly to the conversation
+  -> assistant / kairos: a hidden prompt is enqueued on completion, consumed by the model next turn
 ```
 
-## 排障清单
+## Troubleshooting checklist
 
-| 现象 | 优先检查 |
-|------|----------|
-| 模型看不到后台结果 | task 是否已经 enqueue notification；队列是否在当前模式 drain；`task.notified` 是否已被 `TaskOutput(block=true)` 提前标记 |
-| `SendMessage` 找不到目标 | `name` 是否还在 registry；是否可以改用 raw `agentId`；sidechain transcript 是否仍存在 |
-| 子 Agent 没有某个工具 | agent definition 的 `tools` 是否过滤掉了；MCP server 是否连接；fork path 是否用了 exact tools |
-| 子 Agent 权限和预期不同 | 普通 agent 看 `permissionMode`；teammate 的 `mode` 不是普通子 Agent 权限覆盖；fork 看 `bubble` |
-| fork 没触发 | `FORK_SUBAGENT` feature 是否打开；是否在 coordinator 或 non-interactive；是否传了 `subagent_type` |
-| slash command 没有 fork | skill frontmatter 是否写 `context: fork`；加载后 command.context 是否为 `fork` |
-| worktree 没清理 | 是否有未提交变更；是否 hook-based worktree；cleanup 是否被后台 task 保留到通知后处理 |
-| `TaskOutput(block=true)` 一直等 | task 是否真的进入 terminal status；如果是 async path，确认状态更新是否发生在 classifier / cleanup 之前 |
+| Symptom | Check first |
+|---------|-------------|
+| The model cannot see a background result | Whether the task has enqueued its notification; whether the queue is drained in the current mode; whether `task.notified` was already set early by `TaskOutput(block=true)` |
+| `SendMessage` cannot find the target | Whether the `name` is still in the registry; whether you can switch to the raw `agentId`; whether the sidechain transcript still exists |
+| The sub-agent lacks a tool | Whether the agent definition's `tools` filtered it out; whether the MCP server is connected; whether the fork path used exact tools |
+| Sub-agent permissions differ from expectations | For a normal agent, look at `permissionMode`; a teammate's `mode` is not an ordinary sub-agent permission override; for fork, look at `bubble` |
+| Fork did not trigger | Whether the `FORK_SUBAGENT` feature is on; whether you are in coordinator or non-interactive mode; whether `subagent_type` was passed |
+| Slash command did not fork | Whether the skill frontmatter has `context: fork`; whether command.context is `fork` after loading |
+| Worktree not cleaned up | Whether there are uncommitted changes; whether it is a hook-based worktree; whether cleanup was deferred until after the notification by a background task |
+| `TaskOutput(block=true)` waits forever | Whether the task actually reached a terminal status; on the async path, confirm the state update happens before the classifier / cleanup |
 
-## 选择哪条路径
+## Choosing a path
 
-| 需求 | 推荐路径 |
-|------|----------|
-| 需要专业角色、有限上下文、明确工具集 | 命名子 Agent |
-| 需要长任务但不阻塞主模型 | 异步子 Agent |
-| 需要多个 worker 共享完整父上下文并最大化 prompt cache | AgentTool fork |
-| 需要把一个 slash command / skill 隔离执行 | slash command fork |
-| 运行时内部需要一段轻量分叉推理 | `runForkedAgent()` |
-| 需要隔离文件改动 | `isolation: "worktree"` |
+| Need | Recommended path |
+|------|------------------|
+| A specialist role, limited context, an explicit tool set | Named sub-agent |
+| A long task that must not block the main model | Async sub-agent |
+| Multiple workers sharing the full parent context and maximizing the prompt cache | AgentTool fork |
+| Run a slash command / skill in isolation | Slash command fork |
+| The runtime needs a lightweight forked reasoning branch internally | `runForkedAgent()` |
+| Isolate file changes | `isolation: "worktree"` |
 
-## 常见误区
+## Common misconceptions
 
-| 误区 | 正确理解 |
-|------|----------|
-| `mode` 可以覆盖普通子 Agent 权限 | `mode` 只影响 teammate spawn 的 plan 模式；普通子 Agent 权限来自 agent definition 的 `permissionMode` |
-| `SendMessage` 只能发给 running agent | running 时排队，stopped / evicted 时会尝试从 transcript 后台恢复 |
-| 后台 agent 完成会直接改当前 tool_result | 后台完成走 `<task-notification>` 队列，下一轮模型才会看到 |
-| fork 默认开启 | fork 默认关闭，需要 `FORK_SUBAGENT` feature，且 coordinator / non-interactive 会禁用 |
-| fork 是内部 `runForkedAgent()` | AgentTool fork 经过 Tool 协议；`runForkedAgent()` 是内部运行时 API |
-| `cwd` 和 `isolation: "worktree"` 可以随便一起用 | schema 文案要求互斥；实现上 `cwd` 会优先覆盖运行目录，调用方应避免混用 |
-| 读后台输出应该优先 `TaskOutput` | 当前提示建议优先 `Read(output_file)`；`TaskOutput` 保留兼容和阻塞等待能力 |
+| Misconception | Correct understanding |
+|---------------|-----------------------|
+| `mode` can override a normal sub-agent's permissions | `mode` only affects plan mode for a teammate spawn; a normal sub-agent's permissions come from the agent definition's `permissionMode` |
+| `SendMessage` only works on a running agent | When running it queues; when stopped / evicted it tries to resume from the transcript in the background |
+| A finished background agent edits the current tool_result directly | Background completion goes through the `<task-notification>` queue, and the model only sees it next turn |
+| Fork is on by default | Fork is off by default; it needs the `FORK_SUBAGENT` feature, and coordinator / non-interactive modes disable it |
+| Fork is the internal `runForkedAgent()` | AgentTool fork goes through the Tool protocol; `runForkedAgent()` is an internal runtime API |
+| `cwd` and `isolation: "worktree"` can be freely combined | The schema text requires them to be mutually exclusive; in the implementation `cwd` takes precedence as the run directory, so callers should avoid mixing them |
+| Reading background output should prefer `TaskOutput` | The current prompt recommends `Read(output_file)` first; `TaskOutput` stays for compatibility and blocking waits |
 
-## 源码阅读路径
+## Source reading path
 
-如果要从源码验证一条行为，建议按问题类型走不同入口：
+To verify a behavior against the source, start from a different entry depending on the question:
 
-| 问题 | 阅读顺序 |
-|------|----------|
-| `Agent(...)` 参数为什么这样生效 | `AgentTool.tsx` 的 schema -> `AgentTool.call()` 参数解构 -> 路由规则 |
-| 普通子 Agent 为什么同步等待 | `toolExecution.ts` 的 `await tool.call()` -> `AgentTool.call()` 同步分支 -> `runAgent()` |
-| 后台完成为什么会通知主模型 | `registerAsyncAgent()` -> `runAsyncAgentLifecycle()` -> `enqueueAgentNotification()` -> queue processor |
-| `SendMessage` 为什么能恢复旧 agent | `SendMessageTool.ts` 地址解析 -> `queuePendingMessage()` / `resumeAgentBackground()` -> sidechain transcript |
-| fork 为什么不是普通 agent | `isForkSubagentEnabled()` -> `FORK_AGENT` -> `buildForkedMessages()` -> `useExactTools` |
-| slash command fork 为什么不走 Tool 协议 | skill load frontmatter -> `processSlashCommand()` -> `executeForkedSlashCommand()` |
-| 内部 fork 为什么没有 tool result | `runForkedAgent()` -> `query()` -> 调用方消费 `ForkedAgentResult` |
+| Question | Reading order |
+|----------|---------------|
+| Why a given `Agent(...)` parameter takes effect the way it does | The schema in `AgentTool.tsx` -> the parameter destructuring in `AgentTool.call()` -> routing rules |
+| Why a normal sub-agent waits synchronously | `await tool.call()` in `toolExecution.ts` -> the sync branch of `AgentTool.call()` -> `runAgent()` |
+| Why background completion notifies the main model | `registerAsyncAgent()` -> `runAsyncAgentLifecycle()` -> `enqueueAgentNotification()` -> queue processor |
+| Why `SendMessage` can resume an old agent | Address resolution in `SendMessageTool.ts` -> `queuePendingMessage()` / `resumeAgentBackground()` -> sidechain transcript |
+| Why fork is not a normal agent | `isForkSubagentEnabled()` -> `FORK_AGENT` -> `buildForkedMessages()` -> `useExactTools` |
+| Why slash command fork skips the Tool protocol | skill load frontmatter -> `processSlashCommand()` -> `executeForkedSlashCommand()` |
+| Why an internal fork has no tool result | `runForkedAgent()` -> `query()` -> the caller consumes `ForkedAgentResult` |
 
-## 维护提示
+## Maintenance notes
 
-更新子 Agent 行为时，优先同时检查这些位置：
+When changing sub-agent behavior, check these locations together:
 
-| 文件 | 为什么重要 |
-|------|------------|
-| `src/tools/AgentTool/AgentTool.tsx` | 路由、权限、同步/异步、结果映射都在这里汇合 |
-| `src/tools/AgentTool/forkSubagent.ts` | AgentTool fork 的 gate、FORK_AGENT、消息构造 |
-| `src/tools/AgentTool/runAgent.ts` | 子 Agent 真正的运行循环 |
-| `src/tasks/LocalAgentTask/LocalAgentTask.tsx` | 后台 Agent 状态和通知 |
-| `src/utils/messageQueueManager.ts` | 统一 command queue |
-| `src/utils/queueProcessor.ts` | REPL 队列消费规则 |
-| `src/cli/print.ts` | headless / SDK 队列消费和后台等待 |
-| `src/utils/processUserInput/processSlashCommand.tsx` | slash command fork |
-| `src/utils/forkedAgent.ts` | 内部 `runForkedAgent()` |
-| `src/skills/loadSkillsDir.ts` | skill frontmatter 中 `context: fork` 的解析 |
+| File | Why it matters |
+|------|----------------|
+| `src/tools/AgentTool/AgentTool.tsx` | Routing, permissions, sync/async, and result mapping all converge here |
+| `src/tools/AgentTool/forkSubagent.ts` | The AgentTool fork gate, FORK_AGENT, and message construction |
+| `src/tools/AgentTool/runAgent.ts` | The sub-agent's actual run loop |
+| `src/tasks/LocalAgentTask/LocalAgentTask.tsx` | Background agent state and notifications |
+| `src/utils/messageQueueManager.ts` | The unified command queue |
+| `src/utils/queueProcessor.ts` | REPL queue consumption rules |
+| `src/cli/print.ts` | Headless / SDK queue consumption and background waiting |
+| `src/utils/processUserInput/processSlashCommand.tsx` | Slash command fork |
+| `src/utils/forkedAgent.ts` | Internal `runForkedAgent()` |
+| `src/skills/loadSkillsDir.ts` | Parsing of `context: fork` in skill frontmatter |

@@ -14,7 +14,7 @@ cat > $C/settings.json <<'EOF'
   "deny":["Read(./**/node_modules/**)","Read(./**/dist/**)","Read(./**/*.lock)",
   "Read(./**/package-lock.json)","Read(./**/coverage/**)"]},
  "hooks":{
-  "SessionStart":[{"hooks":[{"type":"command","command":"bash ~/.claude/hooks/issues.sh"}]}],
+  "SessionStart":[{"matcher":"startup","hooks":[{"type":"command","command":"bash ~/.claude/hooks/issues.sh"}]}],
   "PreToolUse":[{"matcher":"Bash","hooks":[{"type":"command","command":"bash ~/.claude/hooks/guard.sh"}]}],
   "PostToolUse":[{"matcher":"Edit|Write|MultiEdit","hooks":[{"type":"command","command":"bash ~/.claude/hooks/format.sh"}]}]}}
 EOF
@@ -33,8 +33,10 @@ cat > $H/issues.sh <<'EOF'
 #!/bin/bash
 r=$(git remote get-url origin 2>/dev/null | sed -E 's#\.git$##; s#.*[/:]([^/:]+/[^/]+)$#\1#')
 [ -n "$r" ] || exit 0
-out=$(timeout 15 gh api -X GET search/issues -f q="repo:$r is:issue is:open" --jq '.items[:10][]|"#\(.number) \(.title)"' 2>/dev/null)
-[ -n "$out" ] && printf 'Open issues in %s (cross-session task list):\n%s\n' "$r" "$out"
+q="repo:$r is:issue is:open assignee:@me"
+out=$(timeout 10 gh api -X GET search/issues -f q="$q" -f sort=updated -f per_page=5 \
+  --jq '"\(.total_count) open issues assigned to you; latest:", (.items[]|"#\(.number) \(.title)")' 2>/dev/null)
+[[ "$out" == 0\ * || -z "$out" ]] || printf 'Task list (%s):\n%s\n' "$r" "$out"
 exit 0
 EOF
 cat > $H/format.sh <<'EOF'

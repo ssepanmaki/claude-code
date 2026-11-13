@@ -2,13 +2,13 @@
 
 - **Flow id**: `recurring-bug-skill-overflow` (sibling pilot to `recurring-bug-loop-oom`)
 - **Branch**: `fix/loop-scheduled-autonomy-oom` (folded into the OOM PR — same audit-and-cap pattern)
-- **Trigger**: post-merge review of the autonomy OOM fix surfaced unbounded module-level state in adjacent `EXPERIMENTAL_SKILL_SEARCH` and `SKILL_LEARNING` subsystems. The user explicitly asked for a `肯定也有同类溢出` audit.
+- **Trigger**: post-merge review of the autonomy OOM fix surfaced unbounded module-level state in adjacent `EXPERIMENTAL_SKILL_SEARCH` and `SKILL_LEARNING` subsystems. The user explicitly asked for a "surely there are similar overflows elsewhere" audit.
 
 ---
 
 ## 1. Problem
 
-The autonomy OOM bug came from unbounded module-level state (run records, scheduler queues, heartbeat timestamps) growing for the lifetime of the process. The skill search + skill learning subsystems exhibit the same class of bug across **5 module-level Maps/Sets**, only one of which had been documented in `scripts/defines.ts` ("projectContext cache 无淘汰机制（非 GB 级主因）").
+The autonomy OOM bug came from unbounded module-level state (run records, scheduler queues, heartbeat timestamps) growing for the lifetime of the process. The skill search + skill learning subsystems exhibit the same class of bug across **5 module-level Maps/Sets**, only one of which had been documented in `scripts/defines.ts` ("projectContext cache has no eviction mechanism (not the main GB-scale cause)").
 
 These bugs were latent because:
 

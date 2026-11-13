@@ -1,67 +1,67 @@
 ---
-title: "MCP 配置 - 多来源合并、作用域与策略管控"
-description: "详细说明 Claude Code MCP 配置的来源层次、合并优先级、传输类型、企业策略管控、插件集成和保留名称机制。"
-keywords: ["MCP", "配置", "settings.json", ".mcp.json", "企业策略", "插件"]
+title: "MCP Configuration - Multi-Source Merging, Scopes, and Policy Control"
+description: "Details the source hierarchy, merge priority, transport types, enterprise policy control, plugin integration, and reserved-name mechanism of Claude Code's MCP configuration."
+keywords: ["MCP", "configuration", "settings.json", ".mcp.json", "enterprise policy", "plugin"]
 ---
 
-## 配置来源与作用域
+## Configuration sources and scopes
 
-Claude Code 的 MCP 配置来自多个来源，每个来源对应一个 `scope`（作用域）。配置按优先级合并，高优先级来源的同名配置覆盖低优先级。
+Claude Code's MCP configuration comes from several sources, each tied to a `scope`. Configurations are merged by priority, and a same-named entry from a higher-priority source overrides one from a lower-priority source.
 
-### 来源列表
+### Source list
 
-| 来源 | Scope | 文件/接口 | 说明 |
+| Source | Scope | File/interface | Notes |
 |------|-------|----------|------|
-| 企业管控 | `enterprise` | 系统管理路径 `managed-mcp.json` | **排他模式**：存在时忽略所有其他来源 |
-| 本地项目 | `local` | `<project>/.claude/settings.local.json` | 项目级私有配置（不提交到 VCS） |
-| 项目配置 | `project` | `<project>/.mcp.json` | 项目级共享配置（可提交到 VCS） |
-| 用户全局 | `user` | `~/.claude/settings.json` | 用户级配置，所有项目共享 |
-| 插件 | `dynamic` | 插件 manifest 中 `.mcp.json` / `.mcpb` | 插件提供的 MCP 服务器 |
-| claude.ai | `claudeai` | 通过 API 获取 | claude.ai 网页端配置的连接器 |
-| 内置动态 | `dynamic` | 代码中注册 | Computer Use / Chrome 等内置服务器 |
-| IDE SDK | `sdk` | IDE 传入 | VS Code / JetBrains 嵌入模式 |
+| Enterprise-managed | `enterprise` | System-managed path `managed-mcp.json` | **Exclusive mode**: when present, all other sources are ignored |
+| Local project | `local` | `<project>/.claude/settings.local.json` | Private project-level config (not committed to VCS) |
+| Project config | `project` | `<project>/.mcp.json` | Shared project-level config (can be committed to VCS) |
+| User global | `user` | `~/.claude/settings.json` | User-level config shared by all projects |
+| Plugin | `dynamic` | `.mcp.json` / `.mcpb` in the plugin manifest | MCP servers provided by plugins |
+| claude.ai | `claudeai` | Fetched through the API | Connectors configured in the claude.ai web app |
+| Built-in dynamic | `dynamic` | Registered in code | Built-in servers such as Computer Use / Chrome |
+| IDE SDK | `sdk` | Passed in by the IDE | VS Code / JetBrains embedded mode |
 
-### 合并优先级（从低到高）
+### Merge priority (low to high)
 
 ```
-claude.ai 连接器        ← 最低优先级
-    ↓ 去重
-插件服务器
-    ↓ 去重
-用户全局配置
+claude.ai connectors     ← lowest priority
+    ↓ dedupe
+Plugin servers
+    ↓ dedupe
+User global config
     ↓
-项目配置（.mcp.json）    ← 需要用户审批
+Project config (.mcp.json)    ← requires user approval
     ↓
-本地项目配置
+Local project config
     ↓
-动态配置（内置 MCP）     ← 最高优先级
+Dynamic config (built-in MCP)     ← highest priority
 ```
 
-`Object.assign({}, dedupedPluginServers, userServers, approvedProjectServers, localServers)` 实现合并——后出现的同名键覆盖前者。
+`Object.assign({}, dedupedPluginServers, userServers, approvedProjectServers, localServers)` does the merge: a same-named key that appears later overrides the earlier one.
 
-## 企业管控模式
+## Enterprise-managed mode
 
-当 `managed-mcp.json` 文件存在时，进入 **排他模式**：
+When a `managed-mcp.json` file exists, Claude Code enters **exclusive mode**:
 
 ```typescript
 // config.ts:1084
 if (doesEnterpriseMcpConfigExist()) {
-  // 只返回企业配置，忽略所有用户/项目/插件/claude.ai 配置
+  // Return only the enterprise config; ignore all user/project/plugin/claude.ai configs
   return { servers: filtered, errors: [] }
 }
 ```
 
-特性：
-- 路径由系统管理决定（`getManagedFilePath()` + `managed-mcp.json`）
-- 覆盖所有用户级、项目级、插件和 claude.ai 配置
-- 仍然应用策略过滤（allowlist/denylist）
-- 无法通过 CLI 添加新服务器（`addMcpConfig` 会拒绝）
+Characteristics:
+- The path is determined by system administration (`getManagedFilePath()` + `managed-mcp.json`)
+- It overrides all user-level, project-level, plugin, and claude.ai configs
+- Policy filtering (allowlist/denylist) is still applied
+- New servers cannot be added through the CLI (`addMcpConfig` rejects them)
 
-## 传输类型与配置 Schema
+## Transport types and config schema
 
-### stdio（默认）
+### stdio (default)
 
-启动子进程，通过 stdin/stdout JSON-RPC 通信。
+Starts a child process and communicates over stdin/stdout using JSON-RPC.
 
 ```json
 {
@@ -73,13 +73,13 @@ if (doesEnterpriseMcpConfigExist()) {
 }
 ```
 
-`type` 字段可省略（默认为 `stdio`）。环境变量通过 `env` 传递给子进程，会与当前进程环境合并。
+The `type` field can be omitted (it defaults to `stdio`). Environment variables are passed to the child process through `env` and merged with the current process environment.
 
-**Windows 注意**：使用 `npx` 需要包装为 `cmd /c npx`，否则会报错。
+**Windows note**: `npx` must be wrapped as `cmd /c npx`, otherwise it fails.
 
-### SSE（Server-Sent Events）
+### SSE (Server-Sent Events)
 
-通过 HTTP SSE 连接远程 MCP 服务器。
+Connects to a remote MCP server over HTTP SSE.
 
 ```json
 {
@@ -95,11 +95,11 @@ if (doesEnterpriseMcpConfigExist()) {
 }
 ```
 
-支持 OAuth 认证流程。认证失败时进入 `needs-auth` 状态，15 分钟 TTL 缓存避免重复提示。
+OAuth authentication is supported. When authentication fails, the server enters the `needs-auth` state, with a 15-minute TTL cache to avoid repeated prompts.
 
-### HTTP（Streamable HTTP）
+### HTTP (Streamable HTTP)
 
-HTTP 流式传输。
+HTTP streaming transport.
 
 ```json
 {
@@ -111,7 +111,7 @@ HTTP 流式传输。
 }
 ```
 
-支持与 SSE 相同的 OAuth 配置。
+Supports the same OAuth configuration as SSE.
 
 ### WebSocket
 
@@ -124,61 +124,61 @@ HTTP 流式传输。
 }
 ```
 
-### IDE 专用类型（内部）
+### IDE-specific types (internal)
 
-`sse-ide` 和 `ws-ide` 是 IDE 扩展专用类型，不由用户直接配置。
+`sse-ide` and `ws-ide` are types reserved for IDE extensions and are not configured directly by users.
 
-- `sse-ide`：使用 lockfile token 认证
-- `ws-ide`：使用 `X-Claude-Code-Ide-Authorization` header
+- `sse-ide`: authenticates with a lockfile token
+- `ws-ide`: uses the `X-Claude-Code-Ide-Authorization` header
 
-### SDK 类型（内部）
+### SDK type (internal)
 
-`type: "sdk"` 由 IDE 嵌入模式传入，不经过保留名称检查和企业管控排他限制。
+`type: "sdk"` is passed in by IDE embedded mode and skips both the reserved-name check and the exclusive restriction of enterprise control.
 
-### claude.ai 代理类型（内部）
+### claude.ai proxy type (internal)
 
-`type: "claudeai-proxy"` 由 claude.ai 网页端配置的连接器使用，通过 OAuth bearer token 认证并支持 401 重试。
+`type: "claudeai-proxy"` is used by connectors configured in the claude.ai web app. It authenticates with an OAuth bearer token and supports retry on 401.
 
-## 配置操作
+## Configuration operations
 
-### 添加 MCP 服务器
+### Adding an MCP server
 
-通过 CLI 命令 `claude mcp add` 或 API 调用 `addMcpConfig()`：
+Use the CLI command `claude mcp add` or the API call `addMcpConfig()`:
 
 ```bash
-# 添加到用户配置
+# Add to user config
 claude mcp add my-server -s user -- npx @my-org/mcp-server
 
-# 添加到项目配置
+# Add to project config
 claude mcp add my-server -s project -- npx @my-org/mcp-server
 
-# 添加 HTTP 类型
+# Add an HTTP type
 claude mcp add my-remote -s user -t http -u https://mcp.example.com/mcp
 ```
 
-添加时的验证流程：
+Validation when adding:
 
-1. **名称校验**：只允许字母、数字、连字符和下划线
-2. **保留名检查**：`claude-in-chrome` 和 `computer-use` 被保留
-3. **企业管控检查**：企业模式下拒绝添加
-4. **Schema 验证**：Zod 校验配置格式
-5. **策略检查**：denylist 拒绝、allowlist 验证
+1. **Name check**: only letters, digits, hyphens, and underscores are allowed
+2. **Reserved-name check**: `claude-in-chrome` and `computer-use` are reserved
+3. **Enterprise control check**: adding is rejected in enterprise mode
+4. **Schema validation**: Zod validates the config format
+5. **Policy check**: denylist rejection, allowlist validation
 
-### 移除 MCP 服务器
+### Removing an MCP server
 
 ```bash
 claude mcp remove my-server -s user
 ```
 
-### 列出 MCP 服务器
+### Listing MCP servers
 
 ```bash
 claude mcp list
 ```
 
-## 项目配置审批
+## Project config approval
 
-`.mcp.json` 中的项目配置需要用户显式审批才能生效：
+Project configs in `.mcp.json` take effect only after explicit user approval:
 
 ```typescript
 // config.ts:1166
@@ -190,71 +190,71 @@ for (const [name, config] of Object.entries(projectServers)) {
 }
 ```
 
-首次打开项目时，Claude Code 会提示用户审批 `.mcp.json` 中的每个服务器。审批状态持久化在本地配置中。
+When a project is first opened, Claude Code prompts the user to approve each server in `.mcp.json`. The approval state is persisted in local config.
 
-## 插件 MCP 集成
+## Plugin MCP integration
 
-插件通过 manifest 中的 `.mcp.json` 或 `.mcpb` 文件声明 MCP 服务器：
+Plugins declare MCP servers through a `.mcp.json` or `.mcpb` file in the manifest:
 
 ```typescript
-// 插件 MCP 加载流程
+// Plugin MCP loading flow
 const pluginResult = await loadAllPluginsCacheOnly()
 const pluginServerResults = await Promise.all(
   pluginResult.enabled.map(plugin => getPluginMcpServers(plugin, mcpErrors))
 )
 ```
 
-### 插件命名空间
+### Plugin namespace
 
-插件 MCP 服务器名格式为 `plugin:<pluginName>:<serverName>`，不会与手动配置的名称冲突。
+Plugin MCP server names take the form `plugin:<pluginName>:<serverName>`, so they never collide with manually configured names.
 
-### 去重机制
+### Deduplication
 
-插件服务器通过内容签名去重（`dedupPluginMcpServers`）：
+Plugin servers are deduplicated by content signature (`dedupPluginMcpServers`):
 
-- **stdio 类型**：签名 = `stdio:` + JSON.stringify([command, ...args])
-- **URL 类型**：签名 = `url:` + 原始 URL（unwrap CCR proxy URL）
-- **sdk 类型**：签名为 null，不去重
+- **stdio type**: signature = `stdio:` + JSON.stringify([command, ...args])
+- **URL type**: signature = `url:` + the original URL (unwrapping a CCR proxy URL)
+- **sdk type**: the signature is null, so no deduplication
 
-去重规则：
-1. 手动配置优先于插件配置
-2. 先加载的插件优先于后加载的
-3. 被抑制的插件服务器在 `/plugin` UI 中显示提示
+Deduplication rules:
+1. Manual config takes precedence over plugin config
+2. A plugin loaded earlier takes precedence over one loaded later
+3. Suppressed plugin servers are flagged in the `/plugin` UI
 
-### claude.ai 连接器去重
+### claude.ai connector deduplication
 
-claude.ai 连接器使用相同的内容签名机制去重（`dedupClaudeAiMcpServers`）：
-- 仅启用的手动配置参与去重（禁用的手动配置不应抑制连接器）
-- 连接器名格式为 `claude.ai <DisplayName>`
+claude.ai connectors are deduplicated with the same content-signature mechanism (`dedupClaudeAiMcpServers`):
+- Only enabled manual configs take part in deduplication (a disabled manual config should not suppress a connector)
+- Connector names take the form `claude.ai <DisplayName>`
 
-## 策略管控
+## Policy control
 
 ### Allowlist / Denylist
 
-企业策略通过 allowlist 和 denylist 控制可用的 MCP 服务器：
+Enterprise policy controls which MCP servers are available through an allowlist and a denylist:
 
 ```typescript
-// config.ts:1243 - 最终策略过滤
+// config.ts:1243 - final policy filter
 for (const [name, serverConfig] of Object.entries(configs)) {
   if (!isMcpServerAllowedByPolicy(name, serverConfig)) {
-    continue  // 跳过策略禁止的服务器
+    continue  // skip servers forbidden by policy
   }
   filtered[name] = serverConfig
 }
 ```
 
-策略检查考虑：
-- 服务器名称匹配
-- stdio 类型的 command + args 匹配
-- URL 类型的 URL 模式匹配（支持通配符）
+The policy check considers:
+- Server name matching
+- command + args matching for the stdio type
+- URL pattern matching for the URL type (wildcards supported)
 
-### 插件专用模式
+### Plugin-only mode
 
-`isRestrictedToPluginOnly('mcp')` 启用时，只允许插件提供的 MCP 服务器——用户/项目级配置被忽略。
+When `isRestrictedToPluginOnly('mcp')` is enabled, only MCP servers provided by plugins are allowed, and user/project-level configs are ignored.
 
-## 环境变量展开
+## Environment variable expansion
 
-MCP 配置中的环境变量支持 `$VAR` 和 `${VAR}` 语法展开：
+Environment variables in MCP config support `$VAR` and `${VAR}` expansion:
 
 ```json
 {
@@ -269,11 +269,11 @@ MCP 配置中的环境变量支持 `$VAR` 和 `${VAR}` 语法展开：
 }
 ```
 
-展开时缺失的变量会生成警告信息，但不阻止配置加载。
+A variable that is missing during expansion produces a warning but does not block config loading.
 
-## 内置 MCP 动态注册
+## Built-in MCP dynamic registration
 
-内置 MCP 服务器在 `main.tsx` 启动流程中动态注入配置：
+Built-in MCP servers inject their config dynamically during the `main.tsx` startup flow:
 
 ### Computer Use MCP
 
@@ -297,50 +297,50 @@ export function setupComputerUseMCP(): {
 }
 ```
 
-启用条件：
-- Feature flag `CHICAGO_MCP` 开启
-- `getPlatform() !== "unknown"`（macOS/Windows/Linux）
-- 非非交互式会话
-- GrowthBook gate `getChicagoEnabled()` 返回 true
+Enabling conditions:
+- The `CHICAGO_MCP` feature flag is on
+- `getPlatform() !== "unknown"` (macOS/Windows/Linux)
+- Not a non-interactive session
+- The GrowthBook gate `getChicagoEnabled()` returns true
 
 ### Claude in Chrome MCP
 
 ```typescript
-// 类似 Computer Use，在 main.tsx 中注册
+// Similar to Computer Use, registered in main.tsx
 const { mcpConfig, allowedTools, systemPrompt } = setupClaudeInChrome()
 dynamicMcpConfig = { ...dynamicMcpConfig, ...mcpConfig }
 ```
 
-启用条件：
-- `--chrome` 参数或 `claudeInChromeDefaultEnabled` 配置
-- Chrome 扩展已安装
+Enabling conditions:
+- The `--chrome` argument or the `claudeInChromeDefaultEnabled` config
+- The Chrome extension is installed
 
 ### VSCode SDK MCP
 
-IDE 嵌入模式通过初始化消息传入 `type:'sdk'` 的配置，由 `setupVscodeSdkMcp()` 设置双向通知。
+IDE embedded mode passes in a `type:'sdk'` config through the initialization message, and `setupVscodeSdkMcp()` sets up bidirectional notifications.
 
-## 保留名称
+## Reserved names
 
-以下 MCP 服务器名称被保留，用户无法手动配置同名服务器：
+The following MCP server names are reserved, and users cannot manually configure a server with the same name:
 
-| 名称 | 用途 | 检查条件 |
+| Name | Purpose | Check condition |
 |------|------|---------|
-| `claude-in-chrome` | Chrome 浏览器控制 | 始终检查 |
-| `computer-use` | 桌面自动化 | `CHICAGO_MCP` feature flag 开启时检查 |
-| `claude-vscode` | VSCode IDE 集成 | 由 SDK 传入，不经过名称检查 |
+| `claude-in-chrome` | Chrome browser control | Always checked |
+| `computer-use` | Desktop automation | Checked when the `CHICAGO_MCP` feature flag is on |
+| `claude-vscode` | VSCode IDE integration | Passed in by the SDK; skips the name check |
 
-保留名检查在两个位置：
-1. `addMcpConfig()`（`config.ts:636-648`）— 运行时拒绝
-2. `main.tsx` 启动检查（`main.tsx:2351-2368`）— 启动时退出
+The reserved-name check happens in two places:
+1. `addMcpConfig()` (`config.ts:636-648`) — rejected at runtime
+2. The `main.tsx` startup check (`main.tsx:2351-2368`) — exits at startup
 
-## 关键源文件索引
+## Key source file index
 
-| 文件 | 职责 |
+| File | Responsibility |
 |------|------|
-| `src/services/mcp/config.ts` | 配置管理核心：合并、去重、策略、添加/删除 |
-| `src/services/mcp/types.ts` | Zod Schema 定义、类型声明 |
-| `src/services/mcp/client.ts` | 连接管理、传输层选择 |
-| `src/utils/plugins/mcpPluginIntegration.ts` | 插件 MCP 配置加载 |
-| `src/utils/computerUse/setup.ts` | Computer Use 动态注册 |
-| `src/utils/claudeInChrome/common.ts` | Chrome MCP 保留名与工具名 |
-| `src/services/mcp/vscodeSdkMcp.ts` | VSCode SDK 双向通知 |
+| `src/services/mcp/config.ts` | Core config management: merging, deduplication, policy, add/remove |
+| `src/services/mcp/types.ts` | Zod schema definitions, type declarations |
+| `src/services/mcp/client.ts` | Connection management, transport selection |
+| `src/utils/plugins/mcpPluginIntegration.ts` | Plugin MCP config loading |
+| `src/utils/computerUse/setup.ts` | Computer Use dynamic registration |
+| `src/utils/claudeInChrome/common.ts` | Chrome MCP reserved names and tool names |
+| `src/services/mcp/vscodeSdkMcp.ts` | VSCode SDK bidirectional notifications |

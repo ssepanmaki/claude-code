@@ -1,0 +1,4 @@
+# Strip AI attribution lines; keep messages short and clean.
+sed -i -E '/^(Co-Authored-By:|Claude-Session:|🤖 Generated with|Generated with \[?Claude)/Id' "$1"
+# Drop trailing blank lines.
+sed -i -e :a -e '/^\n*$/{$d;N;ba' -e '}' "$1"

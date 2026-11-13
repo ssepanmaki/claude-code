@@ -1,145 +1,145 @@
-# 遥测与远程配置下发系统审计（除 Sentry 外）
+# Telemetry and remote config delivery audit (excluding Sentry)
 
-## 1. Datadog 日志
+## 1. Datadog logs
 
-**文件**: `src/services/analytics/datadog.ts`
+**File**: `src/services/analytics/datadog.ts`
 
-- **端点**: 通过环境变量 `DATADOG_LOGS_ENDPOINT` 配置（默认为空，即禁用）
-- **客户端 token**: 通过环境变量 `DATADOG_API_KEY` 配置（默认为空，即禁用）
-- **行为**: 批量发送日志（15s flush 间隔，100 条上限），仅限 1P（直连 Anthropic API）用户
-- **事件白名单**: `tengu_*` 系列事件（启动、错误、OAuth、工具调用等 ~35 种）
-- **基线数据**: 收集 model、platform、arch、version、userBucket（用户 hash 到 30 个桶）等
-- **仅限**: `NODE_ENV === 'production'`
-- **配置示例**: `DATADOG_LOGS_ENDPOINT=https://http-intake.logs.datadoghq.com/api/v2/logs DATADOG_API_KEY=xxx bun run dev`
+- **Endpoint**: configured through the `DATADOG_LOGS_ENDPOINT` environment variable (empty by default, i.e. disabled)
+- **Client token**: configured through the `DATADOG_API_KEY` environment variable (empty by default, i.e. disabled)
+- **Behavior**: sends logs in batches (15s flush interval, 100-entry cap), first-party (direct Anthropic API) users only
+- **Event allowlist**: the `tengu_*` series of events (startup, errors, OAuth, tool calls, etc., ~35 kinds)
+- **Baseline data**: collects model, platform, arch, version, userBucket (the user hashed into 30 buckets), etc.
+- **Only when**: `NODE_ENV === 'production'`
+- **Example configuration**: `DATADOG_LOGS_ENDPOINT=https://http-intake.logs.datadoghq.com/api/v2/logs DATADOG_API_KEY=xxx bun run dev`
 
-## 2. 1P 事件日志（BigQuery）
+## 2. First-party event logging (BigQuery)
 
-**文件**: `src/services/analytics/firstPartyEventLogger.ts` + `firstPartyEventLoggingExporter.ts`
+**Files**: `src/services/analytics/firstPartyEventLogger.ts` + `firstPartyEventLoggingExporter.ts`
 
-- **端点**: `https://api.anthropic.com/api/event_logging/batch`（staging 可切换）
-- **行为**: 使用 OpenTelemetry SDK 的 `BatchLogRecordProcessor`，批量导出到 Anthropic 自有的 BQ 管道
-- **数据**: 完整事件 metadata（session、model、env context、用户数据、subscription type 等）
-- **弹性**: 本地磁盘持久化失败事件（JSONL），二次退避重试，最多 8 次尝试
-- **Proto schema**: 事件序列化为 `ClaudeCodeInternalEvent` / `GrowthbookExperimentEvent` protobuf 格式
-- **Auth fallback**: 401 时自动去掉 auth header 重试
+- **Endpoint**: `https://api.anthropic.com/api/event_logging/batch` (switchable for staging)
+- **Behavior**: uses the OpenTelemetry SDK's `BatchLogRecordProcessor` to export in batches to Anthropic's own BQ pipeline
+- **Data**: full event metadata (session, model, env context, user data, subscription type, etc.)
+- **Resilience**: failed events are persisted to local disk (JSONL), retried with quadratic backoff, up to 8 attempts
+- **Proto schema**: events are serialized as `ClaudeCodeInternalEvent` / `GrowthbookExperimentEvent` protobufs
+- **Auth fallback**: on a 401 the auth header is dropped and the request is retried
 
-## 3. GrowthBook 远程 Feature Flags / 动态配置
+## 3. GrowthBook remote feature flags / dynamic config
 
-**文件**: `src/services/analytics/growthbook.ts`
+**File**: `src/services/analytics/growthbook.ts`
 
-- **服务端**: `https://api.anthropic.com/`（remote eval 模式）
-- **行为**: 启动时拉取全量 feature flags，每 6h（外部用户）/ 20min（ant）定时刷新
-- **磁盘缓存**: feature values 写入 `~/.claude.json` 的 `cachedGrowthBookFeatures`
-- **用途**:
-  - 控制 Datadog 开关（`tengu_log_datadog_events`）
-  - 控制事件采样率（`tengu_event_sampling_config`）
-  - 控制 sink killswitch（`tengu_frond_boric`）
-  - 控制 BQ batch 配置（`tengu_1p_event_batch_config`）
-  - 控制版本上限/自动更新 kill switch
-  - 控制远程管理设置的安全检查 gate
-- **用户属性**: 发送 deviceId, sessionId, organizationUUID, accountUUID, email, subscriptionType 等
+- **Server**: `https://api.anthropic.com/` (remote eval mode)
+- **Behavior**: fetches all feature flags at startup, then refreshes every 6h (external users) / 20min (ant)
+- **Disk cache**: feature values are written to `cachedGrowthBookFeatures` in `~/.claude.json`
+- **Uses**:
+  - Controls the Datadog switch (`tengu_log_datadog_events`)
+  - Controls the event sampling rate (`tengu_event_sampling_config`)
+  - Controls the sink killswitch (`tengu_frond_boric`)
+  - Controls the BQ batch configuration (`tengu_1p_event_batch_config`)
+  - Controls the version cap / auto-update kill switch
+  - Controls the safety-check gate for remotely managed settings
+- **User attributes**: sends deviceId, sessionId, organizationUUID, accountUUID, email, subscriptionType, etc.
 
-## 4. Remote Managed Settings（企业远程配置下发）
+## 4. Remote Managed Settings (enterprise config delivery)
 
-**文件**: `src/services/remoteManagedSettings/index.ts`
+**File**: `src/services/remoteManagedSettings/index.ts`
 
-- **端点**: `{BASE_API_URL}/api/claude_code/settings`
-- **行为**: 企业用户配置下发，支持 ETag/304 缓存，每小时后台轮询
-- **安全**: 变更包含"危险设置"时弹窗让用户确认
-- **适用**: API key 用户全部可拉取；OAuth 用户仅 Enterprise/C4E/Team
-- **Fail-open**: 请求失败时使用本地缓存，无缓存则跳过
+- **Endpoint**: `{BASE_API_URL}/api/claude_code/settings`
+- **Behavior**: delivers configuration to enterprise users, supports ETag/304 caching, polls in the background every hour
+- **Safety**: when a change includes "dangerous settings", a dialog asks the user to confirm
+- **Applies to**: all API key users can fetch; OAuth users only on Enterprise/C4E/Team
+- **Fail-open**: on request failure the local cache is used; with no cache it is skipped
 
-## 5. Settings Sync（设置同步）
+## 5. Settings Sync
 
-**文件**: `src/services/settingsSync/index.ts`
+**File**: `src/services/settingsSync/index.ts`
 
-- **端点**: `{BASE_API_URL}/api/claude_code/user_settings`
-- **行为**: CLI 上传本地设置/memory 到远程；CCR 模式从远程下载
-- **同步内容**: userSettings、userMemory、projectSettings、projectMemory
+- **Endpoint**: `{BASE_API_URL}/api/claude_code/user_settings`
+- **Behavior**: the CLI uploads local settings/memory to the remote; CCR mode downloads from the remote
+- **Synced content**: userSettings, userMemory, projectSettings, projectMemory
 - **Feature gate**: `UPLOAD_USER_SETTINGS` / `DOWNLOAD_USER_SETTINGS`
-- **文件大小限制**: 500KB/文件
+- **File size limit**: 500KB per file
 
-## 6. OpenTelemetry 三方遥测
+## 6. OpenTelemetry third-party telemetry
 
-**文件**: `src/utils/telemetry/instrumentation.ts`
+**File**: `src/utils/telemetry/instrumentation.ts`
 
-- **行为**: 完整的 OTEL SDK 初始化，支持 metrics / logs / traces 三种信号
-- **协议**: gRPC / http-json / http-protobuf（通过 `OTEL_EXPORTER_OTLP_PROTOCOL` 选择）
-- **exporter**: console / otlp / prometheus
-- **触发**: `CLAUDE_CODE_ENABLE_TELEMETRY=1` 环境变量
-- **增强 trace**: `feature('ENHANCED_TELEMETRY_BETA')` + GrowthBook gate `enhanced_telemetry_beta`
+- **Behavior**: full OTEL SDK initialization, supporting three signals: metrics / logs / traces
+- **Protocols**: gRPC / http-json / http-protobuf (chosen through `OTEL_EXPORTER_OTLP_PROTOCOL`)
+- **Exporters**: console / otlp / prometheus
+- **Trigger**: the `CLAUDE_CODE_ENABLE_TELEMETRY=1` environment variable
+- **Enhanced tracing**: `feature('ENHANCED_TELEMETRY_BETA')` + the GrowthBook gate `enhanced_telemetry_beta`
 
-## 7. BigQuery Metrics Exporter（内部指标）
+## 7. BigQuery Metrics Exporter (internal metrics)
 
-**文件**: `src/utils/telemetry/bigqueryExporter.ts`
+**File**: `src/utils/telemetry/bigqueryExporter.ts`
 
-- **端点**: `https://api.anthropic.com/api/claude_code/metrics`
-- **行为**: 定期（5min 间隔）导出 OTel metrics 到内部 BQ
-- **适用**: API 客户、C4E/Team 订阅者
-- **组织级 opt-out**: 通过 `checkMetricsEnabled()` API 查询（见下方第 8 项）
+- **Endpoint**: `https://api.anthropic.com/api/claude_code/metrics`
+- **Behavior**: periodically (5min interval) exports OTel metrics to internal BQ
+- **Applies to**: API customers, C4E/Team subscribers
+- **Organization-level opt-out**: queried through the `checkMetricsEnabled()` API (see item 8 below)
 
-## 8. 组织级 Metrics Opt-out 查询
+## 8. Organization-level metrics opt-out query
 
-**文件**: `src/services/api/metricsOptOut.ts`
+**File**: `src/services/api/metricsOptOut.ts`
 
-- **端点**: `https://api.anthropic.com/api/claude_code/organizations/metrics_enabled`
-- **行为**: 查询组织是否启用了 metrics，二级缓存（内存 1h + 磁盘 24h）
-- **作用**: 控制 BigQuery metrics exporter 是否导出
+- **Endpoint**: `https://api.anthropic.com/api/claude_code/organizations/metrics_enabled`
+- **Behavior**: queries whether the organization has metrics enabled, with a two-level cache (memory 1h + disk 24h)
+- **Effect**: controls whether the BigQuery metrics exporter exports
 
-## 9. Startup Profiling
+## 9. Startup profiling
 
-**文件**: `src/utils/startupProfiler.ts`
+**File**: `src/utils/startupProfiler.ts`
 
-- **行为**: 采样启动性能数据（100% ant / 0.5% 外部），通过 `logEvent('tengu_startup_perf')` 上报
-- **详细模式**: `CLAUDE_CODE_PROFILE_STARTUP=1` 输出完整性能报告到文件
+- **Behavior**: samples startup performance data (100% ant / 0.5% external), reported through `logEvent('tengu_startup_perf')`
+- **Detailed mode**: `CLAUDE_CODE_PROFILE_STARTUP=1` writes a full performance report to a file
 
-## 10. Beta Session Tracing
+## 10. Beta session tracing
 
-**文件**: `src/utils/telemetry/betaSessionTracing.ts`
+**File**: `src/utils/telemetry/betaSessionTracing.ts`
 
-- **行为**: 详细调试 trace，发送 system prompt、model output、tool schema 等
-- **触发**: `ENABLE_BETA_TRACING_DETAILED=1` + `BETA_TRACING_ENDPOINT`
-- **外部用户**: SDK/headless 模式自动启用，交互模式需要 GrowthBook gate `tengu_trace_lantern`
+- **Behavior**: detailed debug traces that send the system prompt, model output, tool schemas, etc.
+- **Trigger**: `ENABLE_BETA_TRACING_DETAILED=1` + `BETA_TRACING_ENDPOINT`
+- **External users**: enabled automatically in SDK/headless mode; interactive mode needs the GrowthBook gate `tengu_trace_lantern`
 
-## 11. Bridge Poll Config（远程轮询间隔配置）
+## 11. Bridge poll config (remote polling interval)
 
-**文件**: `src/bridge/pollConfig.ts`
+**File**: `src/bridge/pollConfig.ts`
 
-- **行为**: 从 GrowthBook 拉取 bridge 轮询间隔配置（`tengu_bridge_poll_interval_config`）
-- **控制**: 单会话和多会话的各种 poll interval
+- **Behavior**: fetches the bridge polling interval configuration from GrowthBook (`tengu_bridge_poll_interval_config`)
+- **Controls**: the various poll intervals for single-session and multi-session
 
-## 12. Plugin/MCP 遥测
+## 12. Plugin/MCP telemetry
 
-**文件**: `src/utils/plugins/fetchTelemetry.ts`
+**File**: `src/utils/plugins/fetchTelemetry.ts`
 
-- **行为**: 记录 plugin/marketplace 的网络请求（安装计数、marketplace clone/pull 等）
-- **事件**: `tengu_plugin_remote_fetch`，包含 host（已脱敏）、outcome、duration
+- **Behavior**: records network requests from plugins/marketplaces (install counts, marketplace clone/pull, etc.)
+- **Event**: `tengu_plugin_remote_fetch`, containing host (sanitized), outcome, duration
 
 ---
 
-## 全局禁用方式
+## Ways to disable globally
 
 ```bash
-# 禁用所有遥测（Datadog + 1P + 调查问卷）
+# Disable all telemetry (Datadog + 1P + surveys)
 DISABLE_TELEMETRY=1
 
-# 更激进：禁用所有非必要网络（包括自动更新、grove、release notes 等）
+# More aggressive: disable all non-essential network traffic (including auto-update, grove, release notes, etc.)
 CLAUDE_CODE_DISABLE_NONESSENTIAL_TRAFFIC=1
 
-# 3P 提供商自动禁用
-CLAUDE_CODE_USE_BEDROCK=1  # 或 VERTEX/FOUNDRY
+# Third-party providers disable it automatically
+CLAUDE_CODE_USE_BEDROCK=1  # or VERTEX/FOUNDRY
 ```
 
-`src/utils/privacyLevel.ts` 是集中控制点，三个级别：`default < no-telemetry < essential-traffic`。
+`src/utils/privacyLevel.ts` is the central control point, with three levels: `default < no-telemetry < essential-traffic`.
 
 ---
 
-## 数据流架构
+## Data flow architecture
 
 ```
-用户操作 → logEvent()
+User action → logEvent()
               ↓
-         sink.ts (路由层)
+         sink.ts (routing layer)
            ↙        ↘
    trackDatadogEvent()   logEventTo1P()
           ↓                      ↓
@@ -152,4 +152,4 @@ CLAUDE_CODE_USE_BEDROCK=1  # 或 VERTEX/FOUNDRY
                     BigQuery (ClaudeCodeInternalEvent proto)
 ```
 
-GrowthBook 作为独立通道，同时驱动上述两个 sink 的开关和配置。
+GrowthBook acts as an independent channel that drives the switches and configuration of both sinks above.

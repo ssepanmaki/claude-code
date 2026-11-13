@@ -1,29 +1,29 @@
-# Background Agent Selector — 底部统一后台 Agent 切换器
+# Background Agent Selector — Unified Bottom Switcher for Background Agents
 
-> Feature Flag: 无（直接启用）
-> 实现状态：完整可用
-> 依赖：`viewingAgentTaskId` / `enterTeammateView` / `exitTeammateView` 已有机制
+> Feature Flag: none (enabled directly)
+> Implementation status: fully usable
+> Depends on: the existing `viewingAgentTaskId` / `enterTeammateView` / `exitTeammateView` mechanisms
 
-## 一、功能概述
+## 1. Overview
 
-Background Agent Selector 是渲染在 PromptInput 下方的常驻状态条，列出当前所有 **backgrounded 的 local_agent 任务**（包括 `/fork` 派生的 fork agent 和 Task/AgentTool 调用 `run_in_background: true` 派生的子 agent）。用户可以用 ↑/↓ 方向键在 `main` 和各 agent 之间切换焦点，按 Enter 把 REPL 主视图替换为所选 agent 的实时 transcript，再按 Enter 选中 `main` 即可回到主对话。
+The Background Agent Selector is a persistent status bar rendered below the PromptInput. It lists all **backgrounded local_agent tasks**, including fork agents spawned by `/fork` and sub-agents spawned by Task/AgentTool calls with `run_in_background: true`. The user can press ↑/↓ to move focus between `main` and the individual agents, and press Enter to replace the REPL main view with the selected agent's live transcript. Selecting `main` and pressing Enter returns to the main conversation.
 
-整个机制完全复用官方已有的 teammate transcript 查看基础设施，不引入新的视图层 / 数据流，仅新增一条 footer pill 类型。
+The whole mechanism reuses the existing teammate transcript viewing infrastructure. It introduces no new view layer or data flow, and only adds one footer pill type.
 
-### 核心特性
+### Core features
 
-- **统一入口**：`/fork`、Task 派生的 subagent、所有 `run_in_background: true` 的 agent 都在同一栏显示
-- **就地切换**：prompt 为空时按 ↓ 溢出进入底部 selector，↑↓ 选中某行，Enter 即切主视图
-- **实时状态**：每行显示 agent 类型 + 描述 + 运行时长 + 已消耗 token；running 时圆点为绿色
-- **Keep-alive 视图**：agent 完成后在 `evictAfter` grace 窗口内保留一段时间，用户可回看
-- **零界面侵入**：tasks 数为 0 时 selector 完全不渲染，不占屏幕高度
-- **与旧 Dialog 共存**：Shift+↓ 打开的 `BackgroundTasksDialog` 原有行为保留，selector 只作为展示 + 快捷切换
+- **Unified entry**: `/fork`, Task-spawned subagents, and every agent with `run_in_background: true` appear in the same bar
+- **In-place switching**: with an empty prompt, pressing ↓ overflows into the bottom selector, ↑↓ selects a row, and Enter switches the main view
+- **Live status**: each row shows agent type + description + elapsed time + tokens consumed; the dot is green while running
+- **Keep-alive view**: after an agent finishes it is kept for a grace window (`evictAfter`) so the user can look back
+- **Zero UI intrusion**: when there are 0 tasks the selector is not rendered at all and takes no screen height
+- **Coexists with the old Dialog**: the existing behavior of `BackgroundTasksDialog` (opened with Shift+↓) is preserved; the selector is only a display + quick-switch surface
 
-## 二、用户交互
+## 2. User interaction
 
-### 触发方式
+### How it appears
 
-有任何 background agent 时，selector 自动出现在 `bypass permissions on` 行下方：
+When any background agent exists, the selector appears automatically below the `bypass permissions on` line:
 
 ```
   claude-code | Opus 4.7 (1M context) | ctx:4%
@@ -35,34 +35,34 @@ Background Agent Selector 是渲染在 PromptInput 下方的常驻状态条，�
   ○ Explore  Research src/utils              21s · ↓ 13.6k tokens
 ```
 
-### 键盘路由
+### Keyboard routing
 
-| 位置 / 状态 | 按键 | 行为 |
+| Location / state | Key | Behavior |
 |---|---|---|
-| PromptInput 非空 | ↑↓ | 光标移动 / 翻历史（不变） |
-| PromptInput 空 + 历史底部 | ↓ | 焦点下放到 selector，高亮到 `● main` |
-| Selector 聚焦（`footerSelection === 'bg_agent'`） | ↓ | 高亮下移，-1 → 0 → ... → N-1 |
-| Selector 聚焦 | ↑ | 高亮上移；在 `main` 再 ↑ → 焦点回 PromptInput |
-| Selector 聚焦 | Enter | `-1` → `exitTeammateView`；`>=0` → `enterTeammateView(agentId)`。焦点保留在 pill |
-| Selector 聚焦 | Esc | `footer:clearSelection`，焦点回 PromptInput |
+| PromptInput non-empty | ↑↓ | Cursor movement / history navigation (unchanged) |
+| PromptInput empty + at bottom of history | ↓ | Focus moves down into the selector, highlighting `● main` |
+| Selector focused (`footerSelection === 'bg_agent'`) | ↓ | Highlight moves down, -1 → 0 → ... → N-1 |
+| Selector focused | ↑ | Highlight moves up; pressing ↑ again on `main` returns focus to PromptInput |
+| Selector focused | Enter | `-1` → `exitTeammateView`; `>=0` → `enterTeammateView(agentId)`. Focus stays on the pill |
+| Selector focused | Esc | `footer:clearSelection`, focus returns to PromptInput |
 
-### 视觉规则
+### Visual rules
 
-- `● main` / `● <agent>`：当前被**查看**（viewingAgentTaskId 指向）或被**光标聚焦**（pill focused 时以光标为准）的一行
-- running 状态的 agent：圆点渲染为 `success` 色（绿色），与 `BackgroundTasksDialog` 状态语义对齐
-- 右上角 hint 随状态变化：
-  - pill 聚焦：`↑/↓ to select · Enter to view`
-  - 已选中 running agent：`shift+↓ to manage · x to stop`
-  - 已选中 terminal agent：`shift+↓ to manage · x to clear`
-  - 未选中任何 agent：`shift+↓ to manage background agents`
+- `● main` / `● <agent>`: the row currently being **viewed** (pointed to by viewingAgentTaskId) or **focused by the cursor** (when the pill is focused, the cursor wins)
+- Running agents: the dot is rendered in the `success` color (green), matching the status semantics of `BackgroundTasksDialog`
+- The hint at the top right changes with state:
+  - Pill focused: `↑/↓ to select · Enter to view`
+  - A running agent is selected: `shift+↓ to manage · x to stop`
+  - A terminal agent is selected: `shift+↓ to manage · x to clear`
+  - No agent selected: `shift+↓ to manage background agents`
 
-## 三、实现架构
+## 3. Implementation architecture
 
-### 3.1 数据层：`useBackgroundAgentTasks`
+### 3.1 Data layer: `useBackgroundAgentTasks`
 
-文件：`src/hooks/useBackgroundAgentTasks.ts`
+File: `src/hooks/useBackgroundAgentTasks.ts`
 
-封装对 `useAppState(s => s.tasks)` 的过滤：
+Wraps the filtering of `useAppState(s => s.tasks)`:
 
 ```ts
 export function useBackgroundAgentTasks(): LocalAgentTaskState[] {
@@ -79,41 +79,41 @@ export function useBackgroundAgentTasks(): LocalAgentTaskState[] {
 }
 ```
 
-`/fork` 和 `AgentTool` 的 `run_in_background: true` 底层都走 `registerAsyncAgent → runAsyncAgentLifecycle`，最终写入同一个 `appState.tasks` Map；此 hook 是唯一数据源，Selector 和 PromptInput 的 `bgAgentList` 都消费它。
+Both `/fork` and `AgentTool` with `run_in_background: true` go through `registerAsyncAgent → runAsyncAgentLifecycle` and end up writing to the same `appState.tasks` Map. This hook is the single data source, and both the Selector and PromptInput's `bgAgentList` consume it.
 
-### 3.2 状态层：新增两个字段
+### 3.2 State layer: two new fields
 
-文件：`src/state/AppStateStore.ts`
+File: `src/state/AppStateStore.ts`
 
 ```ts
 export type FooterItem =
   | 'tasks' | 'tmux' | 'bagel' | 'teams' | 'bridge' | 'companion'
-  | 'bg_agent'   // ← 新增
+  | 'bg_agent'   // ← new
 
 export type AppState = DeepImmutable<{
   // ...
-  selectedBgAgentIndex: number  // -1 = main, 0..N-1 = 选中的 agent
+  selectedBgAgentIndex: number  // -1 = main, 0..N-1 = selected agent
 }>
 ```
 
-- `'bg_agent'` 作为 `FooterItem` 加入 footer pill 体系，享受既有的 `footer:up` / `footer:down` / `footer:openSelected` keybinding 路由
-- `selectedBgAgentIndex` 记录 selector 的光标位置，与 `viewingAgentTaskId`（"正在看什么"）独立；它不可从 `viewingAgentTaskId` 派生——Enter 后光标留在 pill 继续导航，查看目标才变
+- `'bg_agent'` joins the footer pill system as a `FooterItem`, so it gets the existing `footer:up` / `footer:down` / `footer:openSelected` keybinding routing
+- `selectedBgAgentIndex` records the selector's cursor position and is independent of `viewingAgentTaskId` ("what is being viewed"); it cannot be derived from `viewingAgentTaskId`, because after Enter the cursor stays on the pill for further navigation and only the viewing target changes
 
-### 3.3 键盘路由：PromptInput footer pill 分支
+### 3.3 Keyboard routing: the PromptInput footer pill branch
 
-文件：`src/components/PromptInput/PromptInput.tsx`
+File: `src/components/PromptInput/PromptInput.tsx`
 
-1. **`bg_agent` 进入 footerItems[0]**：保证 prompt ↓ 溢出时（`handleHistoryDown` → `selectFooterItem(footerItems[0])`）直接进入 selector，而不是 `tasks` 等其他 pill
-2. **`footer:up` 分支**：`bgAgentSelected` 时 `selectedBgAgentIndex > -1` 则递减；在 -1 → `selectFooterItem(null)` 退出 pill
-3. **`footer:down` 分支**：`selectedBgAgentIndex < bgAgentList.length - 1` 则递增，到底 clamp
-4. **`footer:openSelected` 分支**：index === -1 → `exitTeammateView`；否则 `enterTeammateView(bgAgentList[i].agentId)`。**不清理 pill 焦点**，光标留在 selector 上继续导航
-5. **`selectFooterItem('bg_agent')`**：入 pill 时重置 `selectedBgAgentIndex = -1`（光标落到 `main`）
+1. **`bg_agent` goes in footerItems[0]**: this ensures that when ↓ overflows from the prompt (`handleHistoryDown` → `selectFooterItem(footerItems[0])`) it goes straight into the selector rather than another pill such as `tasks`
+2. **`footer:up` branch**: when `bgAgentSelected`, decrement `selectedBgAgentIndex` if it is > -1; at -1 call `selectFooterItem(null)` to leave the pill
+3. **`footer:down` branch**: increment if `selectedBgAgentIndex < bgAgentList.length - 1`, clamping at the bottom
+4. **`footer:openSelected` branch**: index === -1 → `exitTeammateView`; otherwise `enterTeammateView(bgAgentList[i].agentId)`. **Pill focus is not cleared**, so the cursor stays on the selector for continued navigation
+5. **`selectFooterItem('bg_agent')`**: resets `selectedBgAgentIndex = -1` on entering the pill (the cursor lands on `main`)
 
-### 3.4 渲染层：`BackgroundAgentSelector`
+### 3.4 Rendering layer: `BackgroundAgentSelector`
 
-文件：`src/components/tasks/BackgroundAgentSelector.tsx`
+File: `src/components/tasks/BackgroundAgentSelector.tsx`
 
-纯展示组件，不订阅键盘：
+A purely presentational component that does not subscribe to the keyboard:
 
 ```tsx
 const tasks = useBackgroundAgentTasks()
@@ -129,11 +129,11 @@ const highlightedId = pillFocused
   : (viewingId ?? null)
 ```
 
-**高亮派生规则**：pill 聚焦 → 跟 `selectedBgAgentIndex`；未聚焦 → 镜像 `viewingAgentTaskId`。这样当用户通过 Shift+↓ Dialog 或 `enterTeammateView` 其它途径切换视图时，selector 也会正确反映。
+**Highlight derivation rule**: when the pill is focused, follow `selectedBgAgentIndex`; when unfocused, mirror `viewingAgentTaskId`. This way, when the user switches views through the Shift+↓ Dialog or any other route to `enterTeammateView`, the selector reflects it correctly.
 
-### 3.5 主视图切换：复用 `viewingAgentTaskId`
+### 3.5 Main view switching: reusing `viewingAgentTaskId`
 
-REPL.tsx 主体仍复用原有查看逻辑：
+The REPL.tsx body still reuses the original viewing logic:
 
 ```ts
 const viewedTask = viewingAgentTaskId ? tasks[viewingAgentTaskId] : undefined
@@ -141,18 +141,18 @@ const viewedAgentTask = ... (isLocalAgentTask(viewedTask) ? viewedTask : undefin
 const displayedMessages = viewedAgentTask ? displayedAgentMessages : messages
 ```
 
-当 `enterTeammateView(agentId)` 把 `viewingAgentTaskId` 设成某个 local_agent 的 id：
+When `enterTeammateView(agentId)` sets `viewingAgentTaskId` to a local_agent's id:
 
-- `viewedAgentTask` 解析成该 agent
-- `displayedMessages` 切换到 agent 的 messages
-- 消息列表、spinner、unseen divider 等一整套组件自动用 agent transcript 重渲染
-- 主对话流被"暂停"（并非销毁，回到 `main` 时仍在原处）
+- `viewedAgentTask` resolves to that agent
+- `displayedMessages` switches to the agent's messages
+- The message list, spinner, unseen divider and the rest re-render automatically with the agent transcript
+- The main conversation stream is "paused" (not destroyed, and picks up where it left off when you return to `main`)
 
-`enterTeammateView` 同步负责：设 `retain: true` 阻止 eviction、清 `evictAfter`、触发 disk bootstrap 从 `agent-<id>.jsonl` 加载完整 transcript 到 `task.messages`。
+`enterTeammateView` is also responsible for: setting `retain: true` to block eviction, clearing `evictAfter`, and triggering a disk bootstrap that loads the full transcript from `agent-<id>.jsonl` into `task.messages`.
 
-#### Fork agent prompt 归一化
+#### Fork agent prompt normalization
 
-`/fork` agent 的 transcript 和普通 subagent 不同：它继承 main agent 的上下文，真实初始消息形态是：
+A `/fork` agent's transcript differs from a normal subagent's: it inherits the main agent's context, and its real initial message shape is:
 
 ```text
 ...parent messages
@@ -161,65 +161,65 @@ user([tool_result..., text("<fork-boilerplate>...Your directive: <prompt>")])
 ...fork live messages
 ```
 
-这里的 prompt 文本混在 `[tool_result..., text]` 多 block user message 里。消息渲染管线会优先把这条 user message 当作 tool-result plumbing 来处理，导致 `<fork-boilerplate>` 里的用户 prompt 不稳定可见。为保证切换到 fork agent 时总能看到用户发起的 fork prompt，REPL.tsx 对 fork 视图做一次展示层归一化：
+The prompt text is mixed into a multi-block `[tool_result..., text]` user message. The message rendering pipeline treats this user message as tool-result plumbing first, so the user prompt inside `<fork-boilerplate>` is not reliably visible. To make sure the user-initiated fork prompt is always visible when switching to a fork agent, REPL.tsx applies a display-layer normalization to the fork view:
 
-1. 仅当 `viewedAgentTask.agentType === 'fork'` 时启用，不影响普通 Explore / Task subagent。
-2. 从原始 messages 中识别包含 `<fork-boilerplate>` 的 carrier message。
-3. 剥离 carrier message 里的 boilerplate text block，但保留 `tool_result` blocks，避免破坏父 assistant `tool_use` 的承接关系。
-4. 强制插入一条独立 `createUserMessage({ content: viewedAgentTask.prompt })` 作为可见用户 prompt。
-5. 插入位置优先为 boilerplate carrier 后；如果 sidechain bootstrap 还没读到 carrier，则插到最后一条 inherited `assistant tool_use` 后面，确保 prompt 接在 main 上下文之后，而不是跑到视图顶部。
+1. Enabled only when `viewedAgentTask.agentType === 'fork'`, so ordinary Explore / Task subagents are unaffected.
+2. Identify the carrier message containing `<fork-boilerplate>` in the raw messages.
+3. Strip the boilerplate text block from the carrier message but keep the `tool_result` blocks, so the link to the parent assistant `tool_use` is not broken.
+4. Force-insert a separate `createUserMessage({ content: viewedAgentTask.prompt })` as the visible user prompt.
+5. The insertion point is preferably right after the boilerplate carrier; if the sidechain bootstrap has not yet read the carrier, insert after the last inherited `assistant tool_use`, so the prompt follows the main context instead of ending up at the top of the view.
 
-这个归一化只影响 UI 展示用的 `displayedAgentMessages`，不回写 `task.messages`，也不改变发送给模型的 fork transcript。
+This normalization only affects the `displayedAgentMessages` used for UI display. It does not write back to `task.messages` and does not change the fork transcript sent to the model.
 
-### 3.6 生命周期
+### 3.6 Lifecycle
 
-完全复用官方既有机制：
+Fully reuses the existing mechanisms:
 
-- **运行中**：`isBackgroundTask()` 谓词为真，selector 列出
-- **完成 / 失败 / 中止**：`completeAgentTask` / `failAgentTask` / `killAsyncAgent` 设 `status` 为 terminal
-- **回访后退出**：`exitTeammateView` 调 `release(task)`——清 `retain`、清 `messages`、terminal 状态下设 `evictAfter = now + PANEL_GRACE_MS (30s)`
-- **evictAfter 过期**：`useBackgroundAgentTasks` 过滤时自然剔除，selector 行消失
-- **手动清除**：`stopOrDismissAgent(taskId)` 设 `evictAfter = 0`，立即消失
+- **Running**: the `isBackgroundTask()` predicate is true, and the selector lists it
+- **Completed / failed / aborted**: `completeAgentTask` / `failAgentTask` / `killAsyncAgent` set `status` to a terminal value
+- **Exit after revisit**: `exitTeammateView` calls `release(task)`, which clears `retain`, clears `messages`, and in a terminal state sets `evictAfter = now + PANEL_GRACE_MS (30s)`
+- **evictAfter expires**: `useBackgroundAgentTasks` naturally filters it out and the selector row disappears
+- **Manual dismissal**: `stopOrDismissAgent(taskId)` sets `evictAfter = 0`, and it disappears immediately
 
-## 四、设计决策
+## 4. Design decisions
 
-1. **数据源单一**：`useBackgroundAgentTasks` 是唯一过滤点，PromptInput 也复用，避免过滤条件散落
-2. **pill 聚焦保留**：Enter 切视图后不松焦，让 ↑↓ 连续导航，贴近官方体验
-3. **`bg_agent` 放 footerItems[0]**：确保 ↓ 溢出直接进入 selector 而非其它 pill
-4. **selector 不订阅键盘**：所有按键路由集中在 PromptInput 的 `footer:*` 分支，避免 selector 组件和 PromptInput 双重 `useInput` 的冲突
-5. **`selectedBgAgentIndex` 存 AppState 而非局部 state**：selector 和 PromptInput 分别在两棵不同子树，需要全局字段协调；该值不能从 `viewingAgentTaskId` 派生
-6. **与 `BackgroundTasksDialog` 共存**：Shift+↓ 行为完全不变，selector 是补充快捷入口；Dialog 仍管 shell / workflow / monitor_mcp 等 selector 不显示的 task 类型
-7. **fork prompt 展示层兜底**：fork prompt 不依赖 boilerplate 自身渲染，统一在 `displayedAgentMessages` 中合成独立用户消息；普通 subagent 不走该分支，避免 prompt 重复
+1. **Single data source**: `useBackgroundAgentTasks` is the only filtering point, and PromptInput reuses it too, so filter conditions are not scattered
+2. **Pill focus retained**: after Enter switches the view, focus is not released, so ↑↓ can keep navigating, which is close to the official experience
+3. **`bg_agent` in footerItems[0]**: ensures ↓ overflow goes straight into the selector rather than another pill
+4. **The selector does not subscribe to the keyboard**: all key routing is centralized in PromptInput's `footer:*` branches, avoiding conflicts from double `useInput` in the selector component and PromptInput
+5. **`selectedBgAgentIndex` lives in AppState rather than local state**: the selector and PromptInput are in two different subtrees and need a global field to coordinate; the value cannot be derived from `viewingAgentTaskId`
+6. **Coexists with `BackgroundTasksDialog`**: Shift+↓ behavior is completely unchanged and the selector is a supplementary quick entry; the Dialog still manages task types the selector does not show, such as shell / workflow / monitor_mcp
+7. **Display-layer fallback for the fork prompt**: the fork prompt does not rely on the boilerplate rendering itself; a separate user message is synthesized in `displayedAgentMessages`. Ordinary subagents do not take this branch, avoiding a duplicated prompt
 
-## 五、关键 API 复用
+## 5. Key API reuse
 
-| 官方已有能力 | selector 如何使用 |
+| Existing capability | How the selector uses it |
 |---|---|
-| `AppState.tasks` | 单一数据源，无需 file watcher / output JSONL 订阅 |
-| `registerAsyncAgent` | `/fork` 和 AgentTool 共用，selector 不区分来源 |
-| `enterTeammateView(id)` | Enter 时调用，负责 retain + disk bootstrap |
-| `exitTeammateView` | Enter 选中 `main` 时调用 |
-| `release(task)` + `PANEL_GRACE_MS` | 30s keep-alive，selector 自动生效 |
-| `useElapsedTime` | 每行时长显示，非 running 自动停 interval |
-| `formatTokens` (`utils/format.ts`) | token 数 1k 缩写 |
-| `footer:up` / `footer:down` / `footer:openSelected` keybinding | 键盘路由复用 Footer context |
+| `AppState.tasks` | Single data source, no file watcher / output JSONL subscription needed |
+| `registerAsyncAgent` | Shared by `/fork` and AgentTool; the selector does not distinguish the source |
+| `enterTeammateView(id)` | Called on Enter; handles retain + disk bootstrap |
+| `exitTeammateView` | Called when Enter selects `main` |
+| `release(task)` + `PANEL_GRACE_MS` | 30s keep-alive, applied to the selector automatically |
+| `useElapsedTime` | Per-row elapsed time; the interval stops automatically when not running |
+| `formatTokens` (`utils/format.ts`) | Abbreviates token counts to 1k |
+| `footer:up` / `footer:down` / `footer:openSelected` keybindings | Keyboard routing reuses the Footer context |
 
-## 六、文件索引
+## 6. File index
 
-| 文件 | 职责 |
+| File | Responsibility |
 |------|------|
-| `src/hooks/useBackgroundAgentTasks.ts` | 数据过滤 hook（backgrounded local_agent + evictAfter 过滤 + startTime 排序） |
-| `src/components/tasks/BackgroundAgentSelector.tsx` | 底部 selector UI，纯展示 |
-| `src/components/PromptInput/PromptInput.tsx` | 新增 `'bg_agent'` footer pill + 对应的 `footer:up/down/openSelected` 分支 |
-| `src/state/AppStateStore.ts` | `FooterItem` 加 `'bg_agent'`；新增 `selectedBgAgentIndex` 字段 |
-| `src/main.tsx` | `getDefaultAppState` 同步初始化 `selectedBgAgentIndex: -1` |
-| `src/screens/REPL.tsx` | 在 PromptInput + SessionBackgroundHint 之后挂载 `<BackgroundAgentSelector />`；切换 agent 主视图；对 fork transcript 做 prompt 归一化 |
-| `src/components/messages/AssistantToolUseMessage.tsx` | 新增 `defaultCollapsed?: boolean` prop，为后续详情视图默认折叠工具块预留 |
-| `src/components/messages/UserTextMessage.tsx` | 识别 `<fork-boilerplate>`，交给 fork 专用 renderer 处理 |
-| `src/components/messages/UserForkBoilerplateMessage.tsx` | 将 fork boilerplate text 折叠为纯用户 prompt；作为 transcript 中原位渲染的兼容路径 |
+| `src/hooks/useBackgroundAgentTasks.ts` | Data filtering hook (backgrounded local_agent + evictAfter filter + startTime sort) |
+| `src/components/tasks/BackgroundAgentSelector.tsx` | Bottom selector UI, purely presentational |
+| `src/components/PromptInput/PromptInput.tsx` | Adds the `'bg_agent'` footer pill + the matching `footer:up/down/openSelected` branches |
+| `src/state/AppStateStore.ts` | Adds `'bg_agent'` to `FooterItem`; adds the `selectedBgAgentIndex` field |
+| `src/main.tsx` | `getDefaultAppState` also initializes `selectedBgAgentIndex: -1` |
+| `src/screens/REPL.tsx` | Mounts `<BackgroundAgentSelector />` after PromptInput + SessionBackgroundHint; switches the agent main view; normalizes the prompt in fork transcripts |
+| `src/components/messages/AssistantToolUseMessage.tsx` | Adds a `defaultCollapsed?: boolean` prop, reserved for collapsing tool blocks by default in a future detail view |
+| `src/components/messages/UserTextMessage.tsx` | Recognizes `<fork-boilerplate>` and hands it to the fork-specific renderer |
+| `src/components/messages/UserForkBoilerplateMessage.tsx` | Collapses the fork boilerplate text into the plain user prompt; a compatibility path for in-place rendering in the transcript |
 
-## 七、已知限制
+## 7. Known limitations
 
-- `Date.now()` 在 `useBackgroundAgentTasks` 的 useMemo 里冻结于 `[tasks]` 触发时：若长时间没有新 task 变更事件，某个 terminal agent 的 grace 期过期后不会立即从 selector 消失，要等下一次 tasks 变化才刷新。在典型使用（主对话一直在产生消息）下感知不到，暂不额外加 interval。
-- Selector 当前不处理 Shell Task / Workflow / Monitor MCP 等类型——这些仍走 `BackgroundTasksDialog`（Shift+↓）管理。
-- `AssistantToolUseMessage` 的 `defaultCollapsed` prop 目前无调用方传值，保留作为后续"agent 详情视图内工具块默认折叠"扩展点。
+- `Date.now()` in the useMemo of `useBackgroundAgentTasks` is frozen at the moment `[tasks]` triggers: if no task change event arrives for a long time, a terminal agent whose grace period has expired will not disappear from the selector immediately and only refreshes on the next tasks change. In typical use (the main conversation keeps producing messages) this is not noticeable, so no extra interval has been added.
+- The selector currently does not handle Shell Task / Workflow / Monitor MCP and similar types; those are still managed through `BackgroundTasksDialog` (Shift+↓).
+- The `defaultCollapsed` prop of `AssistantToolUseMessage` currently has no caller passing a value; it is kept as an extension point for a future "collapse tool blocks by default in the agent detail view".

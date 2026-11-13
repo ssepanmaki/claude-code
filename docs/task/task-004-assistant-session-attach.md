@@ -1,103 +1,103 @@
-# Task 004: assistant [sessionId] — 分阶段恢复
+# Task 004: assistant [sessionId] — phased recovery
 
-> 来源: [stub-recovery-design-1-4.md](../features/stub-recovery-design-1-4.md) 第 4 项
-> 优先级: P3
-> 工作量: Phase 4A 中等，4A-4D 全做完很大
-> 状态: Phase 4A DONE, 4B-4D TODO
+> Source: item 4 of [stub-recovery-design-1-4.md](../features/stub-recovery-design-1-4.md)
+> Priority: P3
+> Effort: Phase 4A is medium; doing 4A-4D in full is large
+> Status: Phase 4A DONE, 4B-4D TODO
 
-## 目标
+## Goal
 
-不一次性恢复整个 KAIROS 助手系统。先做"明确 sessionId 的 viewer attach 可用"，再逐步补 discovery / chooser / install。
+Do not restore the whole KAIROS assistant system at once. First make "viewer attach with an explicit sessionId" work, then add discovery / chooser / install step by step.
 
-## 背景
+## Background
 
-- attach 主流程已存在 (`src/main.tsx:4708`)
-- 远端 viewer 所需基础模块已存在:
+- The main attach flow already exists (`src/main.tsx:4708`)
+- The base modules the remote viewer needs already exist:
   - `src/remote/RemoteSessionManager.ts`
   - `src/hooks/useAssistantHistory.ts`
   - `src/assistant/sessionHistory.ts`
-- 真正 stub 的主要是:
+- What is really still a stub is mainly:
   - `src/assistant/sessionDiscovery.ts`
   - `src/assistant/AssistantSessionChooser.tsx`
   - `src/commands/assistant/assistant.tsx:7`
   - `src/assistant/index.ts`
 
-## 分阶段实现
+## Phased implementation
 
-### Phase 4A: MVP — 显式 sessionId attach
+### Phase 4A: MVP — attach with an explicit sessionId
 
-**修改文件:**
+**Modified files:**
 
-| 文件 | 改动 |
-|------|------|
-| `src/main.tsx` | 确保 attach 分支可用 |
-| `src/commands/assistant/index.ts` | 实现显式 sessionId 参数入口 |
+| File | Change |
+|------|--------|
+| `src/main.tsx` | Make sure the attach branch works |
+| `src/commands/assistant/index.ts` | Implement the explicit sessionId argument entry |
 
-**行为:**
-- `claude assistant <sessionId>` — 进入 remote viewer
-- `claude assistant` (无参数) — 返回明确提示: 当前版本需要显式 sessionId，discovery 尚未启用
+**Behavior:**
+- `claude assistant <sessionId>` — enter the remote viewer
+- `claude assistant` (no arguments) — return a clear message: this version needs an explicit sessionId; discovery is not enabled yet
 
-**验证:**
-- [ ] `claude assistant <sessionId>` 能进入 remote viewer
-- [ ] 历史懒加载工作正常
-- [ ] 无参数模式给出明确提示
+**Verification:**
+- [ ] `claude assistant <sessionId>` enters the remote viewer
+- [ ] Lazy loading of history works
+- [ ] The no-argument mode gives a clear message
 
 ### Phase 4B: session discovery
 
-**修改文件:**
+**Modified files:**
 
-| 文件 | 改动 |
-|------|------|
-| `src/assistant/sessionDiscovery.ts` | 恢复 `discoverAssistantSessions()` |
+| File | Change |
+|------|--------|
+| `src/assistant/sessionDiscovery.ts` | Restore `discoverAssistantSessions()` |
 
-**行为:**
-- 数据来源优先复用现有 sessions / bridge / teleport API，不新增协议
-- `claude assistant` 无参数时能拿到候选 session 列表
+**Behavior:**
+- Prefer reusing the existing sessions / bridge / teleport APIs as the data source; add no new protocol
+- `claude assistant` with no arguments can obtain a list of candidate sessions
 
-**验证:**
-- [ ] 无参数调用能列出可用 sessions
-- [ ] 数据来源复用现有通道
+**Verification:**
+- [ ] A no-argument call lists the available sessions
+- [ ] The data source reuses existing channels
 
 ### Phase 4C: session chooser
 
-**修改文件:**
+**Modified files:**
 
-| 文件 | 改动 |
-|------|------|
-| `src/assistant/AssistantSessionChooser.ts` | 恢复交互式选择器 |
+| File | Change |
+|------|--------|
+| `src/assistant/AssistantSessionChooser.ts` | Restore the interactive chooser |
 
-**行为:**
-- 多 session 时可交互选择
+**Behavior:**
+- With several sessions, the user can choose interactively
 
-**验证:**
-- [ ] 多个 session 时弹出选择器
-- [ ] 选择后正确 attach
+**Verification:**
+- [ ] The chooser appears when there are multiple sessions
+- [ ] Attach works correctly after choosing
 
 ### Phase 4D: install wizard
 
-**修改文件:**
+**Modified files:**
 
-| 文件 | 改动 |
-|------|------|
-| `src/commands/assistant/assistant.ts` | 恢复 install wizard 辅助函数 |
+| File | Change |
+|------|--------|
+| `src/commands/assistant/assistant.ts` | Restore the install wizard helper functions |
 
-**行为:**
-- 没有 session 时如何引导用户
+**Behavior:**
+- How to guide the user when there is no session
 
-**验证:**
-- [ ] 无可用 session 时引导用户创建/连接
+**Verification:**
+- [ ] When no session is available, the user is guided to create/connect one
 
-## 为什么拆分
+## Why it is split
 
-- attach 渲染层与远端消息通道大部分已在
-- 真正缺的是"如何发现目标 session"和"如何交互选择"
-- 如果把 `src/assistant/index.ts` 的整套 KAIROS 正常模式也一起拉进来，范围会失控
+- Most of the attach render layer and the remote message channel are already in place
+- What is really missing is "how to discover the target session" and "how to choose interactively"
+- Pulling in the whole normal KAIROS mode of `src/assistant/index.ts` as well would make the scope run away
 
-## 风险
+## Risks
 
-- 这是四项里范围最大的
-- 一旦把 KAIROS 正常模式整体拉入，会从"viewer attach"膨胀成"完整 assistant mode 恢复"
+- This is the largest of the four items
+- Once the whole normal KAIROS mode is pulled in, it grows from "viewer attach" into "full assistant mode recovery"
 
-## 依赖
+## Dependencies
 
-- Task 002 的 session registry 模式可复用
+- The session registry pattern of Task 002 can be reused

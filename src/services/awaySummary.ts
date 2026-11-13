@@ -23,7 +23,7 @@ const PROMPT_EN =
   'The user stepped away and is coming back. Write exactly 1-3 short sentences. Start by stating the high-level task — what they are building or debugging, not implementation details. Next: the concrete next step. Skip status reports and commit recaps.'
 
 const PROMPT_ZH =
-  '用户离开后回来了。用中文写 1-3 句话。先说明用户在做什么（高层目标，不是实现细节），然后说明下一步具体操作。不要写状态报告或提交总结。'
+  'The user has come back after being away. Write 1-3 sentences in English. First state what the user is working on (the high-level goal, not implementation details), then the concrete next action. Do not write a status report or a commit summary.'
 
 function buildAwaySummaryPrompt(memory: string | null): string {
   const memoryBlock = memory

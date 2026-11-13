@@ -1,31 +1,30 @@
 ---
-name: 功能建议
-about: 提出新功能或改进建议
+name: Feature request
+about: Suggest a new feature or an improvement
 title: "feat: "
 labels: ["enhancement"]
 assignees: []
 ---
 
-## 发帖前必读
+## Before you post
 
-- [ ] 我已经搜索过 [现有 Issues](https://github.com/claude-code-best/claude-code/issues)，没有找到重复。
-- [ ] 这是功能建议，不是 Bug 报告或使用问题。
-- [ ] 使用问题请前往 [Discussions](https://github.com/claude-code-best/claude-code/discussions)。
+- [ ] I searched the existing issues and found no duplicate.
+- [ ] This is a feature request, not a bug report or a usage question.
 
 ---
 
-## 要解决的问题
+## Problem to solve
 
-<!-- 这个功能解决什么问题？为什么需要它？ -->
+<!-- What problem does this feature solve? Why is it needed? -->
 
-## 建议方案
+## Proposed solution
 
-<!-- 描述你建议的实现方式，尽量简洁具体。 -->
+<!-- Describe how you would implement it, as concisely and concretely as you can. -->
 
-## 考虑过的替代方案
+## Alternatives considered
 
-<!-- 还有没有想到的其他实现思路？ -->
+<!-- Any other approaches you thought of? -->
 
-## 补充信息
+## Additional context
 
-<!-- 截图、草图、参考资料，或其他有助于说明需求的内容。 -->
+<!-- Screenshots, sketches, references, or anything else that helps explain the request. -->

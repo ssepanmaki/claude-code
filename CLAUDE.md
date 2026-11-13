@@ -4,21 +4,21 @@ This file provides guidance to Claude Code (claude.ai/code) and other AI coding 
 
 ## Project Overview
 
-This is a **reverse-engineered / decompiled** version of Anthropic's official Claude Code CLI tool. The goal is to restore core functionality while trimming secondary capabilities. Many modules are stubbed or feature-flagged off. TypeScript strict mode is enforced — **`bun run precheck` 必须零错误通过**（包含 typecheck + lint fix + test）。
+This is a **reverse-engineered / decompiled** version of Anthropic's official Claude Code CLI tool. The goal is to restore core functionality while trimming secondary capabilities. Many modules are stubbed or feature-flagged off. TypeScript strict mode is enforced — **`bun run precheck` must pass with zero errors** (it runs typecheck + lint fix + tests).
 
 ## Git Commit Message Convention
 
-使用 **Conventional Commits** 规范：
+Use **Conventional Commits**:
 
 ```
-<type>: <描述>
+<type>: <description>
 ```
 
-常见 type：`feat`、`fix`、`docs`、`chore`、`refactor`
+Common types: `feat`, `fix`, `docs`, `chore`, `refactor`
 
-示例：
-- `feat: 添加模型 1M 上下文切换`
-- `fix: 修复初次登陆的校验问题`
+Examples:
+- `feat: add model 1M context switch`
+- `fix: fix first-login validation`
 - `chore: remove prefetchOfficialMcpUrls call on startup`
 
 ## Commands
@@ -47,11 +47,11 @@ bun test                                    # run all tests
 bun test src/utils/__tests__/hash.test.ts   # run single file
 bun test --coverage                         # with coverage report
 
-# Lint & Format (Biome) — 日常开发用 precheck 代替单独调用
-bun run lint              # lint check (全项目)
+# Lint & Format (Biome) — use precheck for day-to-day work instead of calling these individually
+bun run lint              # lint check (whole project)
 bun run lint:fix          # auto-fix lint issues
-bun run format            # format all (全项目)
-bun run check             # lint + format check (全项目)
+bun run format            # format all (whole project)
+bun run check             # lint + format check (whole project)
 bun run check:fix         # lint + format auto-fix
 
 # Health check
@@ -60,7 +60,7 @@ bun run health
 # Check unused exports
 bun run check:unused
 
-# Full check (typecheck + lint fix + test) — 任务完成后必须运行
+# Full check (typecheck + lint fix + test) — must be run after finishing a task
 bun run precheck
 
 # Remote Control Server
@@ -70,43 +70,43 @@ bun run rcs
 bun run docs:dev
 ```
 
-详细的测试规范、覆盖状态和改进计划见 `docs/testing-spec.md`。
+See `docs/testing-spec.md` for detailed testing conventions, coverage status and improvement plans.
 
 ## Architecture
 
 ### Runtime & Build
 
 - **Runtime**: Bun (not Node.js). All imports, builds, and execution use Bun APIs.
-- **Build**: `build.ts` 执行 `Bun.build()` with `splitting: true`，入口 `src/entrypoints/cli.tsx`，输出 `dist/cli.js` + chunk files。Build 默认启用 19 个 feature（见下方 Feature Flag 段）。构建后自动替换 `import.meta.require` 为 Node.js 兼容版本（产物 bun/node 都可运行）。构建时会将 `vendor/audio-capture/` 和 `src/utils/vendor/ripgrep/` 复制到 `dist/vendor/` 下。
-- **Build (Vite)**: `vite.config.ts` + `scripts/post-build.ts`，代码分割模式，chunk 输出到 `dist/chunks/`。post-build 遍历 `dist/` 和 `dist/chunks/` 下所有 `.js` 文件做 `globalThis.Bun` 解构 patch，复制 vendor 文件到 `dist/vendor/`。
-- **Vendor 路径解析**: 构建后 chunk 文件位于 `dist/` 或 `dist/chunks/` 下，vendor 二进制在 `dist/vendor/`。`src/utils/distRoot.ts` 提供共享的 `distRoot` 函数，通过 `import.meta.url` 路径中 `lastIndexOf('dist')` 或 `lastIndexOf('src')` 定位根目录。`ripgrep.ts`、`computerUse/setup.ts`、`claudeInChrome/setup.ts`、`updateCCB.ts` 均使用 `distRoot` 而非内联 `import.meta.url` 路径推算。`packages/audio-capture-napi/src/index.ts` 有独立的 `lastIndexOf('dist')` 逻辑，功能等价。
-- **为什么 Vite 必须代码分割**: Bun/JSC 会全量解析单个大 JS 文件的 bytecode 和 JIT，单文件 17MB 产物导致 RSS 暴涨至 ~1GB（Node/V8 懒解析仅需 ~220MB）。代码分割为 600+ 小 chunk 后 Bun 按需加载，`--version` RSS 从 966MB 降至 35MB，完整加载从 1GB+ 降至 ~500MB。
-- **Dev mode**: `scripts/dev.ts` 通过 Bun `-d` flag 注入 `MACRO.*` defines，运行 `src/entrypoints/cli.tsx`。默认启用全部 feature。
+- **Build**: `build.ts` runs `Bun.build()` with `splitting: true`, entry `src/entrypoints/cli.tsx`, output `dist/cli.js` + chunk files. The build enables a default set of features (see the Feature Flag section below). After building, `import.meta.require` is automatically replaced with a Node.js-compatible version (the output runs on both Bun and Node). The build copies `vendor/audio-capture/` and `src/utils/vendor/ripgrep/` into `dist/vendor/`.
+- **Build (Vite)**: `vite.config.ts` + `scripts/post-build.ts`, code-splitting mode, chunks are emitted to `dist/chunks/`. The post-build step walks all `.js` files under `dist/` and `dist/chunks/` to patch the `globalThis.Bun` destructuring, and copies vendor files to `dist/vendor/`.
+- **Vendor path resolution**: after building, chunk files live under `dist/` or `dist/chunks/`, and vendor binaries live in `dist/vendor/`. `src/utils/distRoot.ts` provides a shared `distRoot` function that locates the root by finding `lastIndexOf('dist')` or `lastIndexOf('src')` in the `import.meta.url` path. `ripgrep.ts`, `computerUse/setup.ts`, `claudeInChrome/setup.ts` and `updateCCB.ts` all use `distRoot` instead of computing paths from `import.meta.url` inline. `packages/audio-capture-napi/src/index.ts` has its own equivalent `lastIndexOf('dist')` logic.
+- **Why Vite must split code**: Bun/JSC parses the bytecode and JIT of a single large JS file in full; a single 17MB output pushed RSS up to ~1GB (Node/V8 lazy parsing needs only ~220MB). After splitting into 600+ small chunks, Bun loads them on demand: `--version` RSS dropped from 966MB to 35MB, and a full load from 1GB+ to ~500MB.
+- **Dev mode**: `scripts/dev.ts` injects `MACRO.*` defines via Bun's `-d` flag and runs `src/entrypoints/cli.tsx`. All features are enabled by default.
 - **Module system**: ESM (`"type": "module"`), TSX with `react-jsx` transform.
-- **Monorepo**: Bun workspaces — 17 个 workspace packages + 若干辅助目录 in `packages/` resolved via `workspace:*`。
-- **Lint/Format**: Biome (`biome.json`)。覆盖 `src/`、`scripts/`、`packages/` 全项目（含 `packages/@ant/`）。`bun run lint` / `bun run lint:fix` / `bun run format` / `bun run check` / `bun run check:fix`。42 条规则因 decompiled 代码被关闭，仅保留 `recommended` 基线。
-- **Pre-commit**: husky + lint-staged。提交时自动对暂存文件执行 `biome check --fix`（TS/JS）和 `biome format --write`（JSON）。
-- **CI Lint**: `ci.yml` 在依赖安装后、类型检查前执行 `bunx biome ci .`，lint 或格式化不达标则 CI 失败。
-- **Defines**: 集中管理在 `scripts/defines.ts`。版本号从 `package.json` 读取（不再硬编码）。
-- **CI**: GitHub Actions — `ci.yml`（lint + 构建 + 测试）、`release-rcs.yml`（RCS 发布）。
+- **Monorepo**: Bun workspaces — the workspace packages in `packages/` (plus a few helper directories) are resolved via `workspace:*`.
+- **Lint/Format**: Biome (`biome.json`). Covers the whole project: `src/`, `scripts/`, `packages/` (including `packages/@ant/`). `bun run lint` / `bun run lint:fix` / `bun run format` / `bun run check` / `bun run check:fix`. 42 rules are turned off because of the decompiled code; only the `recommended` baseline is kept.
+- **Pre-commit**: husky + lint-staged. On commit, staged files are checked with `biome check --fix` (TS/JS) and `biome format --write` (JSON).
+- **CI Lint**: `ci.yml` runs `bunx biome ci .` after installing dependencies and before type checking; CI fails if lint or formatting is not clean.
+- **Defines**: managed centrally in `scripts/defines.ts`. The version number is read from `package.json` (no longer hardcoded).
+- **CI**: GitHub Actions — `ci.yml` (lint + build + test), `release-rcs.yml` (RCS release).
 
 ### Entry & Bootstrap
 
-1. **`src/entrypoints/cli.tsx`** — True entrypoint。`main()` 函数按优先级处理多条快速路径：
-   - `--version` / `-v` — 零模块加载
+1. **`src/entrypoints/cli.tsx`** — True entrypoint. The `main()` function handles several fast paths in priority order:
+   - `--version` / `-v` — zero module loading
    - `--dump-system-prompt` — feature-gated (DUMP_SYSTEM_PROMPT)
    - `--claude-in-chrome-mcp` / `--chrome-native-host`
-   - `--computer-use-mcp` — 独立 MCP server 模式
+   - `--computer-use-mcp` — standalone MCP server mode
    - `--daemon-worker=<kind>` — feature-gated (DAEMON)
    - `remote-control` / `rc` / `remote` / `sync` / `bridge` — feature-gated (BRIDGE_MODE)
    - `daemon` [subcommand] — feature-gated (DAEMON)
    - `ps` / `logs` / `attach` / `kill` / `--bg` — feature-gated (BG_SESSIONS)
-   - `new` / `list` / `reply` — Template job commands
+   - `new` / `list` / `reply` — template job commands
    - `environment-runner` / `self-hosted-runner` — BYOC runner
-   - `--tmux` + `--worktree` 组合
-   - 默认路径：加载 `main.tsx` 启动完整 CLI
-2. **`src/main.tsx`** (~5674 行) — Commander.js CLI definition。注册大量 subcommands：`mcp` (serve/add/remove/list...)、`server`、`ssh`、`open`、`auth`、`plugin`、`agents`、`auto-mode`、`doctor`、`update` 等。主 `.action()` 处理器负责权限、MCP、会话恢复、REPL/Headless 模式分发。
-3. **`src/entrypoints/init.ts`** — One-time initialization (telemetry, config, trust dialog)。
+   - `--tmux` + `--worktree` combination
+   - Default path: loads `main.tsx` and starts the full CLI
+2. **`src/main.tsx`** (~5.7k lines) — Commander.js CLI definition. Registers many subcommands: `mcp` (serve/add/remove/list...), `server`, `ssh`, `open`, `auth`, `plugin`, `agents`, `auto-mode`, `doctor`, `update`, etc. The main `.action()` handler is responsible for permissions, MCP, session resume, and dispatching to REPL/headless mode.
+3. **`src/entrypoints/init.ts`** — One-time initialization (telemetry, config, trust dialog).
 
 ### Core Loop
 
@@ -117,37 +117,37 @@ bun run docs:dev
 ### API Layer
 
 - **`src/services/api/claude.ts`** — Core API client. Builds request params (system prompt, messages, tools, betas), calls the Anthropic SDK streaming endpoint, and processes `BetaRawMessageStreamEvent` events.
-- **7 providers**: `firstParty` (Anthropic direct), `bedrock` (AWS), `vertex` (Google Cloud), `foundry`, `openai`, `gemini`, `grok` (xAI)。
-- Provider selection in `src/utils/model/providers.ts`。优先级：modelType 参数 > 环境变量 > 默认 firstParty。
+- **7 providers**: `firstParty` (Anthropic direct), `bedrock` (AWS), `vertex` (Google Cloud), `foundry`, `openai`, `gemini`, `grok` (xAI).
+- Provider selection is in `src/utils/model/providers.ts`. Priority: `modelType` parameter > environment variable > default `firstParty`.
 
 ### Tool System
 
 - **`src/Tool.ts`** — Tool interface definition (`Tool` type) and utilities (`findToolByName`, `toolMatchesName`).
-- **`src/tools.ts`** — Tool registry. Assembles the tool list; tools are imported from `@claude-code-best/builtin-tools` package. Some tools are conditionally loaded via `feature()` flags or `process.env.USER_TYPE`.
-- **`src/constants/tools.ts`** — `CORE_TOOLS` 白名单常量（38 个核心工具名），用于 `isDeferredTool` 白名单制判定。
-- **`packages/builtin-tools/src/tools/`** — 60 个工具目录（含 shared/testing 等工具目录），通过 `@claude-code-best/builtin-tools` 包导出。主要分类：
-  - **文件操作**: FileEditTool, FileReadTool, FileWriteTool, GlobTool, GrepTool
-  - **Shell/执行**: BashTool, PowerShellTool, REPLTool
-  - **Agent 系统**: AgentTool, TaskCreateTool, TaskUpdateTool, TaskListTool, TaskGetTool
-  - **规划**: EnterPlanModeTool, ExitPlanModeV2Tool, VerifyPlanExecutionTool
+- **`src/tools.ts`** — Tool registry. Assembles the tool list; tools are imported from the `@claude-code-best/builtin-tools` package. Some tools are conditionally loaded via `feature()` flags or `process.env.USER_TYPE`.
+- **`src/constants/tools.ts`** — The `CORE_TOOLS` allowlist constant (38 core tool names), used by the allowlist-based `isDeferredTool` check.
+- **`packages/builtin-tools/src/tools/`** — About 60 tool directories (including shared/testing helper directories), exported through the `@claude-code-best/builtin-tools` package. Main categories:
+  - **File operations**: FileEditTool, FileReadTool, FileWriteTool, GlobTool, GrepTool
+  - **Shell/execution**: BashTool, PowerShellTool, REPLTool
+  - **Agent system**: AgentTool, TaskCreateTool, TaskUpdateTool, TaskListTool, TaskGetTool
+  - **Planning**: EnterPlanModeTool, ExitPlanModeV2Tool, VerifyPlanExecutionTool
   - **Web/MCP**: WebFetchTool, WebSearchTool, MCPTool, McpAuthTool
-  - **调度**: CronCreateTool, CronDeleteTool, CronListTool
-  - **工具发现**: SearchExtraToolsTool, ExecuteExtraTool, SyntheticOutput（CORE_TOOLS，用于延迟工具按需加载）
-  - **其他**: LSPTool, ConfigTool, SkillTool, EnterWorktreeTool, ExitWorktreeTool 等
-- **`src/tools/shared/`** / **`packages/builtin-tools/src/tools/shared/`** — Tool 共享工具函数。
-- **`src/services/searchExtraTools/`** — TF-IDF 工具索引模块（`toolIndex.ts`），为延迟工具提供语义搜索能力。复用 `localSearch.ts` 的 TF-IDF 算法函数（`computeWeightedTf`、`computeIdf`、`cosineSimilarity` 已导出）。修改这些函数时需同步检查工具索引测试。`prefetch.ts` 的 `extractQueryFromMessages` 复用了 `skillSearch/prefetch.ts` 的同名导出函数，修改 skill prefetch 的该函数时需同步检查工具预取行为。工具预取使用独立的 `discoveredToolsThisSession` Set，与 skill prefetch 的去重集合互不影响。
+  - **Scheduling**: CronCreateTool, CronDeleteTool, CronListTool
+  - **Tool discovery**: SearchExtraToolsTool, ExecuteExtraTool, SyntheticOutput (CORE_TOOLS, used for on-demand loading of deferred tools)
+  - **Other**: LSPTool, ConfigTool, SkillTool, EnterWorktreeTool, ExitWorktreeTool, etc.
+- **`src/tools/shared/`** / **`packages/builtin-tools/src/tools/shared/`** — Shared tool helper functions.
+- **`src/services/searchExtraTools/`** — TF-IDF tool index module (`toolIndex.ts`) that provides semantic search for deferred tools. It reuses the TF-IDF functions from `localSearch.ts` (`computeWeightedTf`, `computeIdf` and `cosineSimilarity` are exported). When changing those functions, also check the tool index tests. `extractQueryFromMessages` in `prefetch.ts` reuses the same-named export from `skillSearch/prefetch.ts`; when changing that function in skill prefetch, also check the tool prefetch behavior. Tool prefetch uses its own `discoveredToolsThisSession` Set, independent of the dedup set used by skill prefetch.
 
 ### UI Layer (Ink)
 
 - **`src/ink.ts`** — Ink render wrapper with ThemeProvider injection.
-- **`packages/@ant/ink/`** — Custom Ink framework（forked/internal），包含 components、core、hooks、keybindings、theme、utils。注意：不是 `src/ink/`。
-- **老控制台兼容模式** — `packages/@ant/ink/src/core/legacyConsole.ts`：检测 Windows build < 17763（无 ConPTY 的老系统，如 1709/LTSC 内网机器）时自动启用；`log-update.ts` 的渲染循环每约 1 秒（`LEGACY_CONSOLE_RESET_MS`）用一次全量重绘替换增量 diff，自愈老 conhost 的光标漂移花屏。`CLAUDE_CODE_LEGACY_CONSOLE=1`/`=0` 可强制开/关。其他环境完全不走此路径。
-- **`src/components/`** — 149 个组件目录/文件，渲染于终端 Ink 环境中。关键组件：
+- **`packages/@ant/ink/`** — Custom Ink framework (forked/internal), containing components, core, hooks, keybindings, theme and utils. Note: it is not `src/ink/`.
+- **Legacy console compatibility mode** — `packages/@ant/ink/src/core/legacyConsole.ts`: enabled automatically when a Windows build < 17763 is detected (old systems without ConPTY, e.g. 1709/LTSC machines on corporate networks); the render loop in `log-update.ts` replaces the incremental diff with one full redraw about every second (`LEGACY_CONSOLE_RESET_MS`), which self-heals the cursor-drift garbled output of the old conhost. `CLAUDE_CODE_LEGACY_CONSOLE=1`/`=0` forces it on/off. Other environments never take this path.
+- **`src/components/`** — About 150 component directories/files, rendered in the terminal Ink environment. Key components:
   - `App.tsx` — Root provider (AppState, Stats, FpsMetrics)
   - `Messages.tsx` / `MessageRow.tsx` — Conversation message rendering
   - `PromptInput/` — User input handling
   - `permissions/` — Tool permission approval UI
-  - `design-system/` — 复用 UI 组件（Dialog, FuzzyPicker, ProgressBar, ThemeProvider 等）
+  - `design-system/` — Reusable UI components (Dialog, FuzzyPicker, ProgressBar, ThemeProvider, etc.)
 - Components use React Compiler runtime (`react/compiler-runtime`) — decompiled output has `_c()` memoization calls throughout.
 
 ### State Management
@@ -160,50 +160,50 @@ bun run docs:dev
 
 ### Workspace Packages
 
-| Package | 说明 |
-|---------|------|
-| `packages/@ant/ink/` | Forked Ink 框架（components、hooks、keybindings、theme） |
-| `packages/@ant/computer-use-mcp/` | Computer Use MCP server（截图/键鼠/剪贴板/应用管理） |
-| `packages/@ant/computer-use-input/` | 键鼠模拟（dispatcher + darwin/win32/linux backend） |
-| `packages/@ant/computer-use-swift/` | 截图 + 应用管理（dispatcher + per-platform backend） |
-| `packages/@ant/claude-for-chrome-mcp/` | Chrome 浏览器控制（通过 `--chrome` 启用） |
-| `packages/@ant/model-provider/` | Model provider 抽象层 |
-| `packages/builtin-tools/` | 内置工具集（60 个 tool 实现，通过 `@claude-code-best/builtin-tools` 导出） |
-| `packages/agent-tools/` | Agent 工具集 |
-| `packages/acp-link/` | ACP 代理服务器（WebSocket → ACP agent 桥接） |
-| `packages/mcp-client/` | MCP 客户端库 |
-| `packages/remote-control-server/` | 自托管 Remote Control Server（Docker 部署，含 Web UI）— Web UI 已重构为 React + Vite + Radix UI，支持 ACP agent 接入 |
-| `packages/cloud-artifacts/` | 独立 Cloudflare Worker + R2 服务：POST `/upload` HTML 上传返回 hash URL，GET `/<7d\|30d>/<id>.html` 由 Worker 代理读取；R2 lifecycle rule 自动 7/30 天过期 |
-| `packages/audio-capture-napi/` | 原生音频捕获（已恢复） |
-| `packages/color-diff-napi/` | 颜色差异计算（完整实现，11 tests） |
-| `packages/image-processor-napi/` | 图像处理（已恢复） |
-| `packages/modifiers-napi/` | 键盘修饰键检测（macOS FFI 实现） |
-| `packages/url-handler-napi/` | URL scheme 处理（环境变量 + CLI 参数读取） |
-| `packages/weixin/` | 微信集成（非 workspace 包） |
+| Package | Description |
+|---------|-------------|
+| `packages/@ant/ink/` | Forked Ink framework (components, hooks, keybindings, theme) |
+| `packages/@ant/computer-use-mcp/` | Computer Use MCP server (screenshots / keyboard & mouse / clipboard / app management) |
+| `packages/@ant/computer-use-input/` | Keyboard & mouse simulation (dispatcher + darwin/win32/linux backends) |
+| `packages/@ant/computer-use-swift/` | Screenshots + app management (dispatcher + per-platform backends) |
+| `packages/@ant/claude-for-chrome-mcp/` | Chrome browser control (enabled via `--chrome`) |
+| `packages/@ant/model-provider/` | Model provider abstraction layer |
+| `packages/builtin-tools/` | Built-in tool set (about 60 tool implementations, exported via `@claude-code-best/builtin-tools`) |
+| `packages/agent-tools/` | Agent tool set |
+| `packages/workflow-engine/` | Workflow engine (runs deterministic JS workflow scripts; port-adapter based) |
+| `packages/acp-link/` | ACP proxy server (WebSocket → ACP agent bridge) |
+| `packages/mcp-client/` | MCP client library |
+| `packages/remote-control-server/` | Self-hosted Remote Control Server (Docker deployment, with Web UI) — the Web UI is built with React + Vite + Radix UI and supports ACP agent connections |
+| `packages/cloud-artifacts/` | Standalone Cloudflare Worker + R2 service: POST `/upload` uploads HTML and returns a hash URL, GET `/<7d\|30d>/<id>.html` is read through the Worker; an R2 lifecycle rule expires objects after 7/30 days |
+| `packages/audio-capture-napi/` | Native audio capture (restored) |
+| `packages/color-diff-napi/` | Color difference computation (full implementation, 11 tests) |
+| `packages/image-processor-napi/` | Image processing (restored) |
+| `packages/modifiers-napi/` | Keyboard modifier detection (macOS FFI implementation) |
+| `packages/url-handler-napi/` | URL scheme handling (environment variables + CLI argument reading) |
 
-辅助目录（无 package.json，非 workspace 包）: `langfuse-dashboard`（Langfuse 面板）、`shared-web-ui`（共享 Web UI 组件）、`highlight-code`（代码高亮）、`claude-pencil`（编辑器）、`vscode-ide-bridge`（VS Code 桥接）、`pokemon`（示例/测试）。
+Helper directories (no package.json, not workspace packages): `langfuse-dashboard` (Langfuse dashboard), `shared-web-ui` (shared Web UI components), `highlight-code` (code highlighting), `claude-pencil` (editor), `vscode-ide-bridge` (VS Code bridge).
 
 ### Bridge / Remote Control
 
-- **`src/bridge/`** — Remote Control / Bridge 模式。feature-gated by `BRIDGE_MODE`。包含 bridge API、会话管理、JWT 认证、消息传输、权限回调等。Entry: `bridgeMain.ts`。
-- **`packages/remote-control-server/`** — 自托管 RCS，支持 Docker 部署，含 Web UI 控制面板（React 19 + Vite + Radix UI）。支持 ACP agent 通过 acp-link 接入（ACP WebSocket handler、relay handler、SSE event stream）。通过 `bun run rcs` 启动。
-- CLI 快速路径: `claude remote-control` / `claude rc` / `claude bridge`。
-- 详见 `docs/features/remote-control-self-hosting.md`。
+- **`src/bridge/`** — Remote Control / Bridge mode. Feature-gated by `BRIDGE_MODE`. Includes the bridge API, session management, JWT authentication, message transport, permission callbacks, etc. Entry: `bridgeMain.ts`.
+- **`packages/remote-control-server/`** — Self-hosted RCS with Docker deployment support and a Web UI control panel (React 19 + Vite + Radix UI). Supports ACP agents connecting through acp-link (ACP WebSocket handler, relay handler, SSE event stream). Started with `bun run rcs`.
+- CLI fast paths: `claude remote-control` / `claude rc` / `claude bridge`.
+- See `docs/features/remote-control-self-hosting.md` for details.
 
 ### HTML Artifact Hosting
 
-- **`packages/cloud-artifacts/`** — 独立 Cloudflare Worker + R2 服务，类似 `remote-control-server/` 的"独立部署服务"定位，**不被主 CLI import**。Worker 处理 `POST /upload`（Bearer token 鉴权 + text/html 校验 + 10MB 上限 + ttl∈{7,30}）和 `GET /<7d|30d>/<id>.html`（从 R2 读 + Cache-Control: max-age=86400）。R2 用 prefix + lifecycle rule 实现 TTL（`7d/` 删 7 天、`30d/` 删 30 天），Worker 不参与过期处理。ID 默认 `nanoid(21)`（126 bit 熵），可指定 `?hash=` 自定义 ID（覆盖语义：先删 7d/30d prefix 旧 key 再写新 key）。Worker 用 `wrangler types` 生成的全局 `Env` 类型（`worker-configuration.d.ts`，已 gitignore），不依赖 `@cloudflare/workers-types`。部署用 `npm create cloudflare@latest` 初始化 + `bun run setup`（创建 bucket + lifecycle + secret）+ `bun run deploy`。生产出口经 Deno Deploy 边缘代理（`https://cloud-artifacts.claude-code-best.win`），副作用是 HTTP status code 被抹平为 200（body 的 `{error}` 字段仍保留）。详见 `packages/cloud-artifacts/README.md`。
+- **`packages/cloud-artifacts/`** — A standalone Cloudflare Worker + R2 service, positioned like `remote-control-server/` as a "separately deployed service", and **not imported by the main CLI**. The Worker handles `POST /upload` (Bearer token auth + text/html validation + 10MB limit + ttl ∈ {7,30}) and `GET /<7d|30d>/<id>.html` (read from R2 + `Cache-Control: max-age=86400`). R2 implements TTL with a prefix + lifecycle rule (`7d/` expires after 7 days, `30d/` after 30 days); the Worker takes no part in expiry. The ID defaults to `nanoid(21)` (126 bits of entropy), and a custom ID can be given via `?hash=` (overwrite semantics: first delete the old key under the 7d/30d prefixes, then write the new key). The Worker uses the global `Env` type generated by `wrangler types` (`worker-configuration.d.ts`, gitignored) and does not depend on `@cloudflare/workers-types`. Deploy by initializing with `npm create cloudflare@latest`, then `bun run setup` (creates the bucket + lifecycle + secret) and `bun run deploy`. Set `PUBLIC_URL` in `wrangler.toml` to the public origin; if you put an edge proxy in front, note that it may flatten HTTP status codes to 200 (the `{error}` field in the body is preserved). See `packages/cloud-artifacts/README.md`.
 
 ### ACP Protocol (Agent Client Protocol)
 
-- **`src/services/acp/`** — ACP agent 实现，包含 `agent.ts`（AcpAgent 类）、`bridge.ts`（Claude Code ↔ ACP 桥接）、`permissions.ts`（权限处理）、`entry.ts`（入口）。
-- **`packages/acp-link/`** — ACP 代理服务器，将 WebSocket 客户端桥接到 ACP agent。提供 `acp-link` CLI 命令，支持自定义端口/HTTPS/认证/会话管理、RCS 集成（REST 注册 + WS identify 两步流程）、权限模式透传（fallback: 客户端传值 > config > `ACP_PERMISSION_MODE` 环境变量）。
-- ACP 权限管道改进：`createAcpCanUseTool` 统一权限流水线，`applySessionMode` 模式同步，`bypassPermissions` 可用性检测（非 root/sandbox 环境）。
-- ACP Plan 可视化已支持 `session/update plan` 类型的消息展示（PlanView 组件，含进度条/状态图标/优先级标签）。
+- **`src/services/acp/`** — ACP agent implementation, including `agent.ts` (AcpAgent class), `bridge.ts` (Claude Code ↔ ACP bridge), `permissions.ts` (permission handling) and `entry.ts` (entry point).
+- **`packages/acp-link/`** — ACP proxy server that bridges WebSocket clients to the ACP agent. Provides the `acp-link` CLI command, supports custom port/HTTPS/auth/session management, RCS integration (REST registration + WS identify two-step flow), and permission-mode passthrough (fallback: client value > config > `ACP_PERMISSION_MODE` environment variable).
+- ACP permission pipeline improvements: `createAcpCanUseTool` unifies the permission pipeline, `applySessionMode` syncs modes, and `bypassPermissions` availability detection (non-root / sandbox environments).
+- ACP Plan visualization supports `session/update plan` messages (PlanView component with progress bar / status icons / priority tags).
 
 ### Daemon Mode
 
-- **`src/daemon/`** — Daemon 模式（长驻 supervisor）。feature-gated by `DAEMON`。包含 `main.ts`（entry）和 `workerRegistry.ts`（worker 管理）。
+- **`src/daemon/`** — Daemon mode (long-running supervisor). Feature-gated by `DAEMON`. Contains `main.ts` (entry) and `workerRegistry.ts` (worker management).
 
 ### Context & System Prompt
 
@@ -212,75 +212,75 @@ bun run docs:dev
 
 ### Feature Flag System
 
-Feature flags control which functionality is enabled at runtime. 代码中统一通过 `import { feature } from 'bun:bundle'` 导入，调用 `feature('FLAG_NAME')` 返回 `boolean`。
+Feature flags control which functionality is enabled at runtime. Code always imports them with `import { feature } from 'bun:bundle'` and calls `feature('FLAG_NAME')`, which returns a `boolean`.
 
-**启用方式**: 环境变量 `FEATURE_<FLAG_NAME>=1`。例如 `FEATURE_BUDDY=1 bun run dev`。
+**How to enable**: environment variable `FEATURE_<FLAG_NAME>=1`. For example `FEATURE_BUDDY=1 bun run dev`.
 
-**Build 默认 features**（65+ 个，见 `build.ts` 中 `DEFAULT_BUILD_FEATURES`）:
-- 基础: `BUDDY`, `TRANSCRIPT_CLASSIFIER`, `BRIDGE_MODE`, `AGENT_TRIGGERS_REMOTE`, `CHICAGO_MCP`, `VOICE_MODE`
-- 统计/缓存: `SHOT_STATS`, `PROMPT_CACHE_BREAK_DETECTION`, `TOKEN_BUDGET`
-- P0 本地: `AGENT_TRIGGERS`, `ULTRATHINK`, `BUILTIN_EXPLORE_PLAN_AGENTS`, `LODESTONE`
-- P1 API 依赖: `EXTRACT_MEMORIES`, `VERIFICATION_AGENT`, `KAIROS_BRIEF`, `AWAY_SUMMARY`, `ULTRAPLAN`
+**Build default features** (65+, see `DEFAULT_BUILD_FEATURES` in `build.ts`):
+- Basics: `BUDDY`, `TRANSCRIPT_CLASSIFIER`, `BRIDGE_MODE`, `AGENT_TRIGGERS_REMOTE`, `CHICAGO_MCP`, `VOICE_MODE`
+- Stats/cache: `SHOT_STATS`, `PROMPT_CACHE_BREAK_DETECTION`, `TOKEN_BUDGET`
+- P0 local: `AGENT_TRIGGERS`, `ULTRATHINK`, `BUILTIN_EXPLORE_PLAN_AGENTS`, `LODESTONE`
+- P1 API-dependent: `EXTRACT_MEMORIES`, `VERIFICATION_AGENT`, `KAIROS_BRIEF`, `AWAY_SUMMARY`, `ULTRAPLAN`
 - P2: `DAEMON`, `ACP`
-- 工作流: `WORKFLOW_SCRIPTS`, `HISTORY_SNIP`, `MONITOR_TOOL`, `KAIROS`
-- 多 worker: `COORDINATOR_MODE`, `BG_SESSIONS`, `TEMPLATES`
-- 连接器: `CONNECTOR_TEXT`, `COMMIT_ATTRIBUTION`, `DIRECT_CONNECT`
-- 实验性: `EXPERIMENTAL_SKILL_SEARCH`, `EXPERIMENTAL_SEARCH_EXTRA_TOOLS`
-- 模式: `POOR`, `SSH_REMOTE`
-- 已禁用: `CONTEXT_COLLAPSE`, `FORK_SUBAGENT`, `UDS_INBOX`, `LAN_PIPES`, `REVIEW_ARTIFACT`, `TEAMMEM`, `SKILL_LEARNING`
+- Workflows: `WORKFLOW_SCRIPTS`, `HISTORY_SNIP`, `MONITOR_TOOL`, `KAIROS`
+- Multi-worker: `COORDINATOR_MODE`, `BG_SESSIONS`, `TEMPLATES`
+- Connectors: `CONNECTOR_TEXT`, `COMMIT_ATTRIBUTION`, `DIRECT_CONNECT`
+- Experimental: `EXPERIMENTAL_SKILL_SEARCH`, `EXPERIMENTAL_SEARCH_EXTRA_TOOLS`
+- Modes: `POOR`, `SSH_REMOTE`
+- Disabled: `CONTEXT_COLLAPSE`, `FORK_SUBAGENT`, `UDS_INBOX`, `LAN_PIPES`, `REVIEW_ARTIFACT`, `TEAMMEM`, `SKILL_LEARNING`
 
-**Dev mode 默认**: 全部启用（见 `scripts/dev.ts`）。
+**Dev mode default**: all enabled (see `scripts/dev.ts`).
 
-**类型声明**: `src/types/internal-modules.d.ts` 中声明了 `bun:bundle` 模块的 `feature` 函数签名。
+**Type declaration**: the signature of the `feature` function of the `bun:bundle` module is declared in `src/types/internal-modules.d.ts`.
 
-**新增功能的正确做法**: 保留 `import { feature } from 'bun:bundle'` + `feature('FLAG_NAME')` 的标准模式，在运行时通过环境变量或配置控制，不要绕过 feature flag 直接 import。
+**The right way to add a feature**: keep the standard `import { feature } from 'bun:bundle'` + `feature('FLAG_NAME')` pattern and control it at runtime through environment variables or configuration; do not bypass the feature flag with a direct import.
 
-### Multi-API 兼容层
+### Multi-API Compatibility Layer
 
-所有兼容层均采用流适配器模式：将第三方 API 格式转为 Anthropic 内部格式，下游代码完全不改。通过 `/login` 命令配置。
+All compatibility layers use the stream-adapter pattern: they convert third-party API formats into the internal Anthropic format, leaving downstream code unchanged. Configure them via the `/login` command.
 
-#### OpenAI 兼容层
+#### OpenAI compatibility layer
 
-通过 `CLAUDE_CODE_USE_OPENAI=1` 启用，支持 Ollama/DeepSeek/vLLM 等任意 OpenAI Chat Completions 协议端点。含 DeepSeek thinking mode 支持。
+Enabled with `CLAUDE_CODE_USE_OPENAI=1`. Supports any endpoint speaking the OpenAI Chat Completions protocol, such as Ollama/DeepSeek/vLLM. Includes DeepSeek thinking mode support.
 
-- **`src/services/api/openai/`** — client、消息/工具转换、流适配、模型映射
-- 关键环境变量：`CLAUDE_CODE_USE_OPENAI`、`OPENAI_API_KEY`、`OPENAI_BASE_URL`、`OPENAI_MODEL`
+- **`src/services/api/openai/`** — client, message/tool conversion, stream adapter, model mapping
+- Key environment variables: `CLAUDE_CODE_USE_OPENAI`, `OPENAI_API_KEY`, `OPENAI_BASE_URL`, `OPENAI_MODEL`
 
-#### Gemini 兼容层
+#### Gemini compatibility layer
 
-通过 `CLAUDE_CODE_USE_GEMINI=1` 启用。独立环境变量体系。
+Enabled with `CLAUDE_CODE_USE_GEMINI=1`. Uses its own set of environment variables.
 
-- **`src/services/api/gemini/`** — client、模型映射、类型定义
-- 关键环境变量：`GEMINI_API_KEY`（必填）、`GEMINI_MODEL`（直接指定）、`GEMINI_DEFAULT_SONNET_MODEL`/`GEMINI_DEFAULT_OPUS_MODEL`（按能力映射）
-- 模型映射优先级：`GEMINI_MODEL` > `GEMINI_DEFAULT_*_MODEL` > `ANTHROPIC_DEFAULT_*_MODEL`(已废弃) > 原样返回
+- **`src/services/api/gemini/`** — client, model mapping, type definitions
+- Key environment variables: `GEMINI_API_KEY` (required), `GEMINI_MODEL` (direct override), `GEMINI_DEFAULT_SONNET_MODEL`/`GEMINI_DEFAULT_OPUS_MODEL` (mapping by capability)
+- Model mapping priority: `GEMINI_MODEL` > `GEMINI_DEFAULT_*_MODEL` > `ANTHROPIC_DEFAULT_*_MODEL` (deprecated) > returned as-is
 
-#### Grok 兼容层
+#### Grok compatibility layer
 
-通过 `CLAUDE_CODE_USE_GROK=1` 启用。自定义模型映射支持 xAI Grok API。
+Enabled with `CLAUDE_CODE_USE_GROK=1`. Custom model mapping supporting the xAI Grok API.
 
-- **`src/services/api/grok/`** — client、模型映射
+- **`src/services/api/grok/`** — client, model mapping
 
-详见各兼容层的 docs 文档。
+See the docs for each compatibility layer for details.
 
-### 穷鬼模式（Budget Mode）
+### Budget Mode ("poor mode")
 
-- 通过 `/poor` 命令切换，持久化到 `settings.json`。
-- 启用后跳过 `extract_memories`、`prompt_suggestion` 和 `verification_agent`，显著减少 token 消耗。
-- 实现在 `src/commands/poor/poorMode.ts`。
+- Toggled with the `/poor` command and persisted to `settings.json`.
+- When enabled it skips `extract_memories`, `prompt_suggestion` and `verification_agent`, significantly reducing token consumption.
+- Implemented in `src/commands/poor/poorMode.ts`.
 
 ### Stubbed/Deleted Modules
 
 | Module | Status |
 |--------|--------|
-| Computer Use (`@ant/*`) | Restored — macOS + Windows + Linux（后端完整度不一） |
-| `*-napi` packages | 全部已恢复/实现：`audio-capture-napi`、`image-processor-napi` 已恢复；`color-diff-napi` 完整；`modifiers-napi`（macOS FFI）；`url-handler-napi`（环境变量+CLI） |
-| Voice Mode | Restored — Push-to-Talk 语音输入（需 Anthropic OAuth） |
-| OpenAI/Gemini/Grok 兼容层 | Restored |
-| Remote Control Server | Restored — 自托管 RCS + Web UI |
-| `packages/shell/`, `packages/swarm/`, `packages/mcp-server/`, `packages/cc-knowledge/` | Removed — 功能合并或废弃 |
+| Computer Use (`@ant/*`) | Restored — macOS + Windows + Linux (backend completeness varies) |
+| `*-napi` packages | All restored/implemented: `audio-capture-napi` and `image-processor-napi` restored; `color-diff-napi` complete; `modifiers-napi` (macOS FFI); `url-handler-napi` (environment variables + CLI) |
+| Voice Mode | Restored — push-to-talk voice input (requires Anthropic OAuth) |
+| OpenAI/Gemini/Grok compatibility layers | Restored |
+| Remote Control Server | Restored — self-hosted RCS + Web UI |
+| `packages/shell/`, `packages/swarm/`, `packages/mcp-server/`, `packages/cc-knowledge/`, `packages/weixin/` | Removed — functionality merged or deprecated |
 | Analytics / GrowthBook / Sentry | Empty implementations |
-| Magic Docs / LSP Server | Restored — Magic Docs 自动更新 + LSP 服务器管理器 |
-| Plugins / Marketplace | Restored — 插件安装/卸载/启用/禁用 + Marketplace 浏览 |
+| Magic Docs / LSP Server | Restored — Magic Docs auto-update + LSP server manager |
+| Plugins / Marketplace | Restored — plugin install/uninstall/enable/disable + marketplace browsing |
 | MCP OAuth | Simplified |
 
 ### Key Type Files
@@ -292,20 +292,20 @@ Feature flags control which functionality is enabled at runtime. 代码中统一
 
 ## Testing
 
-- **框架**: `bun:test`（内置断言 + mock）
-- **单元测试**: 就近放置于 `src/**/__tests__/`，文件名 `<module>.test.ts`
-- **集成测试**: `tests/integration/` — 6 个文件（cli-arguments, context-build, message-pipeline, tool-chain, autonomy-lifecycle-user-flow, dependency-overrides）
-- **共享 mock/fixture**: `tests/mocks/`（api-responses, file-system, fixtures/）
-- **命名**: `describe("functionName")` + `test("behavior description")`，英文
-- **包测试**: `packages/` 下各包也有独立测试（如 `color-diff-napi` 11 tests）
+- **Framework**: `bun:test` (built-in assertions + mock)
+- **Unit tests**: colocated in `src/**/__tests__/`, file name `<module>.test.ts`
+- **Integration tests**: `tests/integration/` — 6 files (cli-arguments, context-build, message-pipeline, tool-chain, autonomy-lifecycle-user-flow, dependency-overrides)
+- **Shared mocks/fixtures**: `tests/mocks/` (api-responses, file-system, fixtures/)
+- **Naming**: `describe("functionName")` + `test("behavior description")`, in English
+- **Package tests**: packages under `packages/` also have their own tests (e.g. 11 tests for `color-diff-napi`)
 
-### Mock 使用规范
+### Mock Usage Rules
 
-**只 mock 有副作用的依赖链，不 mock 纯函数/纯数据模块。**
+**Only mock dependency chains that have side effects; do not mock pure functions or pure-data modules.**
 
-被迫 mock 的根源：`log.ts` / `debug.ts` → `bootstrap/state.ts`（模块级 `realpathSync` / `randomUUID` 副作用）。必须 mock 的模块：`log.ts`、`debug.ts`、`bun:bundle`、`settings/settings.js`、`config.ts`、`auth.ts`、第三方网络库。
+The root cause of forced mocking: `log.ts` / `debug.ts` → `bootstrap/state.ts` (module-level `realpathSync` / `randomUUID` side effects). Modules that must be mocked: `log.ts`, `debug.ts`, `bun:bundle`, `settings/settings.js`, `config.ts`, `auth.ts`, third-party network libraries.
 
-**`log.ts` 和 `debug.ts` 使用共享 mock**（`tests/mocks/log.ts` / `tests/mocks/debug.ts`），不要在测试文件中内联 mock 定义。使用方式：
+**`log.ts` and `debug.ts` use shared mocks** (`tests/mocks/log.ts` / `tests/mocks/debug.ts`); do not inline mock definitions in test files. Usage:
 
 ```ts
 import { logMock } from "../../../tests/mocks/log";
@@ -315,36 +315,36 @@ import { debugMock } from "../../../../tests/mocks/debug";
 mock.module("src/utils/debug.ts", debugMock);
 ```
 
-源文件导出变更时只需更新 `tests/mocks/` 下的对应文件，不需要逐个修改测试。
+When the exports of a source file change, only the matching file under `tests/mocks/` needs updating; there is no need to modify tests one by one.
 
-不要 mock：纯函数模块（`errors.ts`、`stringUtils.js`）、mock 值与真实实现相同的模块、mock 路径与实际 import 不匹配的模块。
+Do not mock: pure-function modules (`errors.ts`, `stringUtils.js`), modules whose mock value equals the real implementation, and modules whose mock path does not match the actual import.
 
-路径规则：统一用 `.ts` 扩展名 + `src/*` 别名路径，禁止双重 mock 同一模块。
+Path rule: always use the `.ts` extension + the `src/*` alias path, and never double-mock the same module.
 
-#### 跨文件 mock 污染（process-global `mock.module`）
+#### Cross-file mock pollution (process-global `mock.module`)
 
-**Bun 的 `mock.module` 是进程全局的（last-write-wins），不是 per-file 隔离的。** 一个测试文件的 `mock.module` 会污染同一进程中所有其他测试文件的 `require`/`import`。
+**Bun's `mock.module` is process-global (last-write-wins), not isolated per file.** A `mock.module` in one test file pollutes the `require`/`import` of all other test files in the same process.
 
-**关键事实（Bun 1.x 实测验证）：**
-- 测试文件执行顺序**不是严格字母序**，不要假设文件 A 一定在文件 B 之前执行。
-- `mock.module` 在 `beforeAll` 内部调用时**不会被提升**（hoist），但仍会污染后续加载的文件。
-- `require()` 和 `import()` 共享同一模块注册表，`mock.module` 对两者都生效。
-- 一个模块一旦被某个文件的 `mock.module` 替换，同一进程中所有后续 `require`/`import` 都会返回 mock 值，即使调用方使用不同的 specifier 路径。
+**Key facts (verified on Bun 1.x):**
+- The execution order of test files is **not strictly alphabetical**; do not assume file A always runs before file B.
+- `mock.module` called inside `beforeAll` is **not hoisted**, but it still pollutes files loaded afterwards.
+- `require()` and `import()` share the same module registry, and `mock.module` takes effect for both.
+- Once a module is replaced by some file's `mock.module`, every later `require`/`import` in the same process returns the mock value, even if the caller uses a different specifier path.
 
-**核心规则：不要 mock 被测模块的上层业务模块。**
+**Core rule: do not mock the upper-level business module of the module under test.**
 
-错误做法（会污染同目录的 `api.test.ts`）：
+Wrong (pollutes the `api.test.ts` in the same directory):
 ```ts
-// launchSchedule.test.ts — 直接 mock 源 API 模块 ❌
+// launchSchedule.test.ts — mocks the source API module directly ❌
 mock.module('src/commands/schedule/triggersApi.js', () => ({
   listTriggers: listTriggersMock,
   // ...
 }))
 ```
 
-正确做法（mock 底层 HTTP 层，不污染业务模块）：参考 `launchSkillStore.test.ts`、`launchVault.test.ts` 的模式。
+Right (mock the underlying HTTP layer, do not pollute business modules): follow the pattern in `launchSkillStore.test.ts` and `launchVault.test.ts`.
 ```ts
-// launchSchedule.test.ts — mock axios 而非 triggersApi ✅
+// launchSchedule.test.ts — mock axios instead of triggersApi ✅
 import { setupAxiosMock } from '../../../../tests/mocks/axios.js'
 
 const axiosHandle = setupAxiosMock()
@@ -355,70 +355,70 @@ beforeAll(() => { axiosHandle.useStubs = true })
 afterAll(() => { axiosHandle.useStubs = false })
 ```
 
-**判断标准：** 如果目录下同时有 `launch*.test.ts`（集成测试）和 `api.test.ts`（回归测试），`launch*.test.ts` 必须 mock axios 而非源 API 模块。`api.test.ts` 需要测试真实 API 模块的 HTTP 方法/URL/错误处理逻辑，被 mock 后就无法测试。
+**Criterion:** if a directory has both `launch*.test.ts` (integration tests) and `api.test.ts` (regression tests), `launch*.test.ts` must mock axios rather than the source API module. `api.test.ts` needs to test the HTTP method/URL/error handling of the real API module, which cannot be tested once it is mocked.
 
-**排查 mock 污染的方法：**
-1. 单独运行可疑文件确认其通过：`bun test path/to/suspect.test.ts`
-2. 与同目录其他文件一起运行定位污染源：`bun test path/to/__tests__/`
-3. 在两个文件中各加 `console.error('[file] milestone')` 追踪实际执行顺序
-4. 检查 `mock.module` 的 specifier 是否与同目录其他测试的 `require`/`import` 路径解析到同一模块
+**How to track down mock pollution:**
+1. Run the suspect file alone to confirm it passes: `bun test path/to/suspect.test.ts`
+2. Run it together with the other files in the same directory to locate the polluter: `bun test path/to/__tests__/`
+3. Add `console.error('[file] milestone')` in both files to trace the real execution order
+4. Check whether the `mock.module` specifier resolves to the same module as the `require`/`import` paths of the other tests in the directory
 
-### 类型检查
+### Type Checking
 
-项目使用 TypeScript strict 模式，**tsc 必须零错误**。每次修改后运行：
+The project uses TypeScript strict mode, and **tsc must report zero errors**. Run after every change:
 
 ```bash
 bun run precheck
 ```
 
-**类型规范**：
-- 生产代码禁止 `as any`；测试文件中 mock 数据可用 `as any`
-- 类型不匹配优先用 `as unknown as SpecificType` 双重断言，或补充 interface
-- 未知结构对象用 `Record<string, unknown>` 替代 `any`
-- 联合类型用类型守卫（type guard）收窄，不要强转
-- `msg.request` 属性访问：`const req = msg.request as Record<string, unknown>`
-- Ink `color` prop：用 `as keyof Theme` 而非 `as any`
+**Type conventions**:
+- No `as any` in production code; mock data in test files may use `as any`
+- For type mismatches, prefer the double assertion `as unknown as SpecificType`, or add an interface
+- Use `Record<string, unknown>` instead of `any` for objects of unknown structure
+- Narrow union types with type guards; do not force-cast
+- `msg.request` property access: `const req = msg.request as Record<string, unknown>`
+- Ink `color` prop: use `as keyof Theme` instead of `as any`
 
 ## Working with This Codebase
 
-- **precheck must pass** — `bun run precheck`（typecheck + lint fix + test）必须零错误，任何修改都不能引入新的类型/lint/测试错误。
-- **Feature flags** — 默认全部关闭（`feature()` 返回 `false`）。Dev/build 各有自己的默认启用列表。不要在 `cli.tsx` 中重定义 `feature` 函数。
+- **precheck must pass** — `bun run precheck` (typecheck + lint fix + test) must have zero errors; no change may introduce new type/lint/test errors.
+- **Feature flags** — all off by default (`feature()` returns `false`). Dev/build each have their own default-enabled lists. Do not redefine the `feature` function in `cli.tsx`.
 - **React Compiler output** — Components have decompiled memoization boilerplate (`const $ = _c(N)`). This is normal.
-- **`bun:bundle` import** — `import { feature } from 'bun:bundle'` 是 Bun 内置模块，由运行时/构建器解析。不要用自定义函数替代它。**`feature()` 只能直接用在 `if` 语句或三元表达式的条件位置**（Bun 编译器限制），不能赋值给变量、不能放在箭头函数体里、不能作为 `&&` 链的一部分。正确：`if (feature('X')) {}` 或 `feature('X') ? a : b`。
+- **`bun:bundle` import** — `import { feature } from 'bun:bundle'` is a Bun built-in module resolved by the runtime/bundler. Do not replace it with a custom function. **`feature()` may only be used directly in the condition position of an `if` statement or a ternary expression** (a Bun compiler limitation); it cannot be assigned to a variable, placed in an arrow function body, or used as part of an `&&` chain. Right: `if (feature('X')) {}` or `feature('X') ? a : b`.
 - **`src/` path alias** — tsconfig maps `src/*` to `./src/*`. Imports like `import { ... } from 'src/utils/...'` are valid.
-- **MACRO defines** — 集中管理在 `scripts/defines.ts`。Dev mode 通过 `bun -d` 注入，build 通过 `Bun.build({ define })` 注入。修改版本号等常量只改这个文件。
-- **构建产物兼容 Node.js** — `build.ts` 会自动后处理 `import.meta.require`，产物可直接用 `node dist/cli.js` 运行。
-- **Biome 配置** — 42 条 lint 规则因 decompiled 代码被关闭，仅保留 `recommended` 基线。格式化覆盖全项目（`src/`、`scripts/`、`packages/`，含 `packages/@ant/`）。`.tsx` 文件用 120 行宽 + 强制分号；其他文件 80 行宽 + 按需分号。JSON 格式化已启用。`.editorconfig` 与 Biome 配置对齐（2-space 缩进）。修改任何代码后应运行 `bun run precheck` 确认无类型/lint/格式/测试问题，pre-commit hook 会自动拦截不合格提交。
-- **tsc 与 Biome 冲突处理** — 当 tsc 要求声明属性（赋值使用）但 biome 报 `noUnusedPrivateClassMembers`（只写不读）时，用 `// biome-ignore lint/correctness/noUnusedPrivateClassMembers: <原因>` 抑制 lint 警告，保留类型声明。`biome ci` 必须零 warnings。
-- **`@ts-expect-error` 维护** — 只在下方代码确实有类型错误时保留 `@ts-expect-error`。如果类型系统已更新导致 directive 变为 unused（TS2578），直接移除注释。MACRO 替换产生的永假比较（如 `'production' === 'development'`）仍需保留 `@ts-expect-error`。
-- **Ink 框架在 `packages/@ant/ink/`** — 不是 `src/ink/`（该目录不存在）。Ink 相关的组件、hooks、keybindings 都在 packages 中。
-- **Provider 优先级** — `modelType` 参数 > 环境变量 > 默认 `firstParty`。新增 provider 需在 `src/utils/model/providers.ts` 注册。
+- **MACRO defines** — managed centrally in `scripts/defines.ts`. Dev mode injects them via `bun -d`, and the build via `Bun.build({ define })`. To change constants such as the version number, edit only this file.
+- **Build output is Node.js compatible** — `build.ts` post-processes `import.meta.require` automatically, so the output can run directly with `node dist/cli.js`.
+- **Biome configuration** — 42 lint rules are turned off because of the decompiled code; only the `recommended` baseline is kept. Formatting covers the whole project (`src/`, `scripts/`, `packages/`, including `packages/@ant/`). `.tsx` files use a 120-column width + mandatory semicolons; other files use an 80-column width + semicolons as needed. JSON formatting is enabled. `.editorconfig` is aligned with the Biome config (2-space indent). After changing any code, run `bun run precheck` to confirm there are no type/lint/format/test problems; the pre-commit hook automatically blocks non-compliant commits.
+- **Resolving tsc vs. Biome conflicts** — when tsc requires a declared property (used via assignment) but biome reports `noUnusedPrivateClassMembers` (write-only, never read), suppress the lint warning with `// biome-ignore lint/correctness/noUnusedPrivateClassMembers: <reason>` and keep the type declaration. `biome ci` must report zero warnings.
+- **`@ts-expect-error` maintenance** — keep `@ts-expect-error` only when the code below really has a type error. If a type-system update turns the directive into an unused one (TS2578), just remove the comment. Always-false comparisons produced by MACRO substitution (such as `'production' === 'development'`) still need `@ts-expect-error`.
+- **The Ink framework lives in `packages/@ant/ink/`** — not in `src/ink/` (that directory does not exist). Ink-related components, hooks and keybindings are all in the packages.
+- **Provider priority** — `modelType` parameter > environment variable > default `firstParty`. A new provider must be registered in `src/utils/model/providers.ts`.
 
 ## Design Context
 
-Impeccable 设计上下文保存在 `.impeccable.md` 中。设计 Web UI（RCS 控制面板、文档站、着陆页）时必须参考该文件。
+The Impeccable design context is kept in `.impeccable.md`. Consult that file when designing Web UI (RCS control panel, docs site, landing page).
 
-### 核心设计原则
+### Core design principles
 
-1. **Considered over clever** — 每个设计选择都应感觉有意为之，而非追逐潮流
-2. **Warmth through subtlety** — 通过橙色色调的中性色、留白布局、有温度的文案来传达温暖
-3. **Density with clarity** — 技术用户需要信息密度，但不能混乱
-4. **Community voice** — 设计应感觉是由使用者创造的，而非遥远的设计团队
-5. **Anthropic's shadow** — 遵循 Anthropic 的设计直觉：干净的布局、充足的间距、温暖的色温
+1. **Considered over clever** — every design choice should feel deliberate, not trend-chasing
+2. **Warmth through subtlety** — convey warmth through orange-tinted neutrals, airy layouts and friendly copy
+3. **Density with clarity** — technical users need information density, but it must not become cluttered
+4. **Community voice** — the design should feel made by its users, not by a distant design team
+5. **Anthropic's shadow** — follow Anthropic's design instincts: clean layouts, generous spacing, warm color temperature
 
-### 品牌色
+### Brand colors
 
-- 主色：Claude Orange `#D77757`（terra cotta）
-- 辅色：Claude Blue `#5769F7`
-- 暗色模式使用温暖的深色表面（非冷蓝黑色）
+- Primary: Claude Orange `#D77757` (terra cotta)
+- Secondary: Claude Blue `#5769F7`
+- Dark mode uses warm dark surfaces (not cold blue-black)
 
-### 目标用户
+### Target users
 
-技术团队/企业，在专业工作流中使用 AI 辅助编程。友好的开源社区氛围，非企业 SaaS 风格。
+Technical teams / enterprises using AI-assisted programming in professional workflows. A friendly open-source community feel, not an enterprise-SaaS style.
 
-### 视觉参考
+### Visual references
 
-Anthropic 公司的设计风格 — 干净、考究、温暖的底色。大量留白，以排版为核心。避免 AI 产品常见的设计套路（渐变文字、玻璃态、霓虹色）。
+Anthropic's own design style — clean, considered, with a warm undertone. Generous whitespace, typography-centered. Avoid common AI-product design clichés (gradient text, glassmorphism, neon colors).
 
 ## Owner Rules (always follow)
 

@@ -1,40 +1,36 @@
 # cloud-artifacts
 
-> **生产出口**：`https://cloud-artifacts.claude-code-best.win`
+> A standalone Cloudflare Worker + R2 service for hosting HTML artifacts.
 >
-> 服务端（CLI / RCS 后台）通过单一 bearer token 上传 HTML，得到一个公开可访问的 URL。
-> 文件到期由 R2 lifecycle rule 自动删除（默认 7 天，最长 30 天）。
+> A server (CLI / RCS backend) uploads HTML with a single bearer token and gets back a publicly reachable URL.
+> Files are deleted automatically by an R2 lifecycle rule when they expire (7 days by default, 30 days at most).
+
+Throughout this README, `$WORKER_URL` stands for the public origin of your deployment (the `PUBLIC_URL` in `wrangler.toml`).
 
 ## Quickstart
 
 ```bash
-# 上传一份 html（默认随机 ID + 7 天 TTL）
+# Upload an html file (random ID + 7-day TTL by default)
 echo '<h1>hello</h1>' > /tmp/t.html
-curl -X POST "https://cloud-artifacts.claude-code-best.win/upload" \
+curl -X POST "$WORKER_URL/upload" \
   -H "Authorization: Bearer $TOKEN" \
   -H "Content-Type: text/html" \
   --data-binary @/tmp/t.html
 # {"id":"V1StGXR8_Z5jdHi6B-myT",
-#  "url":"https://cloud-artifacts.claude-code-best.win/7d/V1StGXR8_Z5jdHi6B-myT.html",
+#  "url":"<WORKER_URL>/7d/V1StGXR8_Z5jdHi6B-myT.html",
 #  "expiresAt":"2026-06-27T10:00:00.000Z"}
 
-# 任何人拿到 url 都能访问
-curl "https://cloud-artifacts.claude-code-best.win/7d/V1StGXR8_Z5jdHi6B-myT.html"
+# Anyone with the url can open it
+curl "$WORKER_URL/7d/V1StGXR8_Z5jdHi6B-myT.html"
 ```
 
-## 架构
+## Architecture
 
 ```
-                           ┌──────────────────────────┐
-客户端  --POST /upload----▶│  Deno Deploy 边缘代理     │
-                          │  cloud-artifacts.ccb.win  │
-                          └────────────┬─────────────┘
-                                       │ 透传
-                                       ▼
                           ┌──────────────────────────┐
-                          │  Cloudflare Worker        │
-                          │  - 鉴权 + MIME + 大小校验  │
-                          │  - ttl∈{7,30} + hash 校验 │
+client  --POST /upload---▶│  Cloudflare Worker        │
+                          │  - auth + MIME + size check│
+                          │  - ttl∈{7,30} + hash check │
                           │  - R2 put / R2 get        │
                           └────────────┬─────────────┘
                                        │
@@ -48,155 +44,153 @@ curl "https://cloud-artifacts.claude-code-best.win/7d/V1StGXR8_Z5jdHi6B-myT.html
                           └──────────────────────────┘
 ```
 
-- **POST /upload**：Bearer 鉴权 → text/html 校验 → 10MB 上限 → ttl ∈ {7,30} → R2 put
-- **GET /<7d\|30d>/<id>.html**：Worker 从 R2 读 → 返回 `text/html; charset=utf-8` + `Cache-Control: public, max-age=86400`
-- **TTL**：R2 prefix + lifecycle rule 实现，Worker 不参与过期处理（零额外代码）
-- **覆盖**：指定 `?hash=` 时，先删 `7d/<hash>.html` 和 `30d/<hash>.html` 旧 key，再写新 key
-- **ID**：默认 `nanoid(21)`（126 bit 熵），可指定 `?hash=<custom-id>`
+- **POST /upload**: Bearer auth → text/html check → 10MB limit → ttl ∈ {7,30} → R2 put
+- **GET /<7d\|30d>/<id>.html**: the Worker reads from R2 → returns `text/html; charset=utf-8` + `Cache-Control: public, max-age=86400`
+- **TTL**: implemented with an R2 prefix + lifecycle rule; the Worker takes no part in expiry (zero extra code)
+- **Overwrite**: when `?hash=` is given, first delete the old `7d/<hash>.html` and `30d/<hash>.html` keys, then write the new key
+- **ID**: `nanoid(21)` by default (126 bits of entropy); a custom one can be given with `?hash=<custom-id>`
 
-## 为什么套一层 Deno Deploy
+## Putting a proxy in front (optional)
 
-国内直连 Cloudflare Workers 边缘节点延迟高、丢包严重（DNS 污染 + 路由问题）。在 `cloud-artifacts.claude-code-best.win` 上套 Deno Deploy 边缘代理后：
+If the Worker's edge is hard to reach from some networks, you can put your own edge proxy (for example Deno Deploy) in front of it and use that proxy's origin as `PUBLIC_URL`.
 
-- 国内访问延迟显著降低（Deno Deploy 在国内可达性好）
-- POST/GET body 完整透传
-- **副作用**：Deno Deploy 代理会把上游 HTTP status code 抹平为 200（但 body 内的 `{error: ...}` 字段完整保留）。客户端若依赖 status code 判断错误类型，应改为解析 body 中的 `error` 字段。直连 Worker 自身（如 `*.workers.dev`）时 status code 正常透传。
+- Request and response bodies must be passed through unchanged.
+- **Side effect to watch for**: a proxy may flatten the upstream HTTP status code to 200 (the `{error: ...}` field in the body is preserved). A client that relies on the status code to tell error types apart should parse the `error` field in the body instead. When talking to the Worker directly (for example `*.workers.dev`), status codes pass through normally.
 
 ## API
 
 ### `POST /upload`
 
-| Header / Query | 必填 | 说明 |
-|----------------|------|------|
-| `Authorization: Bearer <TOKEN>` | 是 | 与 Worker secret `TOKEN` 完全相等 |
-| `Content-Type: text/html` | 是 | 不接受其他类型 |
-| `?ttl=7\|30` | 否 | 默认 7，**只允许 7 或 30**（与 R2 lifecycle prefix 对应） |
-| `?hash=<custom-id>` | 否 | 自定义 ID，校验 `^[A-Za-z0-9_-]{1,128}$`；指定时覆盖同 ID 旧版本 |
-| body | 是 | 原始 HTML（`--data-binary @file.html`），≤10MB |
+| Header / Query | Required | Description |
+|----------------|----------|-------------|
+| `Authorization: Bearer <TOKEN>` | yes | Must exactly equal the Worker secret `TOKEN` |
+| `Content-Type: text/html` | yes | No other type is accepted |
+| `?ttl=7\|30` | no | Defaults to 7; **only 7 or 30 are allowed** (they correspond to the R2 lifecycle prefixes) |
+| `?hash=<custom-id>` | no | Custom ID, validated against `^[A-Za-z0-9_-]{1,128}$`; when given, an older version with the same ID is overwritten |
+| body | yes | Raw HTML (`--data-binary @file.html`), ≤10MB |
 
-成功 200：
+Success (200):
 
 ```json
 {
   "id": "V1StGXR8_Z5jdHi6B-myT",
-  "url": "https://cloud-artifacts.claude-code-best.win/7d/V1StGXR8_Z5jdHi6B-myT.html",
+  "url": "<WORKER_URL>/7d/V1StGXR8_Z5jdHi6B-myT.html",
   "expiresAt": "2026-06-27T10:00:00.000Z"
 }
 ```
 
-错误（统一 `{ "error": "<code>" }`，状态码见下）：
+Errors (always `{ "error": "<code>" }`; status codes below):
 
-| 状态码（直连） | error code | 触发条件 |
+| Status (direct) | error code | Trigger |
 |--------|------------|----------|
-| 400 | `invalid_ttl` | `ttl` 非 7 或 30 |
-| 400 | `invalid_hash` | `hash` 不匹配 `^[A-Za-z0-9_-]{1,128}$` |
-| 401 | `unauthorized` | 缺 Authorization / token 不匹配 |
-| 404 | `not_found` | 非 `/upload` 路径或 GET 路径不匹配 `/<7d\|30d>/<id>.html` |
+| 400 | `invalid_ttl` | `ttl` is not 7 or 30 |
+| 400 | `invalid_hash` | `hash` does not match `^[A-Za-z0-9_-]{1,128}$` |
+| 401 | `unauthorized` | Missing Authorization / token mismatch |
+| 404 | `not_found` | Path is not `/upload`, or the GET path does not match `/<7d\|30d>/<id>.html` |
 | 413 | `payload_too_large` | body > 10MB |
-| 415 | `unsupported_media_type` | Content-Type 非 `text/html` |
+| 415 | `unsupported_media_type` | Content-Type is not `text/html` |
 
-> **经 Deno Deploy 代理时**：以上所有错误状态码统一返回 **200**，但 body 仍是上表中的 `{error: ...}` JSON。客户端解析逻辑应以 body 的 `error` 字段为准。
+> **Behind a status-flattening proxy**: every error status above comes back as **200**, but the body is still the `{error: ...}` JSON from the table. Client parsing logic should rely on the `error` field in the body.
 
 ### `GET /<ttl-prefix>/<id>.html`
 
-`ttl-prefix` 只能是 `7d` 或 `30d`（其他路径返回 404/not_found）。返回 `text/html; charset=utf-8` + `Cache-Control: public, max-age=86400`。任何人拿到 URL 都可访问，hash 即秘密。
+`ttl-prefix` must be `7d` or `30d` (other paths return 404/not_found). Returns `text/html; charset=utf-8` + `Cache-Control: public, max-age=86400`. Anyone with the URL can open it; the hash is the secret.
 
-## 示例
+## Examples
 
 ```bash
-# 默认随机 ID + 7 天
-curl -X POST "https://cloud-artifacts.claude-code-best.win/upload" \
+# Random ID + 7 days (default)
+curl -X POST "$WORKER_URL/upload" \
   -H "Authorization: Bearer $TOKEN" \
   -H "Content-Type: text/html" \
   --data-binary @/tmp/t.html
 
-# 自定义 hash + 30 天（再次上传同 hash 覆盖）
-curl -X POST "https://cloud-artifacts.claude-code-best.win/upload?ttl=30&hash=my-report" \
+# Custom hash + 30 days (uploading the same hash again overwrites it)
+curl -X POST "$WORKER_URL/upload?ttl=30&hash=my-report" \
   -H "Authorization: Bearer $TOKEN" \
   -H "Content-Type: text/html" \
   --data-binary @/tmp/report.html
 
-# 访问
-curl "https://cloud-artifacts.claude-code-best.win/7d/V1StGXR8_Z5jdHi6B-myT.html"
+# Fetch
+curl "$WORKER_URL/7d/V1StGXR8_Z5jdHi6B-myT.html"
 ```
 
-## 覆盖语义
+## Overwrite semantics
 
-指定 `?hash=` 时：
+When `?hash=` is given:
 
-1. 校验 hash 字符集（`^[A-Za-z0-9_-]{1,128}$`）
-2. 删除 `7d/<hash>.html` 和 `30d/<hash>.html` 两个 key（R2 delete 不存在的 key 不报错，零成本）
-3. 按 `?ttl=` 写入新 key
-4. 返回新的 `expiresAt`
+1. Validate the hash character set (`^[A-Za-z0-9_-]{1,128}$`)
+2. Delete both the `7d/<hash>.html` and `30d/<hash>.html` keys (R2 delete does not error on a missing key, and costs nothing)
+3. Write the new key according to `?ttl=`
+4. Return the new `expiresAt`
 
-不指定 `?hash=` 时：用 `nanoid(21)` 随机 ID，几乎不可能碰撞，不做碰撞检查。
+When `?hash=` is not given: a random `nanoid(21)` ID is used; collisions are practically impossible, so no collision check is done.
 
-## 部署
+## Deployment
 
-前置：本机已 `npx wrangler login` 登录目标 Cloudflare 账号。Deno Deploy 代理层由部署者另配（CNAME `cloud-artifacts.<your-domain>` → `alias.deno.net`，并在 Deno Deploy 项目里把上游设为 `https://<worker>.<account>.workers.dev`）。
+Prerequisite: you have run `npx wrangler login` for the target Cloudflare account. Any proxy layer in front of the Worker is configured separately by the deployer.
 
 ```bash
 cd packages/cloud-artifacts
-bun install                          # 在 monorepo 根执行也行（workspace 自动识别）
+bun install                          # running it at the monorepo root also works (workspace is detected automatically)
 
-cp .dev.vars.example .dev.vars       # 填本地 dev 用的 TOKEN（仅 wrangler dev 读）
-bun run setup                        # 创建 bucket + 加 lifecycle rule + 设生产 TOKEN secret
+cp .dev.vars.example .dev.vars       # fill in the TOKEN for local dev (read only by wrangler dev)
+bun run setup                        # create the bucket + add the lifecycle rules + set the production TOKEN secret
 
-# 绑 Worker custom domain（如要在 Cloudflare 直连域名上访问）：
+# Bind a Worker custom domain (if you want to serve from a domain directly on Cloudflare):
 #   Dashboard: Workers & Pages > cloud-artifacts > Settings > Domains & Routes > Add > Custom Domain
 
-# 改 wrangler.toml 中 [vars] PUBLIC_URL 为对外出口域名（生产用 https://cloud-artifacts.claude-code-best.win）
+# Set [vars] PUBLIC_URL in wrangler.toml to the public origin (your custom domain or workers.dev URL)
 
 bun run deploy
 ```
 
-## 测试
+## Testing
 
-`scripts/test.sh` 覆盖 7 个错误用例 + 3 个成功用例 + R2 写入验证。**支持双模式**：直连 Worker 时按 HTTP status code 断言；经 Deno Deploy 代理（status 抹平为 200）时自动按 body 的 `error` 字段断言（标记 `[via body]`）。
+`scripts/test.sh` covers 7 error cases + 3 success cases + an R2 write verification. **It supports two modes**: when talking to the Worker directly it asserts on the HTTP status code; behind a proxy that flattens status to 200 it automatically asserts on the `error` field in the body (marked `[via body]`).
 
 ```bash
-WORKER_URL=https://cloud-artifacts.claude-code-best.win \
+WORKER_URL=<your-worker-origin> \
 TOKEN=<your-token> \
 bash scripts/test.sh
 ```
 
-## 本地开发
+## Local development
 
 ```bash
 cp .dev.vars.example .dev.vars
-# 编辑 .dev.vars 填 TOKEN
+# edit .dev.vars and fill in TOKEN
 
-bun run dev                          # wrangler dev，启动本地 Miniflare + 本地 R2 模拟
+bun run dev                          # wrangler dev, starts local Miniflare + a local R2 simulation
 curl -X POST "http://localhost:8787/upload" \
   -H "Authorization: Bearer <token>" \
   -H "Content-Type: text/html" \
   --data-binary @/tmp/t.html
 ```
 
-## 安全注意事项
+## Security notes
 
-- **TOKEN 是上传侧唯一鉴权**：值泄露后任何人可上传/覆盖。生产应使用 ≥32 字符的随机串，定期轮换（`wrangler secret put TOKEN` 即时生效，无需 redeploy）。
-- **GET 完全公开**：URL 形如 `/<ttl>/<id>.html`，hash（21 字符 nanoId）即唯一秘密。不要把 URL 贴到公开频道再期望它"私密"。
-- **覆盖即写**：知道 hash 的任何持 token 者都能覆盖该 ID 的内容。若需要"创建后不可改"语义，应在客户端自行约束（不传 `?hash=`）。
-- **不校验 HTML 内容**：上传的 html 会被原样返回，浏览器渲染时会执行其中的 `<script>`。本服务定位是"托管自己产出的 html"，不要作为任意用户上传入口。
-- **TTL 上限 30 天**：lifecycle rule 是 prefix 级全局规则，所有对象最多保留 30 天，无法延长。
+- **TOKEN is the only authentication on the upload side**: if the value leaks, anyone can upload/overwrite. In production use a random string of ≥32 characters and rotate it regularly (`wrangler secret put TOKEN` takes effect immediately, no redeploy needed).
+- **GET is fully public**: URLs look like `/<ttl>/<id>.html`, and the hash (a 21-character nanoid) is the only secret. Do not paste the URL into a public channel and expect it to stay "private".
+- **Overwrite is a write**: anyone holding the token who knows a hash can overwrite that ID's content. If you need "immutable after creation" semantics, enforce it on the client (do not pass `?hash=`).
+- **HTML content is not validated**: uploaded html is returned as-is, and the browser will execute any `<script>` in it. This service is meant for "hosting html you produced yourself" and must not be used as an upload endpoint for arbitrary users.
+- **TTL is capped at 30 days**: the lifecycle rule is a prefix-level global rule, so every object is kept for at most 30 days and this cannot be extended.
 
 ## Troubleshooting
 
-| 现象 | 原因 / 处理 |
-|------|-------------|
-| 所有请求返 HTTP 200 但业务出错 | 经 Deno Deploy 代理时正常现象，看 body 的 `error` 字段判断真实状态 |
-| `curl` 到 `*.workers.dev` 超时 | 国内 DNS 污染 + 路由问题，走 `cloud-artifacts.claude-code-best.win` 出口或挂代理 |
-| 响应 html 多一段 `<a href="/cdn-cgi/content...">` 和 `<script>` | Cloudflare 默认注入的 Browser Insights（RUM），不影响内容渲染。要纯净响应：dashboard → Workers & Pages → cloud-artifacts → 关 Web Analytics |
-| 上传 413 但文件不到 10MB | 检查 `Content-Length` header 是否被中间层改写；Worker 同时按 `Content-Length` 和 `arrayBuffer().byteLength` 双重校验 |
-| `?ttl=14` 返 400 | 设计如此，只允许 7 或 30（对应 R2 lifecycle prefix） |
-| `wrangler secret list` 看到 TOKEN 但上传 401 | token 值不一致。重新 `wrangler secret put TOKEN` 设正确值 |
+| Symptom | Cause / fix |
+|---------|-------------|
+| Every request returns HTTP 200 but the operation failed | Normal behind a status-flattening proxy; read the `error` field in the body for the real status |
+| The response html has an extra `<a href="/cdn-cgi/content...">` and `<script>` | Browser Insights (RUM) injected by Cloudflare by default; it does not affect rendering. For a clean response: dashboard → Workers & Pages → cloud-artifacts → turn off Web Analytics |
+| Upload returns 413 but the file is under 10MB | Check whether the `Content-Length` header was rewritten by an intermediary; the Worker validates both `Content-Length` and `arrayBuffer().byteLength` |
+| `?ttl=14` returns 400 | By design; only 7 or 30 are allowed (matching the R2 lifecycle prefixes) |
+| `wrangler secret list` shows TOKEN but uploads return 401 | The token values differ. Run `wrangler secret put TOKEN` again with the correct value |
 
-## 依赖
+## Dependencies
 
 - `wrangler` ^4 — Cloudflare Workers CLI
-- `nanoid` ^5 — ID 生成（纯 ESM，Worker 兼容）
+- `nanoid` ^5 — ID generation (pure ESM, Worker compatible)
 
-## 不被主 CLI 引用
+## Not referenced by the main CLI
 
-这是独立 Cloudflare Worker 服务，类似 `packages/remote-control-server/` 的定位。Monorepo 根 `package.json` 的 `workspaces: ["packages/*", ...]` 自动识别本包，但主 CLI 不会 import 它。
+This is a standalone Cloudflare Worker service, positioned like `packages/remote-control-server/`. The root `package.json` of the monorepo has `workspaces: ["packages/*", ...]`, which picks this package up automatically, but the main CLI never imports it.

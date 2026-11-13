@@ -1,30 +1,30 @@
-# Chrome Use — 浏览器自动化快速指南
+# Chrome Use — Browser Automation Quick Guide
 
-让 Claude Code 直接控制你的 Chrome 浏览器，用自然语言完成网页操作。
+Let Claude Code control your Chrome browser directly and perform web actions in natural language.
 
-## 快速开始（3 分钟）
+## Quick start (3 minutes)
 
-### 第一步：安装 Chrome 扩展
+### Step 1: Install the Chrome extension
 
-1. 下载扩展：https://github.com/hangwin/mcp-chrome/releases
-2. 解压 zip 文件
-3. 打开 Chrome 访问 `chrome://extensions/`
-4. 开启右上角「开发者模式」
-5. 点击「加载已解压的扩展程序」，选择解压后的文件夹
+1. Download the extension: https://github.com/hangwin/mcp-chrome/releases
+2. Unzip the zip file
+3. Open `chrome://extensions/` in Chrome
+4. Turn on "Developer mode" in the top right
+5. Click "Load unpacked" and choose the unzipped folder
 
-### 第二步：启动 Claude Code
+### Step 2: Start Claude Code
 
 ```bash
 bun run dev
-ccb # 或者 ccb 安装版也行
+ccb # or the installed ccb works too
 ```
 
-### 第三步：启用 Chrome MCP
+### Step 3: Enable the Chrome MCP
 
-1. 在 REPL 中输入 `/mcp` 打开 MCP 面板
-2. 找到 `mcp-chrome`，按空格键启用
-3. 按 Enter 确认
+1. Type `/mcp` in the REPL to open the MCP panel
+2. Find `mcp-chrome` and press the space bar to enable it
+3. Press Enter to confirm
 
-## 相关文档
+## Related docs
 
-- GitHub 仓库：https://github.com/hangwin/mcp-chrome
+- GitHub repository: https://github.com/hangwin/mcp-chrome

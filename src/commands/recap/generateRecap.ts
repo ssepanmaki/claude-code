@@ -25,7 +25,7 @@ const RECAP_PROMPT_EN =
   'The user stepped away and is coming back. Recap in under 40 words, 1-2 plain sentences, no markdown. Lead with the overall goal and current task, then the one next action. Skip root-cause narrative, fix internals, secondary to-dos, and em-dash tangents.'
 
 const RECAP_PROMPT_ZH =
-  '用户离开后回来了。用中文写 1-2 句话，不超过 60 字，无 markdown。先说明高层目标和当前任务，再说明下一步操作。跳过根因分析和次要待办。'
+  'The user has come back after being away. Write 1-2 sentences in English, no more than 40 words, no markdown. First state the high-level goal and the current task, then the next action. Skip root-cause analysis and minor to-dos.'
 
 export type RecapResult =
   | { kind: 'ok'; text: string }

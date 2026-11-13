@@ -1,28 +1,28 @@
 flowchart TB
-    START((输入)) --> CTX["Context 管理"]
+    START((Input)) --> CTX["Context management"]
     CTX --> PRE["Pre-sampling Hook"]
-    PRE --> LLM["LLM 流式输出"]
+    PRE --> LLM["LLM streaming output"]
     LLM --> TC{tool_use?}
 
-    TC --> |是| PERM{需权限?}
-    PERM --> |是| USER["👤 用户审批"]
+    TC --> |Yes| PERM{Permission needed?}
+    PERM --> |Yes| USER["👤 User approval"]
     USER --> |allow| TOOL_PRE
-    USER --> |deny| DENIED["拒绝"]
-    PERM --> |否| TOOL_PRE["Pre-tool Hook"]
-    TOOL_PRE --> EXEC["并发执行工具"]
+    USER --> |deny| DENIED["Denied"]
+    PERM --> |No| TOOL_PRE["Pre-tool Hook"]
+    TOOL_PRE --> EXEC["Run tools concurrently"]
     EXEC --> TOOL_POST["Post-tool Hook"]
     TOOL_POST --> CTX
     DENIED --> CTX
 
-    TC --> |否| POST["Post-sampling Hook"]
+    TC --> |No| POST["Post-sampling Hook"]
     POST --> STOP{"Stop Hook"}
-    STOP --> |不通过| CTX
-    STOP --> |通过| BUDGET{"Token Budget"}
-    BUDGET --> |继续| CTX
-    BUDGET --> |完成| DONE((完成))
+    STOP --> |Fail| CTX
+    STOP --> |Pass| BUDGET{"Token Budget"}
+    BUDGET --> |Continue| CTX
+    BUDGET --> |Done| DONE((Done))
 
-    subgraph SUB["子 Agent"]
-        FORK["AgentTool"] --> RECURSE["递归调用"]
+    subgraph SUB["Sub-agent"]
+        FORK["AgentTool"] --> RECURSE["Recursive call"]
     end
 
     EXEC -.-> FORK

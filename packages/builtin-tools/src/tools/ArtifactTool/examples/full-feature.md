@@ -1,58 +1,58 @@
-# 全功能 Markdown 测试
+# Full-feature Markdown test
 
-这份文档用于人工验证 `artifact` 工具对 `.md` 文件的上传、转换、代码高亮与 Mermaid 渲染是否正常。**直接把它传给 `artifact` 工具**（`file_path` 指向本文件），浏览器打开返回的 URL 即可对照下面的章节逐一确认。
+This document is for manually verifying that the `artifact` tool handles uploading, conversion, code highlighting and Mermaid rendering of `.md` files correctly. **Pass it straight to the `artifact` tool** (with `file_path` pointing at this file), then open the returned URL in a browser and check the sections below one by one.
 
-## 行内格式
+## Inline formatting
 
-正文段落里包含 **粗体**、*斜体*、~~删除线~~、`行内代码`、以及组合 **粗体 + _斜体_ + `code`**。还有 [一个链接](https://example.com) 指向 example.com。
+The body paragraph contains **bold**, *italic*, ~~strikethrough~~, `inline code`, and a combination **bold + _italic_ + `code`**. There is also [a link](https://example.com) pointing to example.com.
 
-支持中英文混排：Claude Orange `#D77757` 是 Anthropic 的主色。Emoji：🚀 ✅ 🎯。
+Mixed CJK/English text is supported: Claude Orange `#D77757` 是 Anthropic 的主色 (the primary color of Anthropic). Emoji: 🚀 ✅ 🎯.
 
-## 标题层级
+## Heading levels
 
-以下是 H2，再往下还有 H3 / H4 / H5 / H6：
+Below is H2, followed by H3 / H4 / H5 / H6:
 
-### H3 — 第三层
-#### H4 — 第四层
-##### H5 — 第五层
-###### H6 — 第六层
+### H3 — third level
+#### H4 — fourth level
+##### H5 — fifth level
+###### H6 — sixth level
 
-## 列表
+## Lists
 
-无序列表：
+Unordered list:
 
-- 第一项
-- 第二项
-  - 嵌套项 A
-  - 嵌套项 B
-    - 更深一层
-- 第三项
+- First item
+- Second item
+  - Nested item A
+  - Nested item B
+    - One level deeper
+- Third item
 
-有序列表：
+Ordered list:
 
-1. 第一步
-2. 第二步
-   1. 子步骤 2.1
-   2. 子步骤 2.2
-3. 第三步
+1. Step one
+2. Step two
+   1. Sub-step 2.1
+   2. Sub-step 2.2
+3. Step three
 
-任务列表（GFM）：
+Task list (GFM):
 
-- [x] 已完成项
-- [ ] 未完成项
-- [ ] 另一个未完成项
+- [x] Completed item
+- [ ] Open item
+- [ ] Another open item
 
-## 表格
+## Tables
 
-左对齐 / 居中 / 右对齐混合：
+Mixed left / center / right alignment:
 
-| 名称       | 类型     | 数量 | 备注           |
+| Name       | Type     | Qty  | Notes          |
 | ---------- | :------: | ---: | -------------- |
-| Claude     | 模型     |    1 | 推荐           |
-| Opus 4.7   | 模型     |    2 | 最强           |
-| Haiku 4.5  | 模型     |    3 | 最快           |
+| Claude     | Model    |    1 | Recommended    |
+| Opus 4.7   | Model    |    2 | Strongest      |
+| Haiku 4.5  | Model    |    3 | Fastest        |
 
-## 围栏代码块（语法高亮）
+## Fenced code blocks (syntax highlighting)
 
 TypeScript：
 
@@ -106,73 +106,73 @@ JSON：
 }
 ```
 
-## Mermaid 图表
+## Mermaid diagrams
 
-流程图：
+Flowchart:
 
 ```mermaid
 flowchart TD
-    A[用户输入] --> B{是否需要计划?}
-    B -- 是 --> C[进入 Plan 模式]
-    B -- 否 --> D[直接执行]
-    C --> E[用户审批]
+    A[User input] --> B{Plan needed?}
+    B -- Yes --> C[Enter Plan mode]
+    B -- No --> D[Execute directly]
+    C --> E[User approval]
     E --> D
-    D --> F[调用工具]
-    F --> G[返回结果]
+    D --> F[Call tools]
+    F --> G[Return result]
 ```
 
-时序图：
+Sequence diagram:
 
 ```mermaid
 sequenceDiagram
     participant U as User
     participant C as CLI
     participant A as API
-    U->>C: 发送消息
-    C->>A: 流式请求
-    A-->>C: 工具调用 delta
-    C->>U: 渲染权限提示
-    U->>C: 批准
-    C->>A: 继续流
-    A-->>C: 最终消息
-    C-->>U: 显示结果
+    U->>C: Send message
+    C->>A: Streaming request
+    A-->>C: Tool call delta
+    C->>U: Render permission prompt
+    U->>C: Approve
+    C->>A: Continue stream
+    A-->>C: Final message
+    C-->>U: Show result
 ```
 
-甘特图：
+Gantt chart:
 
 ```mermaid
 gantt
-    title 发布计划
+    title Release plan
     dateFormat  YYYY-MM-DD
-    section 工程
-    代码冻结     :done,    eng1, 2026-07-01, 7d
-    人工测试     :active,  eng2, after eng1, 5d
-    section 市场
-    文案撰写     :         mk1, 2026-07-03, 4d
-    正式发布     :         mk2, after eng2, 1d
+    section Engineering
+    Code freeze  :done,    eng1, 2026-07-01, 7d
+    Manual QA    :active,  eng2, after eng1, 5d
+    section Marketing
+    Copywriting  :         mk1, 2026-07-03, 4d
+    Launch       :         mk2, after eng2, 1d
 ```
 
-## 引用
+## Quotes
 
-> 这是一段引用文本。
-> 第二行继续。
+> This is a quoted passage.
+> The second line continues.
 
-> 嵌套引用：
+> Nested quote:
 >
-> > 这是更深层级。
+> > This is a deeper level.
 >
-> 回到外层。
+> Back to the outer level.
 
-## 水平线
+## Horizontal rule
 
 ---
 
-水平线之上。
+Above the horizontal rule.
 
-## 行内 HTML
+## Inline HTML
 
-直接写的 HTML 会被透传：<kbd>Ctrl</kbd> + <kbd>C</kbd>，<span style="color: #D77757">Claude Orange 文字</span>。
+HTML written directly is passed through: <kbd>Ctrl</kbd> + <kbd>C</kbd>, <span style="color: #D77757">Claude Orange text</span>.
 
-## 结论
+## Conclusion
 
-如果上面所有章节都正常显示，说明 artifact 工具的 Markdown 转换、代码高亮（highlight.js）、Mermaid 渲染均已就绪。
+If all the sections above display correctly, the artifact tool's Markdown conversion, code highlighting (highlight.js) and Mermaid rendering are all in place.

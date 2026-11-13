@@ -1,81 +1,85 @@
 # Remote Control Server (RCS)
 
-Remote Control Server 是 Claude Code 的远程控制后端，允许你通过浏览器 Web UI 远程监控和操作 Claude Code 会话。
+Remote Control Server is the remote-control backend for Claude Code. It lets you monitor and operate Claude Code sessions remotely from a browser Web UI.
 
-## 功能
+## Features
 
-- **会话管理** — 创建、监控、归档 Claude Code 会话
-- **实时消息流** — WebSocket / SSE 双向传输，实时查看对话和工具调用
-- **权限审批** — 在 Web UI 中审批 Claude Code 的工具权限请求
-- **多环境管理** — 注册多个运行环境，支持心跳和断线重连
-- **认证安全** — API Key + JWT 双层认证
+- **Session management** — create, monitor and archive Claude Code sessions
+- **Live message stream** — bidirectional WebSocket / SSE transport; watch conversations and tool calls in real time
+- **Permission approval** — approve Claude Code's tool permission requests in the Web UI
+- **Multi-environment management** — register several runtime environments, with heartbeat and reconnection
+- **Authentication** — two layers: API key + JWT
 
-## 快速开始
+## Quick start
 
-### Docker 部署（推荐）
+### Docker deployment (recommended)
+
+Build the image from the repository root, then run it:
 
 ```bash
+docker build -f packages/remote-control-server/Dockerfile -t remote-control-server .
+
 docker run -d \
   --name rcs \
   -p 3000:3000 \
   -e RCS_API_KEYS=your-api-key-here \
   -v rcs-data:/app/data \
-  ghcr.io/claude-code-best/remote-control-server:latest
+  remote-control-server
 ```
 
-## 环境变量
+## Environment variables
 
-### 服务器配置
+### Server configuration
 
-| 变量 | 默认值 | 说明 |
+| Variable | Default | Description |
 |------|--------|------|
-| `RCS_PORT` | `3000` | 监听端口 |
-| `RCS_HOST` | `0.0.0.0` | 监听地址 |
-| `RCS_API_KEYS` | _(空)_ | API 密钥列表，逗号分隔。客户端和 Worker 连接时需要提供 |
-| `RCS_BASE_URL` | _(自动)_ | 外部访问地址，例如 `https://rcs.example.com`。用于生成 WebSocket 连接 URL |
-| `RCS_VERSION` | `0.1.0` | 服务版本号，显示在 `/health` 响应中 |
+| `RCS_PORT` | `3000` | Listening port |
+| `RCS_HOST` | `0.0.0.0` | Listening address |
+| `RCS_API_KEYS` | _(empty)_ | Comma-separated list of API keys. Clients and Workers must provide one when connecting |
+| `RCS_BASE_URL` | _(auto)_ | External address, e.g. `https://rcs.example.com`. Used to generate WebSocket connection URLs |
+| `RCS_VERSION` | `0.1.0` | Service version, shown in the `/health` response |
 
-### 超时与心跳
+### Timeouts and heartbeat
 
-| 变量 | 默认值 | 说明 |
+| Variable | Default | Description |
 |------|--------|------|
-| `RCS_POLL_TIMEOUT` | `8` | V1 轮询超时（秒） |
-| `RCS_HEARTBEAT_INTERVAL` | `20` | 心跳间隔（秒） |
-| `RCS_JWT_EXPIRES_IN` | `3600` | JWT 令牌有效期（秒） |
-| `RCS_DISCONNECT_TIMEOUT` | `300` | 断线判定超时（秒） |
+| `RCS_POLL_TIMEOUT` | `8` | V1 polling timeout (seconds) |
+| `RCS_HEARTBEAT_INTERVAL` | `20` | Heartbeat interval (seconds) |
+| `RCS_JWT_EXPIRES_IN` | `3600` | JWT token lifetime (seconds) |
+| `RCS_DISCONNECT_TIMEOUT` | `300` | Timeout after which a client is considered disconnected (seconds) |
 
-## Claude Code 客户端配置
+## Claude Code client configuration
 
-### 连接到自托管服务器
+### Connecting to a self-hosted server
 
-在 Claude Code 所在环境设置以下变量：
+Set the following variables in the environment where Claude Code runs:
 
 ```bash
-# 指向你的 RCS 服务器地址
+# Point at your RCS server address
 export CLAUDE_BRIDGE_BASE_URL="https://rcs.example.com"
 
-# 认证令牌（与 RCS_API_KEYS 中的值对应）
+# Auth token (matches a value in RCS_API_KEYS)
 export CLAUDE_BRIDGE_OAUTH_TOKEN="your-api-key-here"
 ```
 
-然后启动远程控制模式：
+Then start remote-control mode:
 
 ```bash
 ccb --remote-control
 ```
 
-> **注意**：远程控制功能需要启用 `BRIDGE_MODE` feature flag。开发模式下默认启用。
+> **Note**: remote control requires the `BRIDGE_MODE` feature flag. It is enabled by default in dev mode.
 
-### 环境变量参考
+### Environment variable reference
 
-| 变量 | 说明 |
+| Variable | Description |
 |------|------|
-| `CLAUDE_BRIDGE_BASE_URL` | RCS 服务器地址，覆盖默认的 Anthropic 云端地址 |
-| `CLAUDE_BRIDGE_OAUTH_TOKEN` | 认证令牌，用于连接 RCS 服务器 |
-| `CLAUDE_BRIDGE_SESSION_INGRESS_URL` | WebSocket 入口地址（默认与 BASE_URL 相同） |
-| `CLAUDE_CODE_REMOTE` | 设为 `1` 时标记为远程执行模式 |
+| `CLAUDE_BRIDGE_BASE_URL` | RCS server address; overrides the default Anthropic cloud address |
+| `CLAUDE_BRIDGE_OAUTH_TOKEN` | Auth token used to connect to the RCS server |
+| `CLAUDE_BRIDGE_SESSION_INGRESS_URL` | WebSocket ingress address (same as BASE_URL by default) |
+| `CLAUDE_CODE_REMOTE` | When set to `1`, marks remote execution mode |
 
-## Docker Compose 示例
+## Docker Compose example
 
 ```yaml
 version: "3.8"
@@ -99,16 +103,15 @@ volumes:
   rcs-data:
 ```
 
-## ACP 兼容的 remote-control
-
+## ACP-compatible remote-control
 
 ```sh
 ACP_RCS_URL=http://localhost:3000 ACP_RCS_TOKEN=test-my-key acp-link ccb-bun -- --acp
 ```
 
-## 反向代理配置
+## Reverse proxy configuration
 
-使用 Nginx 或 Caddy 反向代理时，需要支持 WebSocket 升级：
+When using an Nginx or Caddy reverse proxy, WebSocket upgrades must be supported:
 
 ```nginx
 server {
@@ -127,7 +130,7 @@ server {
 }
 ```
 
-Caddy 配置更简单，自动处理 WebSocket：
+Caddy is simpler and handles WebSocket automatically:
 
 ```
 rcs.example.com {
@@ -135,7 +138,7 @@ rcs.example.com {
 }
 ```
 
-## 架构概览
+## Architecture overview
 
 ```
 ┌─────────────┐     WebSocket/SSE      ┌──────────────────┐
@@ -152,23 +155,23 @@ rcs.example.com {
                                       └──────────────────┘
 ```
 
-- **传输层**：WebSocket（V1）和 SSE + HTTP POST（V2）
-- **存储**：纯内存存储（Map），重启后数据清除
-- **认证**：API Key（客户端）+ JWT（Worker）
-- **前端**：原生 JS SPA，通过 `/code/*` 路径访问
+- **Transport**: WebSocket (V1) and SSE + HTTP POST (V2)
+- **Storage**: pure in-memory storage (Map); data is cleared on restart
+- **Authentication**: API key (clients) + JWT (Worker)
+- **Frontend**: plain JS SPA, served under the `/code/*` path
 
-## 开发
+## Development
 
 ```bash
-# 安装依赖
+# Install dependencies
 bun install
 
-# 开发模式（热重载）
+# Dev mode (hot reload)
 bun run dev
 
-# 类型检查
+# Type check
 bun run typecheck
 
-# 运行测试
+# Run tests
 bun test packages/remote-control-server/
 ```

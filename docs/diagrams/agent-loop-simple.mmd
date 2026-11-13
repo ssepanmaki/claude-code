@@ -1,12 +1,12 @@
 flowchart TB
-    START((输入)) --> CTX["Context 管理"]
-    CTX --> LLM["LLM 流式输出"]
+    START((Input)) --> CTX["Context management"]
+    CTX --> LLM["LLM streaming output"]
     LLM --> TC{tool_use?}
 
-    TC --> |是| EXEC["执行工具"]
+    TC --> |Yes| EXEC["Run tools"]
     EXEC --> CTX
 
-    TC --> |否| DONE((完成))
+    TC --> |No| DONE((Done))
 
     classDef proc fill:#eef,stroke:#66c,color:#224
     classDef decision fill:#fee,stroke:#c66,color:#422

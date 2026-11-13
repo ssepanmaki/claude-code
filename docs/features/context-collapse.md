@@ -1,140 +1,140 @@
-# CONTEXT_COLLAPSE — 上下文折叠
+# CONTEXT_COLLAPSE: context collapsing
 
 > Feature Flag: `FEATURE_CONTEXT_COLLAPSE=1`
-> 子 Feature: `FEATURE_HISTORY_SNIP=1`
-> 实现状态：核心逻辑全部 Stub，布线完整
-> 引用数：CONTEXT_COLLAPSE 20 + HISTORY_SNIP 16 = 36
+> Sub-feature: `FEATURE_HISTORY_SNIP=1`
+> Implementation status: all core logic is stubbed, wiring is complete
+> References: CONTEXT_COLLAPSE 20 + HISTORY_SNIP 16 = 36
 
-## 一、功能概述
+## 1. Overview
 
-CONTEXT_COLLAPSE 让模型内省上下文窗口使用情况，并智能压缩旧消息。当对话接近上下文限制时，自动将旧消息折叠为压缩摘要，保留关键信息的同时释放 token 空间。
+CONTEXT_COLLAPSE lets the model introspect context window usage and compress old messages intelligently. When the conversation nears the context limit, old messages are automatically collapsed into compressed summaries, keeping the key information while freeing token space.
 
-### 子 Feature
+### Sub-features
 
-| Feature | 功能 |
+| Feature | Function |
 |---------|------|
-| `CONTEXT_COLLAPSE` | 上下文折叠引擎（后台 LLM 调用压缩旧消息） |
-| `HISTORY_SNIP` | SnipTool — 标记消息进行折叠/修剪 |
+| `CONTEXT_COLLAPSE` | Context collapse engine (background LLM calls compress old messages) |
+| `HISTORY_SNIP` | SnipTool: marks messages for collapsing/trimming |
 
-## 二、实现架构
+## 2. Architecture
 
-### 2.1 模块状态
+### 2.1 Module status
 
-| 模块 | 文件 | 状态 |
+| Module | File | Status |
 |------|------|------|
-| 折叠核心 | `src/services/contextCollapse/index.ts` | **Stub** — 接口完整（`ContextCollapseStats`、`CollapseResult`、`DrainResult`），函数全部空操作 |
-| 折叠操作 | `src/services/contextCollapse/operations.ts` | **Stub** — `projectView` 为恒等函数 |
-| 折叠持久化 | `src/services/contextCollapse/persist.ts` | **Stub** — `restoreFromEntries` 为空操作 |
-| CtxInspectTool | `packages/builtin-tools/src/tools/CtxInspectTool/CtxInspectTool.ts` | **实现** — 上下文内省工具 |
-| SnipTool 提示 | `src/tools/SnipTool/prompt.ts` | **Stub** — 空工具名 |
-| SnipTool 实现 | `src/tools/SnipTool/SnipTool.ts` | **缺失** |
-| force-snip 命令 | `src/commands/force-snip.js` | **缺失** |
-| 折叠读取搜索 | `src/utils/collapseReadSearch.ts` | **完整** — Snip 作为静默吸收操作 |
-| QueryEngine 集成 | `src/QueryEngine.ts` | **布线** — 导入并使用 snip 投影 |
-| Token 警告 UI | `src/components/TokenWarning.tsx` | **布线** — 折叠进度标签 |
+| Collapse core | `src/services/contextCollapse/index.ts` | **Stub**: the interfaces are complete (`ContextCollapseStats`, `CollapseResult`, `DrainResult`); all functions are no-ops |
+| Collapse operations | `src/services/contextCollapse/operations.ts` | **Stub**: `projectView` is the identity function |
+| Collapse persistence | `src/services/contextCollapse/persist.ts` | **Stub**: `restoreFromEntries` is a no-op |
+| CtxInspectTool | `packages/builtin-tools/src/tools/CtxInspectTool/CtxInspectTool.ts` | **Implemented**: context introspection tool |
+| SnipTool prompt | `src/tools/SnipTool/prompt.ts` | **Stub**: empty tool name |
+| SnipTool implementation | `src/tools/SnipTool/SnipTool.ts` | **Missing** |
+| force-snip command | `src/commands/force-snip.js` | **Missing** |
+| Collapse read/search | `src/utils/collapseReadSearch.ts` | **Complete**: Snip is a silently absorbed operation |
+| QueryEngine integration | `src/QueryEngine.ts` | **Wired**: imports and uses the snip projection |
+| Token warning UI | `src/components/TokenWarning.tsx` | **Wired**: collapse progress label |
 
-### 2.2 核心接口（已定义，待实现）
+### 2.2 Core interfaces (defined, to be implemented)
 
 ```ts
 // contextCollapse/index.ts
 interface ContextCollapseStats {
-  // 上下文使用统计
+  // context usage statistics
 }
 interface CollapseResult {
-  // 折叠操作结果
+  // result of a collapse operation
 }
 interface DrainResult {
-  // 紧急释放结果
+  // result of an emergency release
 }
 
-// 关键函数（全部 stub）：
+// Key functions (all stubs):
 isContextCollapseEnabled()          // → false
-applyCollapsesIfNeeded(messages)    // 透传
-recoverFromOverflow(messages)       // 透传（413 恢复）
-initContextCollapse()               // 空操作
+applyCollapsesIfNeeded(messages)    // pass-through
+recoverFromOverflow(messages)       // pass-through (413 recovery)
+initContextCollapse()               // no-op
 ```
 
-### 2.3 预期数据流
+### 2.3 Expected data flow
 
 ```
-对话持续增长
+Conversation keeps growing
       │
       ▼
-上下文接近限制（由 query.ts 检测）
+Context nears the limit (detected by query.ts)
       │
-      ├── 溢出检测 (query.ts:440,616,802)
-      │
-      ▼
-applyCollapsesIfNeeded(messages) [需要实现]
-      │
-      ├── 后台 LLM 调用压缩旧消息
-      ├── 保留关键信息（决策、文件路径、错误）
-      └── 替换旧消息为压缩摘要
-      │
-      ├── 413 恢复 (query.ts:1093,1179)
-      │   └── recoverFromOverflow() 紧急折叠
+      ├── Overflow detection (query.ts:440,616,802)
       │
       ▼
-projectView() 过滤折叠后的消息视图
+applyCollapsesIfNeeded(messages) [to be implemented]
+      │
+      ├── Background LLM call compresses old messages
+      ├── Keeps key information (decisions, file paths, errors)
+      └── Replaces old messages with compressed summaries
+      │
+      ├── 413 recovery (query.ts:1093,1179)
+      │   └── recoverFromOverflow() emergency collapse
       │
       ▼
-模型继续工作（在压缩后的上下文中）
+projectView() filters the collapsed message view
+      │
+      ▼
+The model carries on (in the compressed context)
 ```
 
-### 2.4 HISTORY_SNIP 子功能
+### 2.4 The HISTORY_SNIP sub-feature
 
-SnipTool 提供手动折叠能力：
+SnipTool provides manual collapsing:
 
-- `/force-snip` 命令 — 强制执行折叠
-- SnipTool — 标记特定消息进行折叠/修剪
-- `collapseReadSearch.ts` 已完整实现，将 Snip 作为静默吸收操作处理
+- The `/force-snip` command forces a collapse
+- SnipTool marks specific messages for collapsing/trimming
+- `collapseReadSearch.ts` is fully implemented and treats Snip as a silently absorbed operation
 
-### 2.5 集成点
+### 2.5 Integration points
 
-| 文件 | 位置 | 说明 |
+| File | Location | Notes |
 |------|------|------|
-| `src/query.ts` | 18,440,616,802,1093,1179 | 溢出检测、413 恢复、折叠应用 |
-| `src/QueryEngine.ts` | 124,127,1301 | Snip 投影使用 |
-| `src/utils/analyzeContext.ts` | 1122 | 跳过保留缓冲区显示 |
-| `src/utils/sessionRestore.ts` | 127,494 | 恢复折叠状态 |
-| `src/services/compact/autoCompact.ts` | 179,215 | 自动压缩时考虑折叠 |
+| `src/query.ts` | 18,440,616,802,1093,1179 | Overflow detection, 413 recovery, applying collapses |
+| `src/QueryEngine.ts` | 124,127,1301 | Snip projection use |
+| `src/utils/analyzeContext.ts` | 1122 | Skips the reserved-buffer display |
+| `src/utils/sessionRestore.ts` | 127,494 | Restores collapse state |
+| `src/services/compact/autoCompact.ts` | 179,215 | Takes collapsing into account during auto-compaction |
 
-## 三、需要补全的内容
+## 3. What remains to be built
 
-| 优先级 | 模块 | 工作量 | 说明 |
+| Priority | Module | Effort | Notes |
 |--------|------|--------|------|
-| 1 | `services/contextCollapse/index.ts` | 大 | 折叠状态机、LLM 调用、消息压缩 |
-| 2 | `services/contextCollapse/operations.ts` | 中 | `projectView()` 消息过滤 |
-| 3 | `services/contextCollapse/persist.ts` | 小 | `restoreFromEntries()` 磁盘持久化 |
-| 4 | `tools/CtxInspectTool/` | 已完成 | 上下文内省工具已实现（`packages/builtin-tools/src/tools/CtxInspectTool/`） |
-| 5 | `tools/SnipTool/SnipTool.ts` | 中 | Snip 工具实现 |
-| 6 | `commands/force-snip.js` | 小 | `/force-snip` 命令 |
+| 1 | `services/contextCollapse/index.ts` | Large | Collapse state machine, LLM calls, message compression |
+| 2 | `services/contextCollapse/operations.ts` | Medium | `projectView()` message filtering |
+| 3 | `services/contextCollapse/persist.ts` | Small | `restoreFromEntries()` disk persistence |
+| 4 | `tools/CtxInspectTool/` | Done | The context introspection tool is implemented (`packages/builtin-tools/src/tools/CtxInspectTool/`) |
+| 5 | `tools/SnipTool/SnipTool.ts` | Medium | Snip tool implementation |
+| 6 | `commands/force-snip.js` | Small | `/force-snip` command |
 
-## 四、关键设计决策
+## 4. Key design decisions
 
-1. **后台 LLM 压缩**：折叠不是简单截断，而是用 LLM 生成压缩摘要保留关键信息
-2. **413 恢复**：当 API 返回 413（请求过大）时，紧急折叠是最重要的恢复手段
-3. **与 autoCompact 协作**：折叠和自动压缩（compact）是不同的机制，折叠在消息级别，压缩在对话级别
-4. **持久化**：折叠状态持久化到磁盘，会话恢复时重载
+1. **Background LLM compression**: collapsing is not plain truncation; an LLM generates a compressed summary that keeps the key information
+2. **413 recovery**: when the API returns 413 (request too large), an emergency collapse is the most important recovery path
+3. **Works alongside autoCompact**: collapse and auto-compaction (compact) are different mechanisms; collapse works at the message level, compaction at the conversation level
+4. **Persistence**: collapse state is persisted to disk and reloaded when a session is restored
 
-## 五、使用方式
+## 5. Usage
 
 ```bash
-# 启用 context collapse
+# Enable context collapse
 FEATURE_CONTEXT_COLLAPSE=1 bun run dev
 
-# 启用 snip 子功能
+# Enable the snip sub-feature
 FEATURE_CONTEXT_COLLAPSE=1 FEATURE_HISTORY_SNIP=1 bun run dev
 ```
 
-## 六、文件索引
+## 6. File index
 
-| 文件 | 职责 |
+| File | Responsibility |
 |------|------|
-| `src/services/contextCollapse/index.ts` | 折叠核心（stub，接口已定义） |
-| `src/services/contextCollapse/operations.ts` | 投影操作（stub） |
-| `src/services/contextCollapse/persist.ts` | 持久化（stub） |
-| `src/utils/collapseReadSearch.ts` | Snip 吸收操作（完整） |
-| `src/query.ts` | 溢出检测和 413 恢复集成 |
-| `src/QueryEngine.ts` | Snip 投影使用 |
-| `src/components/TokenWarning.tsx` | 折叠进度 UI |
+| `src/services/contextCollapse/index.ts` | Collapse core (stub, interfaces defined) |
+| `src/services/contextCollapse/operations.ts` | Projection operations (stub) |
+| `src/services/contextCollapse/persist.ts` | Persistence (stub) |
+| `src/utils/collapseReadSearch.ts` | Snip absorption (complete) |
+| `src/query.ts` | Overflow detection and 413 recovery integration |
+| `src/QueryEngine.ts` | Snip projection use |
+| `src/components/TokenWarning.tsx` | Collapse progress UI |

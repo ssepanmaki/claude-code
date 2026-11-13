@@ -1,42 +1,42 @@
 ---
-title: "Token 预算管理 - 上下文窗口动态计算"
-description: "从源码角度揭示 Claude Code token 预算管理：200K 上下文窗口的动态计算、截断机制、缓存优化和自动压缩的完整链路。"
-keywords: ["Token 预算", "上下文窗口", "token 计算", "截断机制", "缓存优化"]
+title: "Token Budget Management - Dynamic Context Window Calculation"
+description: "A source-level look at Claude Code's token budget management: dynamic calculation of the 200K context window, truncation, cache optimization, and the full auto-compaction path."
+keywords: ["token budget", "context window", "token counting", "truncation", "cache optimization"]
 ---
 
-{/* 本章目标：从源码角度揭示 token 预算的动态计算、截断机制、缓存优化和自动压缩的完整链路 */}
+{/* Goal of this chapter: reveal, from the source, dynamic token budget calculation, truncation, cache optimization, and the full auto-compaction path */}
 
-## 上下文窗口：200K 不是全部
+## The context window: 200K is not all yours
 
-Claude Code 的默认上下文窗口为 200K tokens（`MODEL_CONTEXT_WINDOW_DEFAULT = 200_000`），但实际可用于对话的空间远小于此：
+Claude Code's default context window is 200K tokens (`MODEL_CONTEXT_WINDOW_DEFAULT = 200_000`), but the space actually usable for conversation is much smaller:
 
 ```
-上下文窗口（200K）
-├── 系统提示词（~15-25K，缓存后成本低）
-├── 工具定义（~10-20K，含 MCP 工具）
-├── 用户上下文（CLAUDE.md、git status 等）
-├── 输出预留（maxOutputTokens）
-│   ├── 默认上限：64K
-│   ├── 实际默认：8K（slot-reservation 优化）
-│   └── 触顶自动升级：一次 64K 重试
-└── 剩余：对话历史空间（随对话增长）
+Context window (200K)
+├── System prompt (~15-25K, cheap once cached)
+├── Tool definitions (~10-20K, including MCP tools)
+├── User context (CLAUDE.md, git status, etc.)
+├── Output reservation (maxOutputTokens)
+│   ├── Default cap: 64K
+│   ├── Effective default: 8K (slot-reservation optimization)
+│   └── Auto-escalation on hitting the cap: one 64K retry
+└── Remainder: room for conversation history (grows with the conversation)
 ```
 
-`getContextWindowForModel()`（`src/utils/context.ts:51`）按 5 级优先级解析窗口大小：
+`getContextWindowForModel()` (`src/utils/context.ts:51`) resolves the window size with five levels of priority:
 
-1. `CLAUDE_CODE_MAX_CONTEXT_TOKENS` 环境变量覆盖
-2. 模型名含 `[1m]` 后缀 → 1M tokens
+1. `CLAUDE_CODE_MAX_CONTEXT_TOKENS` environment variable override
+2. Model name with a `[1m]` suffix → 1M tokens
 3. `getModelCapability(model).max_input_tokens`
-4. 1M beta header + 支持的模型（claude-sonnet-4, opus-4-6）
-5. 兜底：200K
+4. 1M beta header + a supported model (claude-sonnet-4, opus-4-6)
+5. Fallback: 200K
 
-**有效上下文** = 窗口大小 - min(maxOutputTokens, 20K)，因为压缩摘要需要预留输出空间。
+**Effective context** = window size - min(maxOutputTokens, 20K), because the compaction summary needs reserved output space.
 
-## Token 计数：近似 vs 精确
+## Token counting: approximate vs. exact
 
-系统使用两级 token 计数策略：
+The system uses a two-level token counting strategy:
 
-### 近似估算（毫秒级）
+### Approximate estimation (milliseconds)
 
 ```typescript
 // src/services/tokenEstimation.ts
@@ -45,151 +45,151 @@ function roughTokenCountEstimation(content: string, bytesPerToken = 4): number {
 }
 ```
 
-对不同内容类型有特殊处理：
-- **JSON/JSONL**：`bytesPerToken = 2`（密集的 `{`, `:`, `,` 符号，每个仅 1-2 token）
-- **图片/文档**：固定 2000 tokens（基于 2000×2000px 上限的保守估计）
-- **thinking block**：按实际文本长度 / 4
-- **tool_use**：序列化 `name + JSON.stringify(input)` 后 / 4
+Different content types get special handling:
+- **JSON/JSONL**: `bytesPerToken = 2` (dense `{`, `:`, `,` symbols are only 1-2 tokens each)
+- **Images/documents**: a fixed 2000 tokens (a conservative estimate based on a 2000×2000px cap)
+- **thinking block**: actual text length / 4
+- **tool_use**: serialized `name + JSON.stringify(input)` / 4
 
-### 精确计数（API 调用）
+### Exact counting (API call)
 
-使用 Anthropic 的 `beta.messages.countTokens` 端点。在不同 provider 上有不同路径：
+This uses Anthropic's `beta.messages.countTokens` endpoint. The path differs by provider:
 
-| Provider | 方法 |
-|----------|------|
-| Anthropic 直连 | `anthropic.beta.messages.countTokens()` |
-| AWS Bedrock | `@aws-sdk/client-bedrock-runtime` 的 `CountTokensCommand` |
-| Google Vertex | Anthropic SDK + beta 过滤 |
-| 兜底（Bedrock 不支持） | 用 Haiku 发送 `max_tokens=1` 的请求，读取 `usage.input_tokens` |
+| Provider | Method |
+|----------|--------|
+| Anthropic direct | `anthropic.beta.messages.countTokens()` |
+| AWS Bedrock | `CountTokensCommand` from `@aws-sdk/client-bedrock-runtime` |
+| Google Vertex | Anthropic SDK + beta filtering |
+| Fallback (Bedrock unsupported) | Send a request with `max_tokens=1` to Haiku and read `usage.input_tokens` |
 
-精确计数在关键决策点使用（压缩前后对比、warning 判断），近似估算在热路径使用（每轮循环的 shouldAutoCompact 检查）。
+Exact counting is used at key decision points (before/after compaction comparison, warning decisions), and approximate estimation is used on the hot path (the `shouldAutoCompact` check on every loop iteration).
 
-### 3P Provider 的 Token 计数差异
+### Token counting differences on 3P providers
 
-不同 Provider 的精确 token 计数实现方式不同，部分 provider 甚至不支持精确计数：
+Providers implement exact token counting differently, and some do not support it at all:
 
-| Provider | 计数方式 | 注意事项 |
-|----------|---------|---------|
-| **Anthropic 直连** | `anthropic.beta.messages.countTokens()` | 标准 API，最准确 |
-| **AWS Bedrock** | `CountTokensCommand` | 需要动态加载 279KB AWS SDK |
-| **Google Vertex** | Anthropic SDK + beta 过滤 | 需要特定 beta headers |
-| **OpenAI 兼容层** | 无精确计数 | **退回到近似估算** |
-| **Gemini 兼容层** | 无精确计数 | **退回到近似估算** |
-| **Bedrock 不支持时** | 用 Haiku 发送 `max_tokens=1` 请求 | 读取 `usage.input_tokens` |
+| Provider | Counting method | Notes |
+|----------|-----------------|-------|
+| **Anthropic direct** | `anthropic.beta.messages.countTokens()` | Standard API, most accurate |
+| **AWS Bedrock** | `CountTokensCommand` | Requires dynamically loading the 279KB AWS SDK |
+| **Google Vertex** | Anthropic SDK + beta filtering | Requires specific beta headers |
+| **OpenAI compatibility layer** | No exact counting | **Falls back to approximate estimation** |
+| **Gemini compatibility layer** | No exact counting | **Falls back to approximate estimation** |
+| **When Bedrock is unsupported** | Send a `max_tokens=1` request to Haiku | Read `usage.input_tokens` |
 
-OpenAI 和 Gemini 兼容层**不支持精确 token 计数**，系统会退回到近似估算。这会影响：
-- **自动压缩触发时机**：可能略有偏差
-- **压缩前后 token 对比**：仅为估算值，非精确
-- **Warning/Error 阈值判断**：基于估算而非精确计数
+The OpenAI and Gemini compatibility layers **do not support exact token counting**, so the system falls back to approximate estimation. This affects:
+- **Auto-compaction trigger timing**: may be slightly off
+- **Before/after compaction token comparison**: estimates only, not exact
+- **Warning/error threshold decisions**: based on estimates rather than exact counts
 
 ```typescript
-// src/services/tokenEstimation.ts - 近似估算函数
+// src/services/tokenEstimation.ts - approximate estimation function
 function roughTokenCountEstimation(content: string, bytesPerToken = 4): number {
   return Math.round(content.length / bytesPerToken)
 }
 ```
 
-源码路径：`src/services/tokenEstimation.ts`
+Source path: `src/services/tokenEstimation.ts`
 
-## 自动压缩的触发阈值
-
-```
-src/services/compact/autoCompact.ts — 核心阈值
-```
-
-| 常量 | 值 | 含义 |
-|------|----|------|
-| `AUTOCOMPACT_BUFFER_TOKENS` | 13,000 | 窗口减去此值 = 自动压缩触发点 |
-| `WARNING_THRESHOLD_BUFFER_TOKENS` | 20,000 | 在触发点 + 20K 处显示警告 |
-| `ERROR_THRESHOLD_BUFFER_TOKENS` | 20,000 | 在触发点 + 20K 处显示错误 |
-| `MANUAL_COMPACT_BUFFER_TOKENS` | 3,000 | 手动 /compact 的阻塞上限 |
-| `MAX_CONSECUTIVE_AUTOCOMPACT_FAILURES` | 3 | 连续失败 3 次后停止尝试 |
-
-以 200K 窗口为例：
-- **~167K**：warning 闪烁，用户看到建议压缩的提示
-- **~180K**：自动压缩触发（200K - 20K 输出预留 = 180K 有效，再 - 13K buffer）
-- **~197K**：达到 blocking limit，新消息被阻止
-
-`shouldAutoCompact()` 有多个逃逸条件：
-- `compact` / `session_memory` 来源的查询永不触发（防递归死锁）
-- `DISABLE_COMPACT` / `DISABLE_AUTO_COMPACT` 环境变量
-- 用户配置 `autoCompactEnabled = false`
-- Context Collapse 模式激活时抑制（collapse 自己管理上下文）
-- Reactive Compact 实验模式下抑制主动压缩
-- 超过连续失败上限（circuit breaker）
-
-## Micro-Compact：工具结果的渐进式压缩
-
-在触发全量压缩之前，系统先尝试 **micro-compact**——只压缩旧的工具调用结果：
+## Auto-compaction trigger thresholds
 
 ```
-可压缩工具列表（COMPACTABLE_TOOLS）：
+src/services/compact/autoCompact.ts — core thresholds
+```
+
+| Constant | Value | Meaning |
+|----------|-------|---------|
+| `AUTOCOMPACT_BUFFER_TOKENS` | 13,000 | Window minus this value = auto-compaction trigger point |
+| `WARNING_THRESHOLD_BUFFER_TOKENS` | 20,000 | Show a warning at the trigger point + 20K |
+| `ERROR_THRESHOLD_BUFFER_TOKENS` | 20,000 | Show an error at the trigger point + 20K |
+| `MANUAL_COMPACT_BUFFER_TOKENS` | 3,000 | Blocking limit for manual /compact |
+| `MAX_CONSECUTIVE_AUTOCOMPACT_FAILURES` | 3 | Stop trying after 3 consecutive failures |
+
+For a 200K window:
+- **~167K**: the warning flashes, and the user sees a prompt suggesting compaction
+- **~180K**: auto-compaction triggers (200K - 20K output reservation = 180K effective, minus the 13K buffer)
+- **~197K**: the blocking limit is reached and new messages are blocked
+
+`shouldAutoCompact()` has several escape conditions:
+- Queries from the `compact` / `session_memory` sources never trigger it (prevents recursive deadlock)
+- `DISABLE_COMPACT` / `DISABLE_AUTO_COMPACT` environment variables
+- The user setting `autoCompactEnabled = false`
+- Suppressed while Context Collapse mode is active (collapse manages context itself)
+- Proactive compaction is suppressed in the Reactive Compact experimental mode
+- Exceeding the consecutive failure limit (circuit breaker)
+
+## Micro-compact: progressive compression of tool results
+
+Before triggering a full compaction, the system first tries **micro-compact**, which compresses only old tool call results:
+
+```
+Compactable tool list (COMPACTABLE_TOOLS):
 FileRead, Bash, Grep, Glob, WebSearch, WebFetch, FileEdit, FileWrite
 ```
 
-策略基于时间：
-- 超过一定时间（由 `timeBasedMCConfig` 控制）的工具结果被替换为简短占位符
-- 图片/文档结果替换为 `[image]` / `[document]` 文本
-- 每次替换释放 tokens，可能推迟全量压缩
+The strategy is time-based:
+- Tool results older than a threshold (controlled by `timeBasedMCConfig`) are replaced with a short placeholder
+- Image/document results are replaced with `[image]` / `[document]` text
+- Each replacement frees tokens and may postpone full compaction
 
-工具本身也有 `maxResultSizeChars`（通常 100K）硬限制，超长结果在写入消息前就被截断。
+Tools also have a hard `maxResultSizeChars` limit (typically 100K), and oversized results are truncated before being written into messages.
 
-## 全量压缩的完整流程
+## The full compaction flow
 
 ```
 autoCompactIfNeeded() / compactConversation()
   ↓
-1. 执行 PreCompact hooks（外部可注入自定义指令）
+1. Run PreCompact hooks (external code can inject custom instructions)
   ↓
-2. 尝试 Session Memory 压缩（更轻量，优先尝试）
+2. Try Session Memory compaction (lighter, tried first)
   ↓
-3. Session Memory 失败 → 全量压缩
-   a. 图片/文档从消息中剥离（替换为 [image]/[document]）
-   b. skill_discovery/skill_listing 附件剥离（压缩后会重新注入）
-   c. 通过 forked agent 发送摘要请求（复用主线程的 prompt cache）
-   d. 如果摘要请求本身触发 prompt-too-long → truncateHeadForPTLRetry()
-      从最老的 API 轮次开始删除，重试最多 3 次
+3. Session Memory failed → full compaction
+   a. Strip images/documents from messages (replaced with [image]/[document])
+   b. Strip skill_discovery/skill_listing attachments (re-injected after compaction)
+   c. Send the summary request through a forked agent (reuses the main thread's prompt cache)
+   d. If the summary request itself triggers prompt-too-long → truncateHeadForPTLRetry()
+      deletes from the oldest API round and retries up to 3 times
    ↓
-4. 压缩成功后重建上下文：
-   - compactBoundaryMarker（记录压缩类型、前 token 数等）
-   - 摘要消息（不可见的 user 消息）
-   - 最近 5 个文件的重新读取（POST_COMPACT_TOKEN_BUDGET = 50K）
-   - plan 文件附件（如果有）
-   - plan mode 指令（如果在计划模式中）
-   - 已调用的 skill 内容（每 skill ≤5K，总计 ≤25K）
-   - deferred tools / agent listing / MCP 指令的增量重新注入
-   - SessionStart hooks 重新执行
-   - PostCompact hooks 执行
+4. After a successful compaction, rebuild the context:
+   - compactBoundaryMarker (records compaction type, prior token count, etc.)
+   - Summary message (an invisible user message)
+   - Re-read of the 5 most recent files (POST_COMPACT_TOKEN_BUDGET = 50K)
+   - Plan file attachment (if any)
+   - Plan mode instructions (if in plan mode)
+   - Content of invoked skills (≤5K per skill, ≤25K total)
+   - Incremental re-injection of deferred tools / agent listing / MCP instructions
+   - SessionStart hooks run again
+   - PostCompact hooks run
   ↓
-5. 更新缓存基线，防止被误判为 cache break
+5. Update the cache baseline so it is not misjudged as a cache break
 ```
 
-### Prompt Cache Sharing
+### Prompt cache sharing
 
-压缩 API 调用是整个会话中最昂贵的操作之一。系统通过 `runForkedAgent` 复用主线程的缓存前缀（system prompt + tools + context messages），将缓存命中率从 2% 提升到接近 100%。这个优化单独节省了舰队级约 0.76% 的 `cache_creation` tokens。
+The compaction API call is one of the most expensive operations in a whole session. The system reuses the main thread's cache prefix (system prompt + tools + context messages) through `runForkedAgent`, raising the cache hit rate from 2% to nearly 100%. This optimization alone saves roughly 0.76% of fleet-wide `cache_creation` tokens.
 
-## 输出 Token 的 Slot 优化
+## The output token slot optimization
 
-一个经常被忽视的优化：**maxOutputTokens 的动态调整**。
+An often overlooked optimization: **dynamic adjustment of maxOutputTokens**.
 
 ```typescript
 // src/services/api/claude.ts — getMaxOutputTokensForModel()
 const defaultTokens = isMaxTokensCapEnabled()
-  ? Math.min(maxOutputTokens.default, 8_000)  // 默认降到 8K
-  : maxOutputTokens.default                     // 原始默认 32K/64K
+  ? Math.min(maxOutputTokens.default, 8_000)  // default lowered to 8K
+  : maxOutputTokens.default                     // original default 32K/64K
 ```
 
-为什么？因为 API 的 slot 机制按 `max_tokens` 预留推理容量。BQ p99 输出仅 4,911 tokens，32K 默认值浪费了 8-16 倍的 slot 容量。降到 8K 后，不到 1% 的请求被截断——这些请求会自动获得一次 64K 的 clean retry。
+Why? The API's slot mechanism reserves inference capacity according to `max_tokens`. The BQ p99 output is only 4,911 tokens, so a 32K default wastes 8-16x of slot capacity. After lowering to 8K, fewer than 1% of requests are truncated, and those automatically get one clean 64K retry.
 
-这个优化对 token 预算的影响是间接的：更多的 slot 容量意味着更少的排队延迟，间接减少了超时和重试。
+The effect of this optimization on the token budget is indirect: more slot capacity means less queueing delay, which indirectly reduces timeouts and retries.
 
-## Partial Compact：选择性地压缩
+## Partial compact: selective compression
 
-除了全量压缩，用户还可以在消息历史中选择某个位置，只压缩该位置之前或之后的内容：
+Besides full compaction, the user can pick a position in the message history and compress only what comes before or after it:
 
-- **`up_to` 方向**：压缩选中消息之前的内容，保留最近的对话
-- **`from` 方向**：压缩选中消息之后的内容，保留早期的对话
+- **`up_to` direction**: compress what comes before the selected message and keep the recent conversation
+- **`from` direction**: compress what comes after the selected message and keep the early conversation
 
-`from` 方向保留 prompt cache（前缀不变），`up_to` 方向则破坏 cache（摘要插在保留内容之前）。
+The `from` direction preserves the prompt cache (the prefix is unchanged), while the `up_to` direction breaks the cache (the summary is inserted before the retained content).
 
-两种方向的 PTL（prompt-too-long）重试策略相同：从最老的 API 轮次开始删除，确保至少保留一组消息供摘要。
+Both directions use the same PTL (prompt-too-long) retry strategy: delete from the oldest API round, making sure at least one group of messages remains for the summary.

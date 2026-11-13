@@ -1,323 +1,327 @@
-# ToolSearch 设计指南
+# ToolSearch Design Guide
 
-> 基于 feature/tool_search 分支的 4 次 commit 迭代，系统性地记录 ToolSearch 的架构、核心机制、演进历史和维护指南。
+> A systematic record of ToolSearch's architecture, core mechanisms, evolution history, and maintenance guide, based on four iterations of commits on the feature/tool_search branch.
 
-## 1. 问题背景
+## 1. Background
 
-Claude Code 内置了 60+ 工具，加上用户连接的 MCP 服务器可能引入数十甚至上百个额外工具。将所有工具的完整 schema 一次性发送给模型，会产生几个严重问题：
+Claude Code ships with 60+ built-in tools, and the MCP servers a user connects can add dozens or even hundreds more. Sending the full schema of every tool to the model at once causes several serious problems:
 
-1. **Token 爆炸** — 每个工具定义（name + description + inputSchema）平均消耗数百 token，60 个工具就是数万 token 的常量开销。
-2. **Prompt Cache 失效** — 工具列表作为 prompt 的一部分参与缓存计算。任何工具的增减（如 MCP 服务器连接/断开）都会导致整段缓存失效。
-3. **模型注意力稀释** — 过多的工具定义干扰模型对核心工具的选择准确性。
+1. **Token explosion** — each tool definition (name + description + inputSchema) costs several hundred tokens on average, so 60 tools is a constant overhead of tens of thousands of tokens.
+2. **Prompt cache invalidation** — the tool list is part of the prompt and takes part in cache computation. Any addition or removal of a tool (such as an MCP server connecting/disconnecting) invalidates the whole cached segment.
+3. **Diluted model attention** — too many tool definitions interfere with the model's accuracy in choosing core tools.
 
-## 2. 解决方案概览
+## 2. Solution overview
 
-ToolSearch 采用 **延迟加载（Deferred Loading）** 模式：
+ToolSearch uses a **deferred loading** pattern:
 
-- 将工具分为 **Core Tools**（始终加载）和 **Deferred Tools**（按需发现）
-- 模型通过 `SearchExtraTools` 工具搜索并发现 deferred tools
-- 通过 `ExecuteExtraTool` 工具代理执行发现的 deferred tools
-- **工具数组在会话中保持稳定**，不再动态注入已发现的 deferred tools（v3 修复的关键决策）
+- Tools are split into **Core Tools** (always loaded) and **Deferred Tools** (discovered on demand)
+- The model searches for and discovers deferred tools through the `SearchExtraTools` tool
+- Discovered deferred tools are executed by proxy through the `ExecuteExtraTool` tool
+- **The tools array stays stable during a session**, and discovered deferred tools are no longer injected dynamically (the key decision of the v3 fix)
 
-## 3. 核心架构
+## 3. Core architecture
 
-### 3.1 工具分类体系
+### 3.1 Tool classification
 
 ```
 ┌─────────────────────────────────────────────────────────────┐
 │                     All Tools (60+ built-in + MCP)          │
 ├───────────────────────────┬─────────────────────────────────┤
-│    Core Tools (29 个)     │     Deferred Tools (其余全部)    │
-│    始终加载，直接调用      │     不加载 schema，按需发现      │
-│    CORE_TOOLS 白名单定义   │     isDeferredTool() 判定       │
+│    Core Tools (29)        │     Deferred Tools (the rest)   │
+│    always loaded,         │     schema not loaded,          │
+│    called directly        │     discovered on demand        │
+│    defined by CORE_TOOLS  │     decided by isDeferredTool() │
+│    allowlist              │                                 │
 └───────────────────────────┴─────────────────────────────────┘
 ```
 
-**Core Tools**（`src/constants/tools.ts` 中的 `CORE_TOOLS` Set）：
+**Core Tools** (the `CORE_TOOLS` Set in `src/constants/tools.ts`):
 
-| 类别 | 工具 |
+| Category | Tools |
 |------|------|
-| 文件操作 | Bash/Shell, Read, Edit, Write, Glob, Grep, NotebookEdit |
-| Agent 交互 | Agent, AskUserQuestion |
-| 任务管理 | TaskOutput, TaskStop, TaskCreate, TaskGet, TaskList, TaskUpdate, TodoWrite |
-| 规划 | EnterPlanMode, ExitPlanMode, VerifyPlanExecution |
+| File operations | Bash/Shell, Read, Edit, Write, Glob, Grep, NotebookEdit |
+| Agent interaction | Agent, AskUserQuestion |
+| Task management | TaskOutput, TaskStop, TaskCreate, TaskGet, TaskList, TaskUpdate, TodoWrite |
+| Planning | EnterPlanMode, ExitPlanMode, VerifyPlanExecution |
 | Web | WebFetch, WebSearch |
-| 代码智能 | LSP |
-| 技能 | Skill |
-| 调度/监控 | Sleep |
-| 工具发现 | SearchExtraTools, ExecuteExtraTool, SyntheticOutput |
+| Code intelligence | LSP |
+| Skills | Skill |
+| Scheduling/monitoring | Sleep |
+| Tool discovery | SearchExtraTools, ExecuteExtraTool, SyntheticOutput |
 
-**isDeferredTool 判定逻辑**（`packages/builtin-tools/src/tools/SearchExtraToolsTool/prompt.ts`）：
+**isDeferredTool logic** (`packages/builtin-tools/src/tools/SearchExtraToolsTool/prompt.ts`):
 
 ```
 isDeferredTool(tool) =
-  tool.alwaysLoad === true?  → false（显式跳过延迟）
-  CORE_TOOLS.has(tool.name)? → false（核心工具不延迟）
-  otherwise                  → true（其余全部延迟）
+  tool.alwaysLoad === true?  → false (explicitly skip deferral)
+  CORE_TOOLS.has(tool.name)? → false (core tools are not deferred)
+  otherwise                  → true (everything else is deferred)
 ```
 
-### 3.2 三层组件架构
+### 3.2 Three-layer component architecture
 
 ```
 ┌──────────────────────────────────────────────────────┐
 │  API Layer (src/services/api/claude.ts)              │
-│  ├─ 判定是否启用 ToolSearch                          │
-│  ├─ 过滤 deferred tools 不进入 API tools 数组         │
-│  ├─ 注入 <available-deferred-tools> 或 delta 附件    │
-│  └─ 处理 tool_reference/text 格式的消息归一化         │
+│  ├─ Decides whether ToolSearch is enabled            │
+│  ├─ Filters deferred tools out of the API tools array│
+│  ├─ Injects <available-deferred-tools> or a delta    │
+│  │  attachment                                       │
+│  └─ Normalizes tool_reference/text message formats   │
 ├──────────────────────────────────────────────────────┤
 │  Query Loop (src/query.ts)                           │
-│  ├─ Turn-zero 预取：用户输入时触发                    │
-│  └─ Inter-turn 预取：assistant turn 后异步触发        │
+│  ├─ Turn-zero prefetch: triggered on user input      │
+│  └─ Inter-turn prefetch: triggered asynchronously    │
+│     after an assistant turn                          │
 ├──────────────────────────────────────────────────────┤
 │  Search Engine                                       │
-│  ├─ SearchExtraToolsTool — 搜索入口（4 种查询模式）  │
-│  ├─ TF-IDF Index (toolIndex.ts) — 语义搜索          │
-│  ├─ Keyword Search — 精确匹配                       │
-│  └─ ExecuteExtraTool — 代理执行                      │
+│  ├─ SearchExtraToolsTool — search entry (4 query modes) │
+│  ├─ TF-IDF Index (toolIndex.ts) — semantic search    │
+│  ├─ Keyword Search — exact matching                  │
+│  └─ ExecuteExtraTool — proxy execution               │
 └──────────────────────────────────────────────────────┘
 ```
 
-### 3.3 搜索引擎设计
+### 3.3 Search engine design
 
-SearchExtraToolsTool 支持四种查询模式：
+SearchExtraToolsTool supports four query modes:
 
-| 模式 | 语法 | 行为 | 返回 |
+| Mode | Syntax | Behavior | Returns |
 |------|------|------|------|
-| **Select** | `select:CronCreate,Snip` | 按名称直接获取，逗号分隔多选 | 精确匹配列表 |
-| **Discover** | `discover:schedule cron job` | 纯发现模式，返回描述+schema | 工具信息文本 |
-| **Keyword** | `notebook jupyter` | 关键词搜索 | 按相关性排序 |
-| **Required** | `+slack send` | `+` 前缀强制包含 | 包含必选词的结果 |
+| **Select** | `select:CronCreate,Snip` | Fetch directly by name, comma-separated for multiple | Exact match list |
+| **Discover** | `discover:schedule cron job` | Pure discovery mode, returns description + schema | Tool info text |
+| **Keyword** | `notebook jupyter` | Keyword search | Sorted by relevance |
+| **Required** | `+slack send` | The `+` prefix forces inclusion | Results containing the required term |
 
-**混合搜索算法**：
+**Hybrid search algorithm**:
 
 ```
-最终分数 = 关键词分数 × 0.4 + TF-IDF 分数 × 0.6
+final score = keyword score × 0.4 + TF-IDF score × 0.6
 ```
 
-- **Keyword Search**：基于工具名解析（CamelCase 分词、MCP 前缀拆解）、searchHint 匹配、描述文本匹配，加权计分
-- **TF-IDF Search**：复用 `skillSearch/localSearch.ts` 的算法，对 name (3.0)、searchHint (2.5)、description (1.0) 三个字段加权计算 TF-IDF 向量
+- **Keyword Search**: weighted scoring based on tool-name parsing (CamelCase tokenization, MCP prefix splitting), searchHint matching, and description text matching
+- **TF-IDF Search**: reuses the algorithm from `skillSearch/localSearch.ts`, computing weighted TF-IDF vectors over three fields: name (3.0), searchHint (2.5), and description (1.0)
 
-**MCP 工具名解析**：
+**MCP tool name parsing**:
 
 ```
 mcp__slack__send_message → parts: ["slack", "send", "message"]
 CamelCase → parts: ["cron", "create"]
 ```
 
-### 3.4 执行管道
+### 3.4 Execution pipeline
 
 ```
-模型调用 ExecuteExtraTool({tool_name: "CronCreate", params: {...}})
+The model calls ExecuteExtraTool({tool_name: "CronCreate", params: {...}})
   ↓
-ExecuteTool.call() 在全局工具注册表中查找 CronCreate
+ExecuteTool.call() looks up CronCreate in the global tool registry
   ↓
-检查目标工具 isEnabled() — 桥接/条件工具可能不可用
+Checks the target tool's isEnabled() — bridged/conditional tools may be unavailable
   ↓
-委托目标工具的 checkPermissions() — 权限传递给实际工具
+Delegates to the target tool's checkPermissions() — permissions pass through to the actual tool
   ↓
-调用目标工具的 call() — 与直接调用完全等价
+Calls the target tool's call() — fully equivalent to a direct call
   ↓
-返回结果（包装为 ExecuteExtraTool 的 output schema）
+Returns the result (wrapped in ExecuteExtraTool's output schema)
 ```
 
-关键设计：ExecuteExtraTool 的 `checkPermissions()` 返回 `passthrough`，将权限决策完全委托给目标工具。它本身不引入额外的权限层。
+Key design point: ExecuteExtraTool's `checkPermissions()` returns `passthrough`, delegating the permission decision entirely to the target tool. It introduces no extra permission layer of its own.
 
-### 3.5 Prompt Cache 稳定性策略（v3 关键修复）
+### 3.5 Prompt cache stability strategy (the key v3 fix)
 
-**问题**：早期版本在发现 deferred tool 后会将其注入 API tools 数组，导致每次发现新工具时 tools JSON 变化，prompt cache 全面失效。
+**Problem**: early versions injected a deferred tool into the API tools array after discovering it, so the tools JSON changed each time a new tool was discovered, and the prompt cache was fully invalidated.
 
-**修复**（commit `c14b7ead`）：deferred tools **始终不进入 API tools 数组**。tools 数组在整个会话中只包含 core tools + SearchExtraTools + ExecuteExtraTool，保持稳定。
+**Fix** (commit `c14b7ead`): deferred tools **never enter the API tools array**. For the whole session the tools array contains only core tools + SearchExtraTools + ExecuteExtraTool, and stays stable.
 
 ```
-API Tools 数组（会话期间不变）:
+API tools array (unchanged during the session):
   [Core Tools (29)] + [SearchExtraTools, ExecuteExtraTool, SyntheticOutput]
   
-  不包含: 任何 deferred tool（即使已被发现）
-  执行方式: 通过 ExecuteExtraTool 代理调用
+  Excludes: any deferred tool (even one already discovered)
+  Execution: proxied through ExecuteExtraTool
 ```
 
-## 4. 预取机制（Prefetch）
+## 4. Prefetch
 
-### 4.1 两个触发时机
+### 4.1 Two trigger points
 
-1. **Turn-zero**（`getTurnZeroSearchExtraToolsPrefetch`）— 用户输入第一轮时，基于输入文本搜索相关 deferred tools，以 attachment 形式注入
-2. **Inter-turn**（`startSearchExtraToolsPrefetch`）— assistant turn 结束后，基于对话上下文异步搜索
+1. **Turn-zero** (`getTurnZeroSearchExtraToolsPrefetch`) — on the first turn of user input, searches for relevant deferred tools based on the input text and injects them as an attachment
+2. **Inter-turn** (`startSearchExtraToolsPrefetch`) — after an assistant turn ends, searches asynchronously based on the conversation context
 
-### 4.2 Attachment 管道
+### 4.2 Attachment pipeline
 
 ```
 prefetch → Attachment(type: 'tool_discovery')
-  → messages.ts 转换为 system-reminder
+  → messages.ts converts it to a system-reminder
   → "The following tools were discovered... Use ExecuteExtraTool to invoke..."
 ```
 
-### 4.3 会话去重
+### 4.3 Session dedup
 
-`discoveredToolsThisSession` Set 跟踪已发现的工具，避免重复推荐。该 Set 独立于 skill prefetch 的去重集合，互不影响。使用 `addBoundedSessionEntry()` 保持上限 500 条，超出时裁剪到 400 条。
+The `discoveredToolsThisSession` Set tracks tools already discovered, to avoid repeated recommendations. This Set is independent of the skill prefetch dedup set, and they do not affect each other. `addBoundedSessionEntry()` keeps it capped at 500 entries, trimming to 400 when exceeded.
 
-## 5. 模式切换系统
+## 5. Mode switching
 
-通过环境变量 `ENABLE_SEARCH_EXTRA_TOOLS` 控制：
+Controlled by the environment variable `ENABLE_SEARCH_EXTRA_TOOLS`:
 
-| 环境变量值 | 模式 | 行为 |
+| Environment variable value | Mode | Behavior |
 |-----------|------|------|
-| 未设置 | `tst` | 默认启用，始终延迟非核心工具 |
-| `true` | `tst` | 强制启用 |
-| `false` | `standard` | 完全禁用，所有工具内联加载 |
-| `auto` | `tst-auto` | 仅当 deferred tools 超过上下文窗口 10% 时启用 |
-| `auto:N` | `tst-auto` | 自定义阈值百分比（N=0 启用，N=100 禁用） |
-| `CLAUDE_CODE_DISABLE_EXPERIMENTAL_BETAS=1` | `standard` | 全局 kill switch |
+| unset | `tst` | Enabled by default, always defers non-core tools |
+| `true` | `tst` | Force enabled |
+| `false` | `standard` | Fully disabled, all tools loaded inline |
+| `auto` | `tst-auto` | Enabled only when deferred tools exceed 10% of the context window |
+| `auto:N` | `tst-auto` | Custom threshold percentage (N=0 enables, N=100 disables) |
+| `CLAUDE_CODE_DISABLE_EXPERIMENTAL_BETAS=1` | `standard` | Global kill switch |
 
-`isSearchExtraToolsEnabledOptimistic()` — 快速判断（不检查阈值），用于工具注册
-`isSearchExtraToolsEnabled()` — 完整判断（含阈值检查），用于 API 调用
+`isSearchExtraToolsEnabledOptimistic()` — quick check (no threshold check), used for tool registration
+`isSearchExtraToolsEnabled()` — full check (including the threshold check), used for API calls
 
-## 6. Deferred Tools Delta 机制
+## 6. Deferred tools delta mechanism
 
-对于 Anthropic 内部用户（`USER_TYPE=ant`）或启用了 `tengu_glacier_2xr` feature flag 的用户，使用 **delta attachment** 替代 `<available-deferred-tools>` 头部注入：
+For Anthropic-internal users (`USER_TYPE=ant`) or users with the `tengu_glacier_2xr` feature flag enabled, a **delta attachment** replaces the `<available-deferred-tools>` header injection:
 
-- 首次：注入完整的 deferred tools 列表
-- 后续：只注入增量变化（新增/移除）
-- 优势：不会因为工具池变化导致整个头部缓存失效
+- First time: injects the full deferred tools list
+- Afterwards: injects only incremental changes (added/removed)
+- Advantage: changes in the tool pool do not invalidate the cache for the whole header
 
-Delta attachment 扫描历史消息中的 `deferred_tools_delta` 类型 attachment，重建已宣告集合，然后差分计算当前 deferred pool 的变化。
+The delta attachment scans the `deferred_tools_delta` attachments in the message history, rebuilds the announced set, and then diffs it against the current deferred pool.
 
-## 7. 演进历史
+## 7. Evolution history
 
-### v1: 基础设施层（`7be08f53`）
+### v1: infrastructure layer (`7be08f53`)
 
-**34 个文件，+4040/-90 行**
+**34 files, +4040/-90 lines**
 
-- 定义 `CORE_TOOLS` 白名单（31 个核心工具）
-- 实现 TF-IDF 工具索引模块 `toolIndex.ts`
-- 创建 `ExecuteTool` 作为统一执行入口
-- 增强 ToolSearchTool：TF-IDF 搜索路径、discover 模式、并行搜索合并
-- 新增 27 个单元测试
-- 实现预取管道和 UI 组件
+- Defined the `CORE_TOOLS` allowlist (31 core tools)
+- Implemented the TF-IDF tool index module `toolIndex.ts`
+- Created `ExecuteTool` as the unified execution entry
+- Enhanced ToolSearchTool: TF-IDF search path, discover mode, parallel search merging
+- Added 27 unit tests
+- Implemented the prefetch pipeline and UI components
 
-**关键文件**：
-- `src/services/toolSearch/toolIndex.ts` → 后续重命名为 `searchExtraTools/toolIndex.ts`
-- `packages/builtin-tools/src/tools/ExecuteTool/` — 执行入口
-- `src/constants/tools.ts` — CORE_TOOLS 定义
+**Key files**:
+- `src/services/toolSearch/toolIndex.ts` → later renamed `searchExtraTools/toolIndex.ts`
+- `packages/builtin-tools/src/tools/ExecuteTool/` — execution entry
+- `src/constants/tools.ts` — CORE_TOOLS definition
 
-### v2: 统一自建搜索（`8c157f07`）
+### v2: unified self-built search (`8c157f07`)
 
-**17 个文件，+274/-395 行**（净减少 121 行）
+**17 files, +274/-395 lines** (net reduction of 121 lines)
 
-- **移除 `tool_reference` blocks** — 不再依赖 Anthropic API 的 `tool_reference` 功能
-- **移除 `defer_loading` 字段** — 不再发送 API 级别的工具延迟加载标记
-- **移除 `modelSupportsToolReference()`** — 不再区分模型是否支持 tool_reference
-- **重命名 ExecuteTool → ExecuteExtraTool** — 更清晰地表达其作为代理执行器的角色
-- **输出改为纯文本** — 所有 provider 通用，无需特殊 API 功能支持
-- **简化 system prompt** — 工具使用指南从 ~120 行压缩到 ~10 行
+- **Removed `tool_reference` blocks** — no longer depends on the Anthropic API's `tool_reference` feature
+- **Removed the `defer_loading` field** — no longer sends API-level deferred-loading markers for tools
+- **Removed `modelSupportsToolReference()`** — no longer distinguishes whether a model supports tool_reference
+- **Renamed ExecuteTool → ExecuteExtraTool** — expresses its role as a proxy executor more clearly
+- **Output changed to plain text** — works for all providers, with no special API support needed
+- **Simplified the system prompt** — tool usage guidance compressed from ~120 lines to ~10
 
-**设计决策**：这次重构的核心洞察是 — 依赖 Anthropic 私有 API 特性（tool_reference、defer_loading、beta header）使得系统只能用于 first-party provider。自建 TF-IDF + keyword 搜索完全能满足需求，且对所有 provider（OpenAI、Gemini、Grok）通用。
+**Design decision**: the core insight of this refactor was that depending on private Anthropic API features (tool_reference, defer_loading, beta header) made the system usable only with the first-party provider. A self-built TF-IDF + keyword search fully meets the need and works for all providers (OpenAI, Gemini, Grok).
 
-### v3: Cache 稳定性修复（`c14b7ead`）
+### v3: cache stability fix (`c14b7ead`)
 
-**7 个文件，+46/-31 行**
+**7 files, +46/-31 lines**
 
-- **移除 "discover then include" 逻辑** — 发现的 deferred tools 不再注入 tools 数组
-- **tools 数组保持稳定** — 只有 core tools + SearchExtraTools + ExecuteExtraTool
-- **强化优先级引导** — core tools 直接调用，ToolSearch 仅作为发现 deferred tools 的手段
-- **已加载工具拒绝提示** — 搜索 core tool 时返回明确拒绝
+- **Removed the "discover then include" logic** — discovered deferred tools are no longer injected into the tools array
+- **Tools array kept stable** — only core tools + SearchExtraTools + ExecuteExtraTool
+- **Strengthened priority guidance** — core tools are called directly, and ToolSearch is only a way to discover deferred tools
+- **Rejection message for already-loaded tools** — searching for a core tool returns an explicit rejection
 
-**设计决策**：prompt cache 是 Claude Code 性能优化的关键。每次 tools JSON 变化都会导致缓存失效，代价远大于通过 ExecuteExtraTool 代理调用 deferred tools 的额外 token。因此选择牺牲一点直接调用的便利性，换取 cache 稳定性。
+**Design decision**: the prompt cache is key to Claude Code's performance. Every change to the tools JSON invalidates the cache, at a cost far greater than the extra tokens of calling deferred tools by proxy through ExecuteExtraTool. So some convenience of direct calls was traded away for cache stability.
 
-### v4: Agents/Teams 延迟化（`af0d7dc8`）
+### v4: deferring Agents/Teams (`af0d7dc8`)
 
-**7 个文件，+36/-18 行**
+**7 files, +36/-18 lines**
 
-- 将 `TeamCreate`、`TeamDelete`、`SendMessage` 从 CORE_TOOLS 移除
-- 这些工具仅在 swarm 模式下常用，平时占用 context token
-- swarm 模式下 SendMessage 保持 always loaded
-- TeamCreate/TeamDelete 在 swarm 未启用时返回启用提示
+- Removed `TeamCreate`, `TeamDelete`, and `SendMessage` from CORE_TOOLS
+- These tools are commonly used only in swarm mode and otherwise take up context tokens
+- In swarm mode SendMessage stays always loaded
+- TeamCreate/TeamDelete return an enablement hint when swarm is not enabled
 
-**设计决策**：不是所有用户都需要团队功能。将其延迟化后，大部分用户可以节省约 3 个工具定义的 token 开销。
+**Design decision**: not every user needs team features. Once deferred, most users save the token overhead of about 3 tool definitions.
 
-## 8. 文件索引
+## 8. File index
 
-### 核心文件
+### Core files
 
-| 文件 | 职责 |
+| File | Responsibility |
 |------|------|
-| `src/constants/tools.ts` | CORE_TOOLS 白名单、工具权限集合 |
-| `src/utils/searchExtraTools.ts` | 模式判定、阈值计算、delta 差分、discovered tools 提取 |
-| `src/services/searchExtraTools/toolIndex.ts` | TF-IDF 索引构建和搜索 |
-| `src/services/searchExtraTools/prefetch.ts` | 预取管道（turn-zero + inter-turn） |
-| `packages/builtin-tools/src/tools/SearchExtraToolsTool/` | 搜索工具实现（4 种查询模式） |
-| `packages/builtin-tools/src/tools/ExecuteTool/` | 代理执行器实现 |
-| `src/services/api/claude.ts` | API 层集成（工具过滤、消息归一化） |
-| `src/query.ts` | 查询循环集成（预取触发点） |
-| `src/utils/messages.ts` | Attachment → system-reminder 转换 |
+| `src/constants/tools.ts` | CORE_TOOLS allowlist, tool permission sets |
+| `src/utils/searchExtraTools.ts` | Mode decision, threshold calculation, delta diff, discovered tools extraction |
+| `src/services/searchExtraTools/toolIndex.ts` | TF-IDF index building and search |
+| `src/services/searchExtraTools/prefetch.ts` | Prefetch pipeline (turn-zero + inter-turn) |
+| `packages/builtin-tools/src/tools/SearchExtraToolsTool/` | Search tool implementation (4 query modes) |
+| `packages/builtin-tools/src/tools/ExecuteTool/` | Proxy executor implementation |
+| `src/services/api/claude.ts` | API layer integration (tool filtering, message normalization) |
+| `src/query.ts` | Query loop integration (prefetch trigger points) |
+| `src/utils/messages.ts` | Attachment → system-reminder conversion |
 
-### 共享基础设施
+### Shared infrastructure
 
-| 文件 | 被复用的导出 |
+| File | Reused exports |
 |------|-------------|
 | `src/services/skillSearch/localSearch.ts` | `tokenizeAndStem`, `computeWeightedTf`, `computeIdf`, `cosineSimilarity` |
 | `src/services/skillSearch/prefetch.ts` | `extractQueryFromMessages` |
 
-### 测试文件
+### Test files
 
-| 文件 | 覆盖范围 |
+| File | Coverage |
 |------|---------|
-| `src/services/searchExtraTools/__tests__/toolIndex.test.ts` | 索引构建、TF-IDF 搜索、CJK 处理 |
-| `src/services/searchExtraTools/__tests__/prefetch.test.ts` | 预取管道、去重、attachment 生成 |
-| `packages/builtin-tools/src/tools/SearchExtraToolsTool/__tests__/` | 搜索工具 4 种模式 |
-| `packages/builtin-tools/src/tools/ExecuteTool/__tests__/` | 代理执行 |
+| `src/services/searchExtraTools/__tests__/toolIndex.test.ts` | Index building, TF-IDF search, CJK handling |
+| `src/services/searchExtraTools/__tests__/prefetch.test.ts` | Prefetch pipeline, dedup, attachment generation |
+| `packages/builtin-tools/src/tools/SearchExtraToolsTool/__tests__/` | The 4 search tool modes |
+| `packages/builtin-tools/src/tools/ExecuteTool/__tests__/` | Proxy execution |
 
-## 9. 维护指南
+## 9. Maintenance guide
 
-### 9.1 新增工具的延迟化决策
+### 9.1 Deciding whether to defer a new tool
 
-将新工具加入 deferred 状态的标准：
-- 工具仅在特定场景使用（如 swarm 模式、特定 MCP 集成）
-- 工具的 schema 较大（占用较多 context token）
-- 工具不是模型默认会尝试的核心操作
+Criteria for making a new tool deferred:
+- The tool is used only in specific scenarios (such as swarm mode or a particular MCP integration)
+- The tool's schema is large (takes up many context tokens)
+- The tool is not a core operation the model would try by default
 
-将已延迟的工具提升为 core tool：
-- 在 `src/constants/tools.ts` 的 `CORE_TOOLS` Set 中添加工具名常量
-- 确保导入对应的 `*_TOOL_NAME` 常量
+To promote a deferred tool to a core tool:
+- Add the tool name constant to the `CORE_TOOLS` Set in `src/constants/tools.ts`
+- Make sure the matching `*_TOOL_NAME` constant is imported
 
-### 9.2 修改注意事项
+### 9.2 Notes when making changes
 
-1. **修改 `localSearch.ts` 的 TF-IDF 函数**：需同步检查 `toolIndex.test.ts` 和 `localSearch.test.ts`
-2. **修改 `skillSearch/prefetch.ts` 的 `extractQueryFromMessages`**：需同步检查工具预取行为（`searchExtraTools/prefetch.ts` 调用同一函数）
-3. **修改 CORE_TOOLS**：需更新 `src/constants/__tests__/tools.test.ts` 测试
-4. **修改 `isDeferredTool`**：需更新 `src/constants/__tests__/tools.test.ts` 和 `SearchExtraToolsTool.test.ts`
+1. **Changing the TF-IDF functions in `localSearch.ts`**: also check `toolIndex.test.ts` and `localSearch.test.ts`
+2. **Changing `extractQueryFromMessages` in `skillSearch/prefetch.ts`**: also check tool prefetch behavior (`searchExtraTools/prefetch.ts` calls the same function)
+3. **Changing CORE_TOOLS**: update the `src/constants/__tests__/tools.test.ts` tests
+4. **Changing `isDeferredTool`**: update `src/constants/__tests__/tools.test.ts` and `SearchExtraToolsTool.test.ts`
 
-### 9.3 性能优化配置
+### 9.3 Performance tuning configuration
 
 ```bash
-# 环境变量调优
-ENABLE_SEARCH_EXTRA_TOOLS=auto:15    # 当 deferred tools 超过上下文 15% 时启用
-SEARCH_EXTRA_TOOLS_WEIGHT_KEYWORD=0.5  # 关键词搜索权重
-SEARCH_EXTRA_TOOLS_WEIGHT_TFIDF=0.5    # TF-IDF 搜索权重
-SEARCH_EXTRA_TOOLS_DISPLAY_MIN_SCORE=0.10  # 最低显示分数阈值
+# Environment variable tuning
+ENABLE_SEARCH_EXTRA_TOOLS=auto:15    # enable when deferred tools exceed 15% of context
+SEARCH_EXTRA_TOOLS_WEIGHT_KEYWORD=0.5  # keyword search weight
+SEARCH_EXTRA_TOOLS_WEIGHT_TFIDF=0.5    # TF-IDF search weight
+SEARCH_EXTRA_TOOLS_DISPLAY_MIN_SCORE=0.10  # minimum display score threshold
 ```
 
-### 9.4 搜索质量调优
+### 9.4 Tuning search quality
 
-- `TOOL_FIELD_WEIGHT`（`toolIndex.ts`）：控制 name/searchHint/description 对 TF-IDF 分数的贡献权重
-- `KEYWORD_WEIGHT` / `TFIDF_WEIGHT`（`SearchExtraToolsTool.ts`）：控制混合搜索中两种算法的最终权重比例
-- `searchHint` 属性：为工具添加精心编写的搜索提示，提高关键词匹配质量
+- `TOOL_FIELD_WEIGHT` (`toolIndex.ts`): controls how much name/searchHint/description contribute to the TF-IDF score
+- `KEYWORD_WEIGHT` / `TFIDF_WEIGHT` (`SearchExtraToolsTool.ts`): control the final weight ratio of the two algorithms in hybrid search
+- The `searchHint` property: add a carefully written search hint to a tool to improve keyword matching quality
 
-## 10. 与 Skill Search 的关系
+## 10. Relationship to Skill Search
 
-ToolSearch 和 SkillSearch 是平行的搜索系统，共享底层算法但服务于不同领域：
+ToolSearch and SkillSearch are parallel search systems that share the underlying algorithms but serve different domains:
 
-| 维度 | ToolSearch | SkillSearch |
+| Dimension | ToolSearch | SkillSearch |
 |------|-----------|-------------|
-| 搜索对象 | Deferred 工具（内置 + MCP） | 用户技能（skill） |
-| 执行方式 | `ExecuteExtraTool` 代理调用 | 直接注入 attachment 内容 |
-| 字段权重 | name:3.0, searchHint:2.5, desc:1.0 | name:3.0, whenToUse:2.0, desc:1.0 |
-| 缓存策略 | 按工具名列表缓存 | 按 cwd 缓存 |
-| 去重集合 | `discoveredToolsThisSession` | 独立的 Set |
+| What is searched | Deferred tools (built-in + MCP) | User skills |
+| Execution | Proxy call via `ExecuteExtraTool` | Directly injects attachment content |
+| Field weights | name:3.0, searchHint:2.5, desc:1.0 | name:3.0, whenToUse:2.0, desc:1.0 |
+| Cache strategy | Cached by tool name list | Cached by cwd |
+| Dedup set | `discoveredToolsThisSession` | A separate Set |
 
-共享的底层函数：
-- `tokenizeAndStem` — 统一的 CJK/ASCII 分词和词干提取
-- `computeWeightedTf` — 加权词频计算
-- `computeIdf` — 逆文档频率计算
-- `cosineSimilarity` — 向量余弦相似度
-- `extractQueryFromMessages` — 从对话历史中提取搜索查询文本
+Shared underlying functions:
+- `tokenizeAndStem` — unified CJK/ASCII tokenization and stemming
+- `computeWeightedTf` — weighted term frequency computation
+- `computeIdf` — inverse document frequency computation
+- `cosineSimilarity` — vector cosine similarity
+- `extractQueryFromMessages` — extracts the search query text from conversation history

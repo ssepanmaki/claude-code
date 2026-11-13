@@ -1,368 +1,368 @@
-# Computer Use 工具参考文档
+# Computer Use Tools Reference
 
-## 概览
+## Overview
 
-Computer Use 提供 38 个工具，分为三类：
+Computer Use provides 38 tools in three categories:
 
-| 分类 | 平台 | 工具数 | 说明 |
+| Category | Platform | Tools | Description |
 |------|------|--------|------|
-| 通用工具 | 全平台 | 24 | 官方 Computer Use 标准能力 |
-| Windows 专属工具 | Win32 | 11 | 绑定窗口模式下的增强能力 |
-| 教学工具 | 全平台 | 3 | 分步引导模式（需 teachMode 开启） |
+| General tools | All platforms | 24 | Standard official Computer Use capabilities |
+| Windows-specific tools | Win32 | 11 | Enhanced capabilities in bound-window mode |
+| Teaching tools | All platforms | 3 | Step-by-step guided mode (requires `teachMode`) |
 
 ---
 
-## 一、通用工具（24 个）
+## 1. General tools (24)
 
-全平台可用。未绑定窗口时，操作对象是整个屏幕。
+Available on all platforms. When no window is bound, the target of every operation is the whole screen.
 
-### 权限与会话
+### Permissions and session
 
-| 工具 | 参数 | 说明 |
+| Tool | Parameters | Description |
 |------|------|------|
-| `request_access` | `apps[]`, `reason`, `clipboardRead?`, `clipboardWrite?`, `systemKeyCombos?` | 请求操作应用的权限。所有其他工具的前置条件 |
-| `list_granted_applications` | — | 列出当前会话已授权的应用 |
+| `request_access` | `apps[]`, `reason`, `clipboardRead?`, `clipboardWrite?`, `systemKeyCombos?` | Request permission to operate apps. A prerequisite for all other tools |
+| `list_granted_applications` | — | List the apps authorized in the current session |
 
-### 截图与显示
+### Screenshots and display
 
-| 工具 | 参数 | 说明 |
+| Tool | Parameters | Description |
 |------|------|------|
-| `screenshot` | `save_to_disk?` | 截取当前屏幕。绑定窗口时截取绑定窗口（PrintWindow）。返回图片 + GUI 元素列表（Windows） |
-| `zoom` | `region: [x1,y1,x2,y2]` | 截取指定区域的高分辨率图片。坐标基于最近一次全屏截图 |
-| `switch_display` | `display` | 切换截图的目标显示器 |
+| `screenshot` | `save_to_disk?` | Capture the current screen. When a window is bound, captures the bound window (PrintWindow). Returns an image plus a GUI element list (Windows) |
+| `zoom` | `region: [x1,y1,x2,y2]` | Capture a high-resolution image of the given region. Coordinates are based on the most recent full-screen screenshot |
+| `switch_display` | `display` | Switch the target display for screenshots |
 
-### 鼠标操作
+### Mouse operations
 
-| 工具 | 参数 | 说明 |
+| Tool | Parameters | Description |
 |------|------|------|
-| `left_click` | `coordinate: [x,y]`, `text?` (修饰键) | 左键点击。`text` 可传 "shift"/"ctrl"/"alt" 实现组合点击 |
-| `double_click` | `coordinate`, `text?` | 双击 |
-| `triple_click` | `coordinate`, `text?` | 三击（选整行） |
-| `right_click` | `coordinate`, `text?` | 右键点击 |
-| `middle_click` | `coordinate`, `text?` | 中键点击 |
-| `mouse_move` | `coordinate` | 移动鼠标（不点击） |
-| `left_click_drag` | `coordinate` (终点), `start_coordinate?` (起点) | 拖拽 |
-| `left_mouse_down` | — | 按下左键不松 |
-| `left_mouse_up` | — | 松开左键 |
-| `cursor_position` | — | 获取当前鼠标位置 |
+| `left_click` | `coordinate: [x,y]`, `text?` (modifier key) | Left click. `text` can be "shift"/"ctrl"/"alt" for modified clicks |
+| `double_click` | `coordinate`, `text?` | Double click |
+| `triple_click` | `coordinate`, `text?` | Triple click (selects a whole line) |
+| `right_click` | `coordinate`, `text?` | Right click |
+| `middle_click` | `coordinate`, `text?` | Middle click |
+| `mouse_move` | `coordinate` | Move the mouse (no click) |
+| `left_click_drag` | `coordinate` (end point), `start_coordinate?` (start point) | Drag |
+| `left_mouse_down` | — | Press and hold the left button |
+| `left_mouse_up` | — | Release the left button |
+| `cursor_position` | — | Get the current mouse position |
 
-### 键盘操作
+### Keyboard operations
 
-| 工具 | 参数 | 说明 |
+| Tool | Parameters | Description |
 |------|------|------|
-| `type` | `text` | 输入文字 |
-| `key` | `text` (如 "ctrl+s"), `repeat?` | 按键/组合键 |
-| `hold_key` | `text`, `duration` (秒) | 按住键指定时长 |
+| `type` | `text` | Type text |
+| `key` | `text` (e.g. "ctrl+s"), `repeat?` | Press a key or key combination |
+| `hold_key` | `text`, `duration` (seconds) | Hold a key for the given duration |
 
-### 滚动
+### Scrolling
 
-| 工具 | 参数 | 说明 |
+| Tool | Parameters | Description |
 |------|------|------|
-| `scroll` | `coordinate`, `scroll_direction`, `scroll_amount` | 滚动。方向: up/down/left/right |
+| `scroll` | `coordinate`, `scroll_direction`, `scroll_amount` | Scroll. Directions: up/down/left/right |
 
-### 应用管理
+### Application management
 
-| 工具 | 参数 | 说明 |
+| Tool | Parameters | Description |
 |------|------|------|
-| `open_application` | `app` | 打开应用。Windows 上自动绑定窗口 |
+| `open_application` | `app` | Open an app. On Windows the window is bound automatically |
 
-### 剪贴板
+### Clipboard
 
-| 工具 | 参数 | 说明 |
+| Tool | Parameters | Description |
 |------|------|------|
-| `read_clipboard` | — | 读取剪贴板文字 |
-| `write_clipboard` | `text` | 写入剪贴板 |
+| `read_clipboard` | — | Read clipboard text |
+| `write_clipboard` | `text` | Write to the clipboard |
 
-### 其他
+### Other
 
-| 工具 | 参数 | 说明 |
+| Tool | Parameters | Description |
 |------|------|------|
-| `wait` | `duration` (秒) | 等待 |
-| `computer_batch` | `actions[]` | 批量执行多个动作（减少 API 往返） |
+| `wait` | `duration` (seconds) | Wait |
+| `computer_batch` | `actions[]` | Run several actions in one batch (fewer API round trips) |
 
 ---
 
-## 二、Windows 专属工具（12 个）
+## 2. Windows-specific tools (12)
 
-仅 Windows 平台可见。核心能力：**绑定窗口后的独立操作——不抢占用户鼠标键盘**。
+Visible only on Windows. Core capability: **independent operation after binding a window, without taking over the user's mouse and keyboard**.
 
-### 工作模式
+### Working modes
 
 ```
 ┌──────────────────────────────────────────────────┐
-│                  未绑定模式                        │
-│  使用通用工具 (left_click/type/key/scroll)          │
-│  操作对象：整个屏幕                                 │
-│  输入方式：全局 SendInput（会移动真实鼠标）           │
+│                  Unbound mode                     │
+│  Uses the general tools (left_click/type/key/scroll) │
+│  Target: the whole screen                         │
+│  Input: global SendInput (moves the real mouse)   │
 └──────────────────────────────────────────────────┘
                         │
                   bind_window / open_application
                         ▼
 ┌──────────────────────────────────────────────────┐
-│                  绑定窗口模式                      │
-│  使用 Win32 工具 (virtual_mouse/virtual_keyboard)  │
-│  操作对象：绑定的窗口                               │
-│  输入方式：SendMessageW（不动真实鼠标/键盘）          │
-│  可视化：DWM 绿色边框 + 虚拟光标 + 状态指示器        │
+│                Bound-window mode                  │
+│  Uses Win32 tools (virtual_mouse/virtual_keyboard)│
+│  Target: the bound window                         │
+│  Input: SendMessageW (real mouse/keyboard untouched) │
+│  Visuals: DWM green border + virtual cursor + status indicator │
 └──────────────────────────────────────────────────┘
 ```
 
-### 窗口绑定
+### Window binding
 
-| 工具 | 参数 | 说明 |
+| Tool | Parameters | Description |
 |------|------|------|
-| `bind_window` | `action`: list/bind/unbind/status | 窗口绑定管理 |
+| `bind_window` | `action`: list/bind/unbind/status | Window binding management |
 
-**动作详情：**
+**Action details:**
 
-| action | 参数 | 说明 |
+| action | Parameters | Description |
 |--------|------|------|
-| `list` | — | 列出所有可见窗口（hwnd、pid、title） |
-| `bind` | `title?`, `hwnd?`, `pid?` | 绑定到指定窗口。设置 DWM 绿色边框 + 启动虚拟光标 + 启动状态指示器 + 短暂激活窗口确保可接收输入 |
-| `unbind` | — | 解除绑定，恢复全屏模式 |
-| `status` | — | 查看当前绑定状态（hwnd、title、pid、窗口矩形） |
+| `list` | — | List all visible windows (hwnd, pid, title) |
+| `bind` | `title?`, `hwnd?`, `pid?` | Bind to the given window. Sets the DWM green border, starts the virtual cursor and the status indicator, and briefly activates the window so it can receive input |
+| `unbind` | — | Unbind and restore full-screen mode |
+| `status` | — | Show the current binding state (hwnd, title, pid, window rectangle) |
 
-### 窗口管理
+### Window management
 
-| 工具 | 参数 | 说明 |
+| Tool | Parameters | Description |
 |------|------|------|
-| `window_management` | `action`, `x?`, `y?`, `width?`, `height?` | 窗口操作（Win32 API，不走全局快捷键） |
+| `window_management` | `action`, `x?`, `y?`, `width?`, `height?` | Window operations (Win32 API, no global hotkeys) |
 
-**动作详情：**
+**Action details:**
 
-| action | 说明 |
+| action | Description |
 |--------|------|
 | `minimize` | ShowWindow(SW_MINIMIZE) |
 | `maximize` | ShowWindow(SW_MAXIMIZE) |
-| `restore` | ShowWindow(SW_RESTORE) — 恢复最小化/最大化 |
-| `close` | SendMessage(WM_CLOSE) — 优雅关闭 |
-| `focus` | SetForegroundWindow + BringWindowToTop — 激活窗口 |
-| `move_offscreen` | SetWindowPos(-32000,-32000) — 移到屏幕外（仍可 SendMessage/PrintWindow） |
-| `move_resize` | SetWindowPos — 移动/缩放到指定位置和大小 |
-| `get_rect` | GetWindowRect — 获取当前位置和大小 |
+| `restore` | ShowWindow(SW_RESTORE) — restore from minimized/maximized |
+| `close` | SendMessage(WM_CLOSE) — graceful close |
+| `focus` | SetForegroundWindow + BringWindowToTop — activate the window |
+| `move_offscreen` | SetWindowPos(-32000,-32000) — move off-screen (SendMessage/PrintWindow still work) |
+| `move_resize` | SetWindowPos — move/resize to the given position and size |
+| `get_rect` | GetWindowRect — get the current position and size |
 
-### 虚拟鼠标
+### Virtual mouse
 
-| 工具 | 参数 | 说明 |
+| Tool | Parameters | Description |
 |------|------|------|
-| `virtual_mouse` | `action`, `coordinate: [x,y]`, `start_coordinate?` | 在绑定窗口内操作虚拟鼠标 |
+| `virtual_mouse` | `action`, `coordinate: [x,y]`, `start_coordinate?` | Operate a virtual mouse inside the bound window |
 
-**动作详情：**
+**Action details:**
 
-| action | 说明 |
+| action | Description |
 |--------|------|
-| `click` | 左键点击。虚拟光标移动到坐标 + 闪烁动画 |
-| `double_click` | 双击 |
-| `right_click` | 右键点击 |
-| `move` | 移动虚拟光标（不点击） |
-| `drag` | 按住 → 移动 → 松开。需 `start_coordinate` 指定起点 |
-| `down` | 按下左键不松 |
-| `up` | 松开左键 |
+| `click` | Left click. The virtual cursor moves to the coordinate with a blink animation |
+| `double_click` | Double click |
+| `right_click` | Right click |
+| `move` | Move the virtual cursor (no click) |
+| `drag` | Press, move, release. Needs `start_coordinate` for the start point |
+| `down` | Press and hold the left button |
+| `up` | Release the left button |
 
-**与通用鼠标工具的区别：**
+**Difference from the general mouse tools:**
 
-| | 通用 (`left_click` 等) | `virtual_mouse` |
+| | General (`left_click` etc.) | `virtual_mouse` |
 |---|---|---|
-| 输入方式 | SendInput（全局） | SendMessageW（窗口级） |
-| 真实鼠标 | 会移动 | **不动** |
-| 用户干扰 | 有 | **无** |
-| 适用场景 | 未绑定时 | **绑定后** |
+| Input method | SendInput (global) | SendMessageW (window-level) |
+| Real mouse | Moves | **Does not move** |
+| User interference | Yes | **None** |
+| Use when | Unbound | **Bound** |
 
-### 虚拟键盘
+### Virtual keyboard
 
-| 工具 | 参数 | 说明 |
+| Tool | Parameters | Description |
 |------|------|------|
-| `virtual_keyboard` | `action`, `text`, `duration?`, `repeat?` | 在绑定窗口内操作虚拟键盘 |
+| `virtual_keyboard` | `action`, `text`, `duration?`, `repeat?` | Operate a virtual keyboard inside the bound window |
 
-**动作详情：**
+**Action details:**
 
-| action | text 含义 | 说明 |
+| action | Meaning of text | Description |
 |--------|----------|------|
-| `type` | 要输入的文字 | SendMessageW(WM_CHAR)，支持 Unicode 中文/emoji |
-| `combo` | 组合键 (如 "ctrl+s") | WM_KEYDOWN/UP 序列 |
-| `press` | 单个键名 | 按下不松（配合 release 使用） |
-| `release` | 单个键名 | 松开按键 |
-| `hold` | 键名或组合 | 按住指定秒数后松开 |
+| `type` | Text to type | SendMessageW(WM_CHAR), supports Unicode (CJK/emoji) |
+| `combo` | Key combination (e.g. "ctrl+s") | WM_KEYDOWN/UP sequence |
+| `press` | A single key name | Press and hold (use with release) |
+| `release` | A single key name | Release the key |
+| `hold` | Key name or combination | Hold for the given number of seconds, then release |
 
-**与通用键盘工具的区别：**
+**Difference from the general keyboard tools:**
 
-| | 通用 (`type`/`key`) | `virtual_keyboard` |
+| | General (`type`/`key`) | `virtual_keyboard` |
 |---|---|---|
-| 输入方式 | SendInput（全局） | SendMessageW（窗口级） |
-| 物理键盘 | 会冲突 | **不冲突** |
-| 适用场景 | 未绑定时 | **绑定后** |
+| Input method | SendInput (global) | SendMessageW (window-level) |
+| Physical keyboard | Conflicts | **No conflict** |
+| Use when | Unbound | **Bound** |
 
-**注意：** SendMessageW 对 Windows Terminal (ConPTY) 等现代应用无效。这些应用需要使用通用工具 + 窗口激活方式操作。
+**Note:** SendMessageW has no effect on modern apps such as Windows Terminal (ConPTY). For those apps, use the general tools plus window activation.
 
-### 鼠标滚轮
+### Mouse wheel
 
-| 工具 | 参数 | 说明 |
+| Tool | Parameters | Description |
 |------|------|------|
-| `mouse_wheel` | `coordinate: [x,y]`, `delta`, `direction?` | WM_MOUSEWHEEL 鼠标中键滚轮 |
+| `mouse_wheel` | `coordinate: [x,y]`, `delta`, `direction?` | WM_MOUSEWHEEL mouse wheel scrolling |
 
-**参数说明：**
-- `delta`: 正值=向上，负值=向下。每 1 单位 ≈ 3 行
-- `direction`: "vertical"（默认）或 "horizontal"
-- `coordinate`: 滚轮作用点——决定哪个面板/区域接收滚动
+**Parameters:**
+- `delta`: positive = up, negative = down. Each unit ≈ 3 lines
+- `direction`: "vertical" (default) or "horizontal"
+- `coordinate`: where the wheel acts, which decides which pane/region receives the scroll
 
-**与通用 `scroll` 的区别：**
+**Difference from the general `scroll`:**
 
 | | `scroll` | `mouse_wheel` |
 |---|---|---|
-| 原理 | WM_VSCROLL/WM_HSCROLL | **WM_MOUSEWHEEL** |
+| Mechanism | WM_VSCROLL/WM_HSCROLL | **WM_MOUSEWHEEL** |
 | Excel | ❌ | ✅ |
-| 浏览器 | ❌ | ✅ |
-| 代码编辑器 | ❌ | ✅ |
+| Browsers | ❌ | ✅ |
+| Code editors | ❌ | ✅ |
 
-### 元素级操作
+### Element-level operations
 
-| 工具 | 参数 | 说明 |
+| Tool | Parameters | Description |
 |------|------|------|
-| `click_element` | `name?`, `role?`, `automationId?` | 按无障碍名称/角色点击 GUI 元素 |
-| `type_into_element` | `name?`, `role?`, `automationId?`, `text` | 按名称向元素输入文字 |
+| `click_element` | `name?`, `role?`, `automationId?` | Click a GUI element by accessibility name/role |
+| `type_into_element` | `name?`, `role?`, `automationId?`, `text` | Type text into an element by name |
 
-**工作原理：**
-1. 通过 UI Automation 在绑定窗口中查找匹配元素
-2. `click_element`: 先尝试 InvokePattern（按钮/菜单），失败则 SendMessage 点击 BoundingRect 中心
-3. `type_into_element`: 先尝试 ValuePattern 直接设值，失败则点击聚焦 + WM_CHAR 输入
+**How it works:**
+1. Find the matching element in the bound window through UI Automation
+2. `click_element`: tries InvokePattern first (buttons/menus), and on failure sends a SendMessage click at the center of the BoundingRect
+3. `type_into_element`: tries ValuePattern to set the value directly, and on failure clicks to focus and types with WM_CHAR
 
-**适用场景：**
-- 截图中看到元素名称但坐标不精确时
-- Accessibility Snapshot 列出了元素的 name/automationId 时
-- 比坐标点击更可靠（不受窗口缩放/DPI 影响）
+**Use when:**
+- You can see an element's name in the screenshot but the coordinates are imprecise
+- The Accessibility Snapshot lists the element's name/automationId
+- It is more reliable than coordinate clicks (not affected by window scaling/DPI)
 
-### 终端交互
+### Terminal interaction
 
-| 工具 | 参数 | 说明 |
+| Tool | Parameters | Description |
 |------|------|------|
-| `open_terminal` | `agent`, `command?` | 打开新终端窗口并启动 AI agent（claude/codex/gemini/custom）。自动绑定窗口并截图验证 |
-| `activate_window` | `click_x?`, `click_y?` | 激活绑定窗口：SetForegroundWindow + BringWindowToTop + 点击确保焦点 |
-| `prompt_respond` | `response_type`, `arrow_direction?`, `arrow_count?`, `text?` | 处理终端 Yes/No/选择提示 |
+| `open_terminal` | `agent`, `command?` | Open a new terminal window and start an AI agent (claude/codex/gemini/custom). Binds the window automatically and verifies with a screenshot |
+| `activate_window` | `click_x?`, `click_y?` | Activate the bound window: SetForegroundWindow + BringWindowToTop + a click to ensure focus |
+| `prompt_respond` | `response_type`, `arrow_direction?`, `arrow_count?`, `text?` | Handle terminal Yes/No/selection prompts |
 
-**open_terminal agent 类型：**
+**open_terminal agent types:**
 
-| agent | 命令 | 说明 |
+| agent | Command | Description |
 |-------|------|------|
-| `claude` | `claude` | 启动 Claude Code |
-| `codex` | `codex` | 启动 Codex |
-| `gemini` | `gemini` | 启动 Gemini |
-| `custom` | 用户指定 | 自定义命令 |
+| `claude` | `claude` | Start Claude Code |
+| `codex` | `codex` | Start Codex |
+| `gemini` | `gemini` | Start Gemini |
+| `custom` | User-specified | Custom command |
 
-**response_type 详情：**
+**response_type details:**
 
-| response_type | 操作 | 场景 |
+| response_type | Action | Scenario |
 |---------------|------|------|
-| `yes` | 发送 'y' + Enter | npm "Continue? (y/n)" |
-| `no` | 发送 'n' + Enter | 拒绝确认 |
-| `enter` | 发送 Enter | 接受默认选项 |
-| `escape` | 发送 Escape | 取消操作 |
-| `select` | ↑/↓ 箭头 × N + Enter | inquirer 选择菜单 |
-| `type` | 输入文字 + Enter | 文本输入提示 |
+| `yes` | Send 'y' + Enter | npm "Continue? (y/n)" |
+| `no` | Send 'n' + Enter | Decline a confirmation |
+| `enter` | Send Enter | Accept the default option |
+| `escape` | Send Escape | Cancel the operation |
+| `select` | ↑/↓ arrow × N + Enter | inquirer selection menu |
+| `type` | Type text + Enter | Text input prompt |
 
-### 状态指示器
+### Status indicator
 
-| 工具 | 参数 | 说明 |
+| Tool | Parameters | Description |
 |------|------|------|
-| `status_indicator` | `action`: show/hide/status, `message?` | 控制绑定窗口底部的浮动状态标签 |
+| `status_indicator` | `action`: show/hide/status, `message?` | Control the floating status label at the bottom of the bound window |
 
 ---
 
-## 三、教学工具（3 个）
+## 3. Teaching tools (3)
 
-需要 `teachMode` 开启。
+Require `teachMode` to be enabled.
 
-| 工具 | 说明 |
+| Tool | Description |
 |------|------|
-| `request_teach_access` | 请求教学引导模式权限 |
-| `teach_step` | 显示一步引导提示，等用户点 Next |
-| `teach_batch` | 批量排队多步引导 |
+| `request_teach_access` | Request permission for guided teaching mode |
+| `teach_step` | Show one guidance tip and wait for the user to click Next |
+| `teach_batch` | Queue several guidance steps in one batch |
 
 ---
 
-## 操作流程
+## Workflows
 
-### 流程 1：全屏操作（未绑定）
-
-```
-request_access(apps=["Notepad"])
-open_application(app="Notepad")          ← 自动绑定窗口
-screenshot                               ← PrintWindow 截图 + GUI 元素列表
-left_click(coordinate=[500, 300])        ← 全局 SendInput
-type(text="hello world")                 ← 全局 SendInput
-key(text="ctrl+s")                       ← 全局 SendInput
-```
-
-### 流程 2：绑定窗口操作（推荐，不干扰用户）
+### Flow 1: full-screen operation (unbound)
 
 ```
 request_access(apps=["Notepad"])
-bind_window(action="list")               ← 列出所有窗口
-bind_window(action="bind", title="记事本") ← 绑定 + 绿色边框 + 虚拟光标
-screenshot                               ← PrintWindow 截取绑定窗口
-virtual_mouse(action="click", coordinate=[500, 300])   ← SendMessageW，不动真实鼠标
-virtual_keyboard(action="type", text="hello world")    ← SendMessageW，不动物理键盘
-virtual_keyboard(action="combo", text="ctrl+s")        ← 保存
-mouse_wheel(coordinate=[500, 400], delta=-5)           ← 向下滚动
-bind_window(action="unbind")             ← 解除绑定
+open_application(app="Notepad")          ← binds the window automatically
+screenshot                               ← PrintWindow screenshot + GUI element list
+left_click(coordinate=[500, 300])        ← global SendInput
+type(text="hello world")                 ← global SendInput
+key(text="ctrl+s")                       ← global SendInput
 ```
 
-### 流程 3：按元素名称操作
+### Flow 2: bound-window operation (recommended, does not disturb the user)
 
 ```
-bind_window(action="bind", title="记事本")
-screenshot                               ← 返回截图 + GUI elements 列表
-click_element(name="保存", role="Button") ← UI Automation 查找并点击
+request_access(apps=["Notepad"])
+bind_window(action="list")               ← list all windows
+bind_window(action="bind", title="Notepad") ← bind + green border + virtual cursor
+screenshot                               ← PrintWindow captures the bound window
+virtual_mouse(action="click", coordinate=[500, 300])   ← SendMessageW, real mouse untouched
+virtual_keyboard(action="type", text="hello world")    ← SendMessageW, physical keyboard untouched
+virtual_keyboard(action="combo", text="ctrl+s")        ← save
+mouse_wheel(coordinate=[500, 400], delta=-5)           ← scroll down
+bind_window(action="unbind")             ← unbind
+```
+
+### Flow 3: operate by element name
+
+```
+bind_window(action="bind", title="Notepad")
+screenshot                               ← returns screenshot + GUI elements list
+click_element(name="Save", role="Button") ← UI Automation finds and clicks
 type_into_element(role="Edit", text="new content")
 ```
 
-### 流程 4：终端交互
+### Flow 4: terminal interaction
 
 ```
 bind_window(action="bind", title="PowerShell")
 screenshot
-prompt_respond(response_type="yes")      ← 回答 y + Enter
-prompt_respond(response_type="select", arrow_direction="down", arrow_count=2)  ← 选第3项
+prompt_respond(response_type="yes")      ← answers y + Enter
+prompt_respond(response_type="select", arrow_direction="down", arrow_count=2)  ← pick the 3rd item
 ```
 
-### 流程 5：Excel/浏览器滚动
+### Flow 5: Excel/browser scrolling
 
 ```
 bind_window(action="bind", title="Excel")
 screenshot
-mouse_wheel(coordinate=[600, 400], delta=-10)            ← 向下滚动 10 格
-mouse_wheel(coordinate=[600, 400], delta=5, direction="horizontal")  ← 向右滚动
+mouse_wheel(coordinate=[600, 400], delta=-10)            ← scroll down 10 notches
+mouse_wheel(coordinate=[600, 400], delta=5, direction="horizontal")  ← scroll right
 ```
 
 ---
 
-## 应用兼容性
+## App compatibility
 
-| 应用类型 | SendMessageW (virtual_*) | 元素操作 (click_element) | 注意 |
+| App type | SendMessageW (virtual_*) | Element operations (click_element) | Notes |
 |---------|--------------------------|------------------------|------|
-| 传统 Win32 (记事本/写字板) | ✅ | ✅ | 完美支持 |
-| Office (Excel/Word) | ✅ (COM 自动化) | ✅ | 通过 COM API |
-| WPF 应用 | ✅ | ✅ | 标准 UIA 支持 |
-| Electron/Chrome | ⚠️ 部分 | ⚠️ 部分 | 内部渲染不走 Win32 消息 |
-| UWP/WinUI (Windows Terminal) | ❌ | ❌ | ConPTY 不接受 SendMessageW |
-| 浏览器网页内容 | ❌ | ❌ | 需要全局 SendInput |
+| Classic Win32 (Notepad/WordPad) | ✅ | ✅ | Fully supported |
+| Office (Excel/Word) | ✅ (COM automation) | ✅ | Through the COM API |
+| WPF apps | ✅ | ✅ | Standard UIA support |
+| Electron/Chrome | ⚠️ Partial | ⚠️ Partial | Internal rendering does not use Win32 messages |
+| UWP/WinUI (Windows Terminal) | ❌ | ❌ | ConPTY does not accept SendMessageW |
+| Web page content in browsers | ❌ | ❌ | Needs global SendInput |
 
-**对于不支持 SendMessageW 的应用**，使用通用工具 (`left_click`/`type`/`key`) + `window_management(action="focus")` 先激活窗口。
+**For apps that do not support SendMessageW**, use the general tools (`left_click`/`type`/`key`) and first activate the window with `window_management(action="focus")`.
 
 ---
 
-## 绑定窗口时的可视化
+## Visuals while a window is bound
 
-绑定窗口后自动启动三层可视化：
+Binding a window automatically starts three layers of visuals:
 
-1. **DWM 绿色边框** — 窗口自身的边框颜色变绿，零偏移
-2. **虚拟鼠标光标** — 红色箭头图标，跟随 virtual_mouse 操作移动，点击时闪烁
-3. **状态指示器** — 窗口底部浮动标签，显示当前操作（通过 status_indicator 控制）
+1. **DWM green border** — the window's own border turns green, with zero offset
+2. **Virtual mouse cursor** — a red arrow icon that follows virtual_mouse operations and blinks on click
+3. **Status indicator** — a floating label at the bottom of the window showing the current operation (controlled through status_indicator)
 
 ---
 
 ## Accessibility Snapshot
 
-每次 `screenshot` 时，如果窗口已绑定，会自动附带 GUI 元素列表：
+On every `screenshot`, if a window is bound, a GUI element list is attached automatically:
 
 ```
 GUI elements in this window:
@@ -373,135 +373,135 @@ GUI elements in this window:
 [CheckBox] "Auto-save" (300,50 100x20) enabled id=chkAutoSave
 ```
 
-模型同时收到 **截图图片 + 结构化元素列表**，可以选择：
-- 用坐标操作：`virtual_mouse(action="click", coordinate=[120, 50])`
-- 用名称操作：`click_element(name="Save")`
+The model receives both the **screenshot image and a structured element list**, and can choose to:
+- Operate by coordinates: `virtual_mouse(action="click", coordinate=[120, 50])`
+- Operate by name: `click_element(name="Save")`
 
 ---
 
-## UI Automation Control Patterns 参考
+## UI Automation Control Patterns reference
 
-`click_element` / `type_into_element` 底层使用 UI Automation Control Patterns。当前已实现的和可扩展的：
+`click_element` / `type_into_element` use UI Automation Control Patterns underneath. What is implemented now and what could be added:
 
-| Pattern | 用途 | 当前状态 | 可用于 |
+| Pattern | Purpose | Status | Used for |
 |---------|------|---------|--------|
-| `InvokePattern` | 触发点击 | ✅ 已实现 (`click_element`) | 按钮、菜单项、链接 |
-| `ValuePattern` | 读写文本值 | ✅ 已实现 (`type_into_element`) | 文本框、组合框 |
-| `TogglePattern` | 切换状态 | ❌ 未实现 | 复选框、开关 |
-| `SelectionPattern` | 选择项目 | ❌ 未实现 | 下拉菜单、列表 |
-| `ScrollPattern` | 编程滚动 | ❌ 未实现（用 `mouse_wheel` 替代） | 列表、树、面板 |
-| `ExpandCollapsePattern` | 展开/折叠 | ❌ 未实现 | 树节点、折叠面板 |
-| `WindowPattern` | 窗口操作 | ❌ 未实现（用 `window_management` 替代） | 窗口最大化/关闭 |
-| `TextPattern` | 读取文档文本 | ❌ 未实现 | 文档、富文本 |
-| `GridPattern` | 表格操作 | ❌ 未实现 | Excel 单元格、数据网格 |
-| `TablePattern` | 表格结构 | ❌ 未实现 | 表头、行列关系 |
-| `RangeValuePattern` | 范围值操作 | ❌ 未实现 | 滑块、进度条 |
-| `TransformPattern` | 移动/缩放 | ❌ 未实现 | 可拖拽元素 |
+| `InvokePattern` | Trigger a click | ✅ Implemented (`click_element`) | Buttons, menu items, links |
+| `ValuePattern` | Read/write text values | ✅ Implemented (`type_into_element`) | Text boxes, combo boxes |
+| `TogglePattern` | Toggle state | ❌ Not implemented | Checkboxes, switches |
+| `SelectionPattern` | Select items | ❌ Not implemented | Dropdown menus, lists |
+| `ScrollPattern` | Programmatic scrolling | ❌ Not implemented (`mouse_wheel` is used instead) | Lists, trees, panes |
+| `ExpandCollapsePattern` | Expand/collapse | ❌ Not implemented | Tree nodes, collapsible panels |
+| `WindowPattern` | Window operations | ❌ Not implemented (`window_management` is used instead) | Maximize/close windows |
+| `TextPattern` | Read document text | ❌ Not implemented | Documents, rich text |
+| `GridPattern` | Table operations | ❌ Not implemented | Excel cells, data grids |
+| `TablePattern` | Table structure | ❌ Not implemented | Headers, row/column relationships |
+| `RangeValuePattern` | Range value operations | ❌ Not implemented | Sliders, progress bars |
+| `TransformPattern` | Move/resize | ❌ Not implemented | Draggable elements |
 
-**扩展路线：** 优先实现 `TogglePattern`（复选框）和 `SelectionPattern`（下拉菜单），这两个在表单自动化中最常用。
+**Extension roadmap:** implement `TogglePattern` (checkboxes) and `SelectionPattern` (dropdown menus) first, since they are the most common in form automation.
 
 ---
 
-## 屏幕截取技术方案对比
+## Screen capture approaches compared
 
-当前使用 Python Bridge (mss) 进行截图，底层是 GDI BitBlt。三种方案对比：
+Screenshots currently go through the Python bridge (mss), which uses GDI BitBlt underneath. The three approaches compared:
 
-| 方案 | API | 当前状态 | 性能 | 优势 | 限制 |
+| Approach | API | Status | Performance | Strengths | Limits |
 |------|-----|---------|------|------|------|
-| **GDI BitBlt** | `BitBlt` / `PrintWindow` | ✅ 当前使用 (mss/bridge.py) | ~300ms | 简单稳定，支持后台窗口 (PrintWindow) | 不支持硬件加速内容、DPI 处理复杂 |
-| **DXGI Desktop Duplication** | `IDXGIOutputDuplication` | ❌ 未实现 | ~16ms (60fps) | 硬件加速，支持 HDR，GPU 直接读取 | 不支持单窗口截取，需 D3D11 |
-| **Windows.Graphics.Capture** | `GraphicsCaptureItem` | ❌ 未实现 | ~16ms | 最新 API，支持单窗口/单显示器，系统级权限管理 | Win10 1903+，首次需用户确认 |
+| **GDI BitBlt** | `BitBlt` / `PrintWindow` | ✅ In use (mss/bridge.py) | ~300ms | Simple and stable, supports background windows (PrintWindow) | No hardware-accelerated content, awkward DPI handling |
+| **DXGI Desktop Duplication** | `IDXGIOutputDuplication` | ❌ Not implemented | ~16ms (60fps) | Hardware accelerated, supports HDR, direct GPU reads | No single-window capture, needs D3D11 |
+| **Windows.Graphics.Capture** | `GraphicsCaptureItem` | ❌ Not implemented | ~16ms | Newest API, supports single window/single display, system-level permission management | Win10 1903+, needs user confirmation the first time |
 
-### 推荐升级路径
+### Recommended upgrade path
 
 ```
-当前: GDI BitBlt (mss) ─── 全屏 ~300ms, 窗口 ~300ms (PrintWindow)
+Now: GDI BitBlt (mss) ─── full screen ~300ms, window ~300ms (PrintWindow)
   │
-  ├─ 近期: DXGI Desktop Duplication ─── 全屏 ~16ms, 但不支持单窗口
+  ├─ Near term: DXGI Desktop Duplication ─── full screen ~16ms, but no single-window support
   │
-  └─ 远期: Windows.Graphics.Capture ─── 全屏 + 单窗口都 ~16ms
+  └─ Long term: Windows.Graphics.Capture ─── both full screen and single window ~16ms
 ```
 
-### DXGI Desktop Duplication 实现要点
+### DXGI Desktop Duplication implementation notes
 
 ```python
-# bridge.py 中可添加 DXGI 截图（通过 d3dshot 或 dxcam 库）
+# DXGI capture can be added in bridge.py (via the d3dshot or dxcam library)
 import dxcam  # pip install dxcam
 
 camera = dxcam.create()
 frame = camera.grab()  # numpy array, ~5ms
-# 转为 JPEG base64 发送
+# Convert to JPEG base64 and send
 ```
 
-### Windows.Graphics.Capture 实现要点
+### Windows.Graphics.Capture implementation notes
 
 ```python
-# 需要 WinRT Python 绑定
+# Needs the WinRT Python bindings
 # pip install winrt-Windows.Graphics.Capture winrt-Windows.Graphics.DirectX
-# 限制：首次调用需要用户在系统弹窗中确认权限
+# Limitation: the first call needs the user to confirm permission in a system dialog
 ```
 
 ---
 
-## 输入方式技术矩阵
+## Input method matrix
 
-不同应用类型需要不同的输入方式：
+Different app types need different input methods:
 
-| 输入方式 | API | 优势 | 限制 | 适用应用 |
+| Input method | API | Strengths | Limits | Suitable apps |
 |---------|-----|------|------|---------|
-| **SendMessageW** | `WM_CHAR` / `WM_KEYDOWN` | 不抢焦点，不动真实键鼠 | 现代应用不支持 | Win32 传统应用 (记事本/Office/WPF) |
-| **SendInput** | `INPUT` 结构体 | 所有应用都支持 | **必须前台焦点**，会干扰用户 | 所有应用（通用后备） |
-| **WriteConsoleInput** | 控制台 API | 直接写入控制台缓冲区 | 需要 AttachConsole（可能被拒绝） | cmd/PowerShell（非 Windows Terminal） |
-| **UI Automation** | `InvokePattern` / `ValuePattern` | 语义级操作，最可靠 | 部分应用不暴露 UIA 接口 | 支持 UIA 的应用 |
-| **COM Automation** | Excel/Word COM | 完全编程控制 | 仅 Office 应用 | Excel / Word |
-| **剪贴板 + 粘贴** | `SetClipboardData` + `Ctrl+V` | 绕过输入限制 | 会覆盖用户剪贴板 | 通用后备 |
+| **SendMessageW** | `WM_CHAR` / `WM_KEYDOWN` | Does not steal focus, real mouse/keyboard untouched | Not supported by modern apps | Classic Win32 apps (Notepad/Office/WPF) |
+| **SendInput** | `INPUT` struct | Works with every app | **Needs foreground focus**, disturbs the user | All apps (general fallback) |
+| **WriteConsoleInput** | Console API | Writes directly into the console buffer | Needs AttachConsole (may be refused) | cmd/PowerShell (not Windows Terminal) |
+| **UI Automation** | `InvokePattern` / `ValuePattern` | Semantic-level operation, most reliable | Some apps do not expose UIA | Apps that support UIA |
+| **COM Automation** | Excel/Word COM | Full programmatic control | Office apps only | Excel / Word |
+| **Clipboard + paste** | `SetClipboardData` + `Ctrl+V` | Bypasses input restrictions | Overwrites the user's clipboard | General fallback |
 
-### 按应用类型的推荐输入策略
+### Recommended input strategy by app type
 
-| 应用类型 | 首选 | 后备 | 说明 |
+| App type | First choice | Fallback | Notes |
 |---------|------|------|------|
-| 传统 Win32 (记事本/写字板) | SendMessageW | UIA ValuePattern | 虚拟输入完美工作 |
-| Office (Excel/Word) | COM Automation | SendMessageW | COM 提供结构化操作 |
-| WPF 应用 | SendMessageW | UIA | 标准 Win32 消息循环 |
-| Electron/Chrome 应用 | UIA | 剪贴板粘贴 | 内部渲染不走 Win32 |
-| Windows Terminal (ConPTY) | SendInput (需前台) | 剪贴板粘贴 | ConPTY 不接受外部消息 |
-| UWP/WinUI 应用 | SendInput (需前台) | UIA | XAML 渲染不走 Win32 消息 |
+| Classic Win32 (Notepad/WordPad) | SendMessageW | UIA ValuePattern | Virtual input works perfectly |
+| Office (Excel/Word) | COM Automation | SendMessageW | COM provides structured operations |
+| WPF apps | SendMessageW | UIA | Standard Win32 message loop |
+| Electron/Chrome apps | UIA | Clipboard paste | Internal rendering does not use Win32 |
+| Windows Terminal (ConPTY) | SendInput (needs foreground) | Clipboard paste | ConPTY does not accept external messages |
+| UWP/WinUI apps | SendInput (needs foreground) | UIA | XAML rendering does not use Win32 messages |
 
 ---
 
-## 已知限制与待解决
+## Known limitations and open items
 
-| 限制 | 影响 | 计划 |
+| Limitation | Impact | Plan |
 |------|------|------|
-| Windows Terminal 不接受 SendMessageW | 虚拟键盘/鼠标对终端无效 | 自动检测应用类型，终端类切换到 SendInput + 短暂激活 |
-| PrintWindow 截不到 alternate screen buffer | Ink REPL 画面截不到 | 切换到 Windows.Graphics.Capture |
-| Accessibility Snapshot 对大应用慢 (>30s) | Excel 等复杂应用超时 | 限制遍历深度 + 超时保护 |
-| DWM 边框对自定义标题栏应用可能无效 | 某些 Electron 应用看不到边框 | 检测并回退到叠加窗口方案 |
-| 虚拟光标是 PowerShell WinForms 进程 | 启动慢 (~1s)，资源占用 | 考虑用 Win32 原生窗口替代 |
+| Windows Terminal does not accept SendMessageW | Virtual keyboard/mouse have no effect on terminals | Detect the app type automatically and switch terminal-class apps to SendInput + brief activation |
+| PrintWindow cannot capture the alternate screen buffer | The Ink REPL screen cannot be captured | Switch to Windows.Graphics.Capture |
+| Accessibility Snapshot is slow for large apps (>30s) | Complex apps such as Excel time out | Limit traversal depth + timeout protection |
+| DWM border may not work for apps with custom title bars | The border is not visible in some Electron apps | Detect and fall back to an overlay window approach |
+| The virtual cursor is a PowerShell WinForms process | Slow startup (~1s) and resource usage | Consider replacing it with a native Win32 window |
 
 ---
 
-## 技术路线图
+## Technical roadmap
 
-### Phase 1（当前）— 基础功能
-- ✅ SendMessageW 虚拟输入
-- ✅ PrintWindow/mss 截图
+### Phase 1 (current): basic functionality
+- ✅ SendMessageW virtual input
+- ✅ PrintWindow/mss screenshots
 - ✅ UI Automation (InvokePattern + ValuePattern)
 - ✅ Accessibility Snapshot
-- ✅ DWM 边框指示
-- ✅ Python Bridge
+- ✅ DWM border indicator
+- ✅ Python bridge
 
-### Phase 2（近期）— 兼容性增强
-- ⬜ 应用类型自动检测（Win32 vs Terminal vs UWP）
-- ⬜ 终端类应用自动切换 SendInput + 短暂激活
-- ⬜ TogglePattern / SelectionPattern 支持
-- ⬜ DXGI Desktop Duplication 高速截图
-- ⬜ Accessibility Snapshot 超时保护
+### Phase 2 (near term): compatibility improvements
+- ⬜ Automatic app type detection (Win32 vs Terminal vs UWP)
+- ⬜ Automatic switch to SendInput + brief activation for terminal-class apps
+- ⬜ TogglePattern / SelectionPattern support
+- ⬜ High-speed DXGI Desktop Duplication screenshots
+- ⬜ Accessibility Snapshot timeout protection
 
-### Phase 3（远期）— 高级能力
-- ⬜ Windows.Graphics.Capture（单窗口实时截图）
-- ⬜ 截图元素标注（在截图上标记 ID 数字）
-- ⬜ 浏览器 DOM 提取（绑定浏览器时提取网页结构）
-- ⬜ GridPattern / TablePattern（Excel 单元格级操作）
-- ⬜ TextPattern（文档内容读取）
-- ⬜ 多窗口协同操作
+### Phase 3 (long term): advanced capabilities
+- ⬜ Windows.Graphics.Capture (real-time single-window screenshots)
+- ⬜ Screenshot element annotation (marking ID numbers on the screenshot)
+- ⬜ Browser DOM extraction (extract the page structure when a browser is bound)
+- ⬜ GridPattern / TablePattern (cell-level Excel operations)
+- ⬜ TextPattern (reading document content)
+- ⬜ Multi-window coordinated operation

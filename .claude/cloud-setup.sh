@@ -59,7 +59,7 @@ cat > $C/CLAUDE.md <<'EOF'
 - Commits: one short Conventional Commit line. No Co-Authored-By, Claude-Session or generated-by lines.
 - Branches: `<type>/<short-topic>` (fix/login-check). Never commit on main or claude/* names; create a proper branch first.
 - PRs: only when asked. Body = short summary + how tested. No footer.
-- Task list across sessions: GitHub Issues on the repo. Check open issues before multi-step work, open one for anything left unfinished, close with "Fixes #n".
+- Task list across sessions: GitHub Issues on the repo. Check open issues before multi-step work, open one (assigned to me) for anything left unfinished, close with "Fixes #n".
 - Be concise. Use Haiku/Sonnet subagents for searching; Opus only when asked.
 EOF
 cat > $C/output-styles/terse.md <<'EOF'
@@ -88,7 +88,7 @@ $'Diff against the default branch. Report bugs, missing tests and security issue
 sk fix-ci "Fix failing CI on the current branch's PR. Use for fix CI, checks failing." \
 $'Find the failing job with the GitHub MCP tools, read its log, reproduce locally, fix the cause (never skip or disable tests), then commit and push per owner rules.'
 sk issue "Record a problem or unfinished work as a GitHub issue. Use for make an issue, track this, todo." \
-$'Create the issue with the GitHub MCP tools: short title; body with context, steps and acceptance criteria. Reply with the issue number only.'
+$'Create the issue with the GitHub MCP tools: short title; body with context, steps, acceptance criteria; assign to me. Reply with the issue number only.'
 for d in */; do
   d=${d%/}; [ -f "$d/package.json" ] || continue
   if [ -f "$d/bun.lock" ] || [ -f "$d/bun.lockb" ]; then (cd "$d" && bun install) || true

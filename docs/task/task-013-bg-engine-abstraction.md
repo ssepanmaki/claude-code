@@ -1,38 +1,38 @@
-# Task 013: BgEngine 跨平台后台引擎抽象
+# Task 013: BgEngine cross-platform background engine abstraction
 
-> 设计文档: [daemon-restructure-design.md](../features/daemon-restructure-design.md) § 四
-> 依赖: 无
-> 分支: `feat/integrate-5-branches`
+> Design doc: [daemon-restructure-design.md](../features/daemon-restructure-design.md) § 4
+> Depends on: none
+> Branch: `feat/integrate-5-branches`
 
-## 目标
+## Goal
 
-将 `src/cli/bg.ts` 中硬编码的 tmux 逻辑提取为引擎抽象层，实现 TmuxEngine + DetachedEngine，使后台会话功能在 Windows / macOS / Linux 上都能工作。
+Extract the hard-coded tmux logic in `src/cli/bg.ts` into an engine abstraction layer and implement TmuxEngine + DetachedEngine, so background sessions work on Windows, macOS and Linux.
 
-## 背景
+## Background
 
-当前 `bg.ts` 中 `handleBgFlag()` 和 `attachHandler()` 直接调用 tmux 命令。Windows 上 `--bg` 直接报错退出。需要一个引擎抽象层，根据平台和可用工具自动选择最佳方案。
+Today `handleBgFlag()` and `attachHandler()` in `bg.ts` call tmux directly, and `--bg` exits with an error on Windows. An engine abstraction layer should pick the best option automatically based on the platform and available tools.
 
-## 文件清单
+## Files
 
-### 新增
+### New
 
-| 文件 | 说明 |
+| File | Description |
 |------|------|
-| `src/cli/bg/engine.ts` | BgEngine 接口 + BgStartOptions/BgStartResult 类型 |
-| `src/cli/bg/engines/tmux.ts` | TmuxEngine: 从 `bg.ts` 提取 tmux 相关逻辑 |
-| `src/cli/bg/engines/detached.ts` | DetachedEngine: spawn({ detached }) + logFile 重定向 |
-| `src/cli/bg/engines/index.ts` | selectEngine() 自动选择 + re-export |
-| `src/cli/bg/tail.ts` | 跨平台日志 tail: fs.watch + 轮询 fallback |
+| `src/cli/bg/engine.ts` | BgEngine interface + BgStartOptions/BgStartResult types |
+| `src/cli/bg/engines/tmux.ts` | TmuxEngine: tmux logic extracted from `bg.ts` |
+| `src/cli/bg/engines/detached.ts` | DetachedEngine: spawn({ detached }) + logFile redirection |
+| `src/cli/bg/engines/index.ts` | selectEngine() auto-selection + re-export |
+| `src/cli/bg/tail.ts` | Cross-platform log tail: fs.watch + polling fallback |
 
-### 修改
+### Modified
 
-| 文件 | 变更 |
+| File | Change |
 |------|------|
-| `src/cli/bg.ts` | `handleBgFlag()` 改为调用 `selectEngine().start()`；`attachHandler()` 改为调用 `engine.attach()` |
+| `src/cli/bg.ts` | `handleBgFlag()` now calls `selectEngine().start()`; `attachHandler()` now calls `engine.attach()` |
 
-## 实现方案
+## Implementation
 
-### 1. BgEngine 接口 (`src/cli/bg/engine.ts`)
+### 1. BgEngine interface (`src/cli/bg/engine.ts`)
 
 ```typescript
 export interface BgEngine {
@@ -44,7 +44,7 @@ export interface BgEngine {
 
 export interface BgStartOptions {
   sessionName: string
-  args: string[]         // CLI args (去除 --bg)
+  args: string[]         // CLI args (without --bg)
   env: Record<string, string | undefined>
   logPath: string
   cwd: string
@@ -60,8 +60,8 @@ export interface BgStartResult {
 
 ### 2. TmuxEngine (`src/cli/bg/engines/tmux.ts`)
 
-从 `bg.ts:handleBgFlag()` 和 `bg.ts:attachHandler()` 提取:
-- `available()`: `execFileNoThrow('tmux', ['-V'])` 返回 code === 0
+Extracted from `bg.ts:handleBgFlag()` and `bg.ts:attachHandler()`:
+- `available()`: `execFileNoThrow('tmux', ['-V'])` returns code === 0
 - `start()`: `tmux new-session -d -s <name> <cmd>`
 - `attach()`: `tmux attach-session -t <session.tmuxSessionName>`
 
@@ -72,7 +72,7 @@ export class DetachedEngine implements BgEngine {
   readonly name = 'detached'
 
   async available(): Promise<boolean> {
-    return true  // 总是可用
+    return true  // always available
   }
 
   async start(opts: BgStartOptions): Promise<BgStartResult> {
@@ -95,27 +95,27 @@ export class DetachedEngine implements BgEngine {
   }
 
   async attach(session: SessionEntry): Promise<void> {
-    // 委托给 tail.ts
+    // delegate to tail.ts
     await tailLog(session.logPath!)
   }
 }
 ```
 
-### 4. 日志 Tail (`src/cli/bg/tail.ts`)
+### 4. Log tail (`src/cli/bg/tail.ts`)
 
 ```typescript
 /**
- * 跨平台实时日志输出。Ctrl+C 退出，不杀后台进程。
+ * Cross-platform live log output. Ctrl+C exits without killing the background process.
  *
- * 策略:
- * 1. 读取已有内容输出
- * 2. fs.watch() 监听文件变化 (主方案)
- * 3. 如果 fs.watch 不可靠 (某些 Windows 网络驱动器)，fallback 到 500ms 轮询
+ * Strategy:
+ * 1. Print the existing content
+ * 2. Watch the file with fs.watch() (primary)
+ * 3. If fs.watch is unreliable (some Windows network drives), fall back to 500ms polling
  */
 export async function tailLog(logPath: string): Promise<void>
 ```
 
-### 5. 引擎选择 (`src/cli/bg/engines/index.ts`)
+### 5. Engine selection (`src/cli/bg/engines/index.ts`)
 
 ```typescript
 export async function selectEngine(): Promise<BgEngine> {
@@ -130,9 +130,9 @@ export async function selectEngine(): Promise<BgEngine> {
 }
 ```
 
-### 6. bg.ts 重构
+### 6. bg.ts refactor
 
-`handleBgFlag()` 改名为 `handleBgStart()`，内部逻辑:
+`handleBgFlag()` is renamed to `handleBgStart()`, with this logic:
 ```typescript
 export async function handleBgStart(args: string[]): Promise<void> {
   const engine = await selectEngine()
@@ -154,10 +154,10 @@ export async function handleBgStart(args: string[]): Promise<void> {
 }
 ```
 
-`attachHandler()` 根据 `session.engine` 字段选择引擎:
+`attachHandler()` picks the engine from the `session.engine` field:
 ```typescript
 export async function attachHandler(target: string | undefined): Promise<void> {
-  // ... 找到 session
+  // ... find the session
   if (session.engine === 'tmux' && session.tmuxSessionName) {
     const tmux = new TmuxEngine()
     await tmux.attach(session)
@@ -168,9 +168,9 @@ export async function attachHandler(target: string | undefined): Promise<void> {
 }
 ```
 
-## SessionEntry 扩展
+## SessionEntry extension
 
-`sessions/<PID>.json` 新增 `engine` 字段:
+`sessions/<PID>.json` gains an `engine` field:
 
 ```json
 {
@@ -182,15 +182,15 @@ export async function attachHandler(target: string | undefined): Promise<void> {
 }
 ```
 
-兼容旧格式: 如果 `engine` 字段缺失，检查 `tmuxSessionName` 存在则为 `tmux`，否则为 `detached`。
+Backward compatibility: if `engine` is missing, treat the session as `tmux` when `tmuxSessionName` exists, otherwise as `detached`.
 
-## 验证清单
+## Verification checklist
 
-- [ ] Windows: `claude daemon bg` 启动后台会话，无 tmux 依赖
-- [ ] Windows: `claude daemon attach <name>` 以 tail 模式附着，Ctrl+C 退出不杀进程
-- [ ] macOS/Linux (有 tmux): 行为与当前一致
-- [ ] macOS/Linux (无 tmux): 自动 fallback 到 detached 引擎
-- [ ] `claude daemon status` 正确显示 engine 类型
-- [ ] 旧格式 session JSON (无 engine 字段) 兼容
-- [ ] tsc --noEmit 零错误
-- [ ] bun test 通过
+- [ ] Windows: `claude daemon bg` starts a background session with no tmux dependency
+- [ ] Windows: `claude daemon attach <name>` attaches in tail mode; Ctrl+C exits without killing the process
+- [ ] macOS/Linux (with tmux): behavior unchanged
+- [ ] macOS/Linux (without tmux): automatically falls back to the detached engine
+- [ ] `claude daemon status` shows the engine type correctly
+- [ ] Old-format session JSON (no engine field) still works
+- [ ] tsc --noEmit zero errors
+- [ ] bun test passes

@@ -1,57 +1,57 @@
-# Task 014: /daemon 命令层级化
+# Task 014: Hierarchical /daemon command
 
-> 设计文档: [daemon-restructure-design.md](../features/daemon-restructure-design.md) § 三.1
-> 依赖: Task 013 (BgEngine 抽象)
-> 分支: `feat/integrate-5-branches`
+> Design doc: [daemon-restructure-design.md](../features/daemon-restructure-design.md) § 3.1
+> Depends on: Task 013 (BgEngine abstraction)
+> Branch: `feat/integrate-5-branches`
 
-## 目标
+## Goal
 
-将散落的 `daemon start/stop/status` + `ps/logs/attach/kill` + `--bg` 统一收归 `/daemon` 命名空间，实现 CLI + REPL 双注册。
+Bring the scattered `daemon start/stop/status`, `ps/logs/attach/kill` and `--bg` under one `/daemon` namespace, registered in both the CLI and the REPL.
 
-## 背景
+## Background
 
-当前这些命令注册在两个互不关联的位置:
+These commands are currently registered in two unrelated places:
 - `cli.tsx:203-212`: `daemon [start|status|stop]` → `daemon/main.ts`
 - `cli.tsx:217-246`: `ps|logs|attach|kill|--bg` → `cli/bg.ts`
 
-需要合并为统一的 `claude daemon <subcommand>` 入口，并新增 REPL `/daemon` 斜杠命令。
+They should be merged into a single `claude daemon <subcommand>` entry point, plus a new REPL `/daemon` slash command.
 
-## 文件清单
+## Files
 
-### 新增
+### New
 
-| 文件 | 说明 |
+| File | Description |
 |------|------|
-| `src/commands/daemon/index.ts` | `/daemon` REPL 斜杠命令注册 (type: local-jsx) |
-| `src/commands/daemon/daemon.tsx` | `/daemon` 子命令路由 + status UI 组件 |
+| `src/commands/daemon/index.ts` | `/daemon` REPL slash command registration (type: local-jsx) |
+| `src/commands/daemon/daemon.tsx` | `/daemon` subcommand routing + status UI component |
 
-### 修改
+### Modified
 
-| 文件 | 变更 |
+| File | Change |
 |------|------|
-| `src/entrypoints/cli.tsx` | 统一 daemon 快速路径: `daemon <sub>` 路由到对应 handler。旧命令 `ps/logs/attach/kill` 保留但输出 deprecation 警告后代理 |
-| `src/commands.ts` | 注册 `/daemon` 斜杠命令 (feature-gated: DAEMON \|\| BG_SESSIONS) |
-| `src/daemon/main.ts` | `daemonMain()` 扩展: 支持 `bg/attach/logs/kill/ps` 子命令 (委托给 bg.ts handlers) |
+| `src/entrypoints/cli.tsx` | Unified daemon fast path: `daemon <sub>` routes to the matching handler. The old `ps/logs/attach/kill` commands stay but print a deprecation warning and then proxy |
+| `src/commands.ts` | Registers the `/daemon` slash command (feature-gated: DAEMON \|\| BG_SESSIONS) |
+| `src/daemon/main.ts` | `daemonMain()` extended to support the `bg/attach/logs/kill/ps` subcommands (delegating to the bg.ts handlers) |
 
-## 实现方案
+## Implementation
 
-### 1. CLI 快速路径统一 (`cli.tsx`)
+### 1. Unify the CLI fast path (`cli.tsx`)
 
-**改前** (两段独立路由):
+**Before** (two independent routes):
 ```typescript
-// 段 1: daemon
+// Block 1: daemon
 if (feature('DAEMON') && args[0] === 'daemon') {
   await daemonMain(args.slice(1))
 }
-// 段 2: bg sessions
+// Block 2: bg sessions
 if (feature('BG_SESSIONS') && ['ps','logs','attach','kill'].includes(args[0])) {
   // ...switch/case
 }
 ```
 
-**改后** (统一入口):
+**After** (single entry point):
 ```typescript
-// 统一 daemon 入口 — 合并 daemon supervisor + bg sessions
+// Unified daemon entry — merges the daemon supervisor and bg sessions
 if (
   (feature('DAEMON') || feature('BG_SESSIONS')) &&
   args[0] === 'daemon'
@@ -66,7 +66,7 @@ if (
   return
 }
 
-// --bg 快捷方式 → daemon bg
+// --bg shortcut → daemon bg
 if (
   feature('BG_SESSIONS') &&
   (args.includes('--bg') || args.includes('--background'))
@@ -79,7 +79,7 @@ if (
   return
 }
 
-// 向后兼容: ps/logs/attach/kill → daemon <sub> (deprecated)
+// Backward compatibility: ps/logs/attach/kill → daemon <sub> (deprecated)
 if (
   feature('BG_SESSIONS') &&
   ['ps', 'logs', 'attach', 'kill'].includes(args[0] ?? '')
@@ -94,14 +94,14 @@ if (
 }
 ```
 
-### 2. daemonMain 扩展 (`daemon/main.ts`)
+### 2. daemonMain extension (`daemon/main.ts`)
 
 ```typescript
 export async function daemonMain(args: string[]): Promise<void> {
   const subcommand = args[0] || 'status'
 
   switch (subcommand) {
-    // --- Supervisor 管理 ---
+    // --- Supervisor management ---
     case 'start':
       await runSupervisor(args.slice(1))
       break
@@ -109,10 +109,10 @@ export async function daemonMain(args: string[]): Promise<void> {
       await handleDaemonStop()
       break
 
-    // --- 会话管理 (委托给 bg.ts) ---
+    // --- Session management (delegated to bg.ts) ---
     case 'status':
     case 'ps':
-      await showUnifiedStatus()  // 新: daemon 状态 + 会话列表
+      await showUnifiedStatus()  // new: daemon status + session list
       break
     case 'bg':
       const bg = await import('../cli/bg.js')
@@ -142,11 +142,11 @@ export async function daemonMain(args: string[]): Promise<void> {
 }
 ```
 
-### 3. 统一状态面板 (`showUnifiedStatus`)
+### 3. Unified status panel (`showUnifiedStatus`)
 
 ```typescript
 async function showUnifiedStatus(): Promise<void> {
-  // 1. Daemon supervisor 状态
+  // 1. Daemon supervisor status
   const daemonResult = queryDaemonStatus()
   console.log('=== Daemon Supervisor ===')
   switch (daemonResult.status) {
@@ -162,14 +162,14 @@ async function showUnifiedStatus(): Promise<void> {
       break
   }
 
-  // 2. 后台会话列表
+  // 2. Background session list
   console.log('\n=== Background Sessions ===')
   const bg = await import('../cli/bg.js')
   await bg.psHandler([])
 }
 ```
 
-### 4. REPL 斜杠命令注册
+### 4. REPL slash command registration
 
 **`src/commands/daemon/index.ts`**:
 ```typescript
@@ -205,18 +205,18 @@ export async function call(
   switch (sub) {
     case 'status':
     case 'ps':
-      // 调用 showUnifiedStatus，捕获输出
-      // 返回文本结果
+      // call showUnifiedStatus and capture its output
+      // return the text result
       break
     case 'bg':
-      // REPL 中启动后台会话
+      // start a background session from the REPL
       break
     case 'start':
     case 'stop':
     case 'attach':
     case 'logs':
     case 'kill':
-      // 委托给对应 handler
+      // delegate to the matching handler
       break
     default:
       onDone(`Unknown: ${sub}. Use: status|start|stop|bg|attach|logs|kill`)
@@ -225,19 +225,19 @@ export async function call(
 }
 ```
 
-**`src/commands.ts`** 添加:
+**`src/commands.ts`** adds:
 ```typescript
-// 条件导入
+// conditional import
 const daemonCmd =
   feature('DAEMON') || feature('BG_SESSIONS')
     ? require('./commands/daemon/index.js').default
     : null
 
-// COMMANDS 数组中添加
+// add to the COMMANDS array
 ...(daemonCmd ? [daemonCmd] : []),
 ```
 
-### 5. 更新 help 文本 (`daemon/main.ts`)
+### 5. Update the help text (`daemon/main.ts`)
 
 ```
 Claude Code Daemon — background process management
@@ -259,17 +259,17 @@ REPL
   /daemon [subcommand]    Same commands available in interactive mode
 ```
 
-## 验证清单
+## Verification checklist
 
-- [ ] `claude daemon` (无参数) 显示统一状态面板
-- [ ] `claude daemon status` 显示 supervisor + 会话列表
-- [ ] `claude daemon start/stop` 与当前行为一致
-- [ ] `claude daemon bg` 启动后台会话 (调用 BgEngine)
-- [ ] `claude daemon attach/logs/kill <target>` 功能正常
-- [ ] `claude ps` 输出 deprecation 警告 + 正常工作
-- [ ] `claude logs/attach/kill` 同上
-- [ ] `claude --bg` 快捷方式正常
-- [ ] REPL 中 `/daemon` 可用，tab 补全显示
-- [ ] REPL 中 `/daemon status` 显示状态信息
-- [ ] tsc --noEmit 零错误
-- [ ] bun test 通过
+- [ ] `claude daemon` (no arguments) shows the unified status panel
+- [ ] `claude daemon status` shows the supervisor and the session list
+- [ ] `claude daemon start/stop` behaves as it does today
+- [ ] `claude daemon bg` starts a background session (via BgEngine)
+- [ ] `claude daemon attach/logs/kill <target>` work
+- [ ] `claude ps` prints a deprecation warning and still works
+- [ ] `claude logs/attach/kill` same as above
+- [ ] `claude --bg` shortcut works
+- [ ] `/daemon` is available in the REPL and shows in tab completion
+- [ ] `/daemon status` in the REPL shows status information
+- [ ] tsc --noEmit zero errors
+- [ ] bun test passes

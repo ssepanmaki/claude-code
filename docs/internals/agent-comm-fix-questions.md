@@ -1,74 +1,74 @@
-# Agent 通讯修复问题文档
+# Agent Communication Fix: Open Questions
 
-- 版本：v1.0
-- 生成日期：2026-04-25
-- 范围：ACP Agent / Bridge / Remote Control Server / REPL Hook 生命周期
-- 配套执行文档：`docs/internals/agent-comm-fix-jira-tasks.md`
-- 目的：保留决策前要问的问题、交叉验证提示词和已确认结论；不要在这里写 Jira 执行步骤。
-
----
-
-## 1. 当前已确认结论
-
-- 只保留两份交付文档：本问题文档 + Jira Task 文档。
-- Jira Task 文档是唯一执行入口，包含 Owner、优先级、文件范围、验收标准、风险和验证建议。
-- Claude 交叉验证结论：整体通过，无 blocking findings；建议补充协议回归 gate、JIRA-001/008 依赖、代码参考位置和阈值一致性，这些建议已合并到 Jira Task 文档。
-- 本次已进入业务代码修复阶段，必须运行 `bun run typecheck` 和相关回归测试。
+- Version: v1.0
+- Date generated: 2026-04-25
+- Scope: ACP Agent / Bridge / Remote Control Server / REPL hook lifecycle
+- Companion execution doc: `docs/internals/agent-comm-fix-jira-tasks.md`
+- Purpose: keep the questions to ask before deciding, the cross-check prompt and the confirmed conclusions. Do not write Jira execution steps here.
 
 ---
 
-## 2. 执行前必须问清的问题
+## 1. Conclusions confirmed so far
 
-1. `session-ingress` 的 WebSocket 上限是否固定为 10MB，并与 ACP route 保持一致？
-2. 超限 close code 是否统一使用 `1009`，close reason 是否固定为 `message too large`？
-3. `resource_link` 的纯文本格式是否已有下游依赖，能否替代当前 markdown link 表达？
-4. ACP permission mode 的真实 settings key 是哪个，非法值 fallback 是否统一为 `default`？
-5. `_meta.permissionMode` 是否必须始终覆盖 settings/defaultMode？
-6. abort listener 测试中，是否能通过 mock signal 或计数器稳定证明 10k next 后无 listener 累积？
-7. pending prompt queue 的取消语义是否允许惰性清理，而不是立刻从数组中删除？
-8. REPL hook suppress 的清理范围是否只限目标段，不顺手改其他 decompiled React Compiler 结构？
-9. RCS WebSocket 测试应放在现有哪个 `__tests__` 布局下，是否已有 route/mock 基础设施可复用？
-10. 发布 gate 是否必须包含 `stopReason` 决策与 `sessionUpdate` 发送顺序不回归？
+- Only two deliverable documents are kept: this questions doc and the Jira task doc.
+- The Jira task doc is the single execution entry point, with owner, priority, file scope, acceptance criteria, risks and verification suggestions.
+- Claude cross-check result: passed overall with no blocking findings. It suggested adding a protocol regression gate, the JIRA-001/008 dependency, code reference locations and consistent thresholds; these have been merged into the Jira task doc.
+- The work has moved into the business-code fix phase; `bun run typecheck` and the related regression tests must be run.
 
 ---
 
-## 3. 给 Claude 或 Reviewer 的复核问题
+## 2. Questions to settle before execution
+
+1. Is the `session-ingress` WebSocket limit fixed at 10MB, consistent with the ACP route?
+2. Is the over-limit close code always `1009`, and is the close reason fixed as `message too large`?
+3. Does anything downstream depend on the plain-text format of `resource_link`, and can it replace the current markdown link representation?
+4. What is the actual settings key for the ACP permission mode, and is the fallback for invalid values always `default`?
+5. Must `_meta.permissionMode` always override settings/defaultMode?
+6. In the abort listener test, can a mock signal or a counter reliably prove that no listeners accumulate after 10k `next` calls?
+7. Do the cancellation semantics of the pending prompt queue allow lazy cleanup instead of removing entries from the array immediately?
+8. Is the REPL hook suppress cleanup limited to the target section, without touching other decompiled React Compiler structures?
+9. Under which existing `__tests__` layout should the RCS WebSocket tests live, and is there route/mock infrastructure to reuse?
+10. Must the release gate include that the `stopReason` decision and the `sessionUpdate` send order do not regress?
+
+---
+
+## 3. Review questions for Claude or a reviewer
 
 ```text
-请作为外部审查者，复核 docs/internals/agent-comm-fix-jira-tasks.md。
+Please act as an external reviewer and re-check docs/internals/agent-comm-fix-jira-tasks.md.
 
-请检查：
-1. 是否仍满足“按文件分工的执行清单”和“Jira task 文档”要求。
-2. 是否存在遗漏的文件、验收标准、风险或前置依赖。
-3. 是否有重复、误导执行者、优先级不合理或测试不可落地的问题。
-4. 是否还有必须阻断实施的 finding。
+Check:
+1. Whether it still meets the requirements of a per-file execution checklist and a Jira task document.
+2. Whether any files, acceptance criteria, risks or prerequisites are missing.
+3. Whether there are duplicates, anything that misleads the implementer, unreasonable priorities or tests that cannot be put into practice.
+4. Whether any finding must block implementation.
 
-请用中文输出：
+Output in English:
 - Verdict
 - Blocking Findings
 - Non-blocking Findings
 - Suggested Edits
 - Final Recommendation
 
-不要修改文件，只输出审查意见。
+Do not modify files; output review comments only.
 ```
 
 ---
 
-## 4. 已处理的复核建议
+## 4. Review suggestions already addressed
 
-- Release Checklist 已补充协议层行为无回归 gate。
-- JIRA-001 与 JIRA-008 已明确同文件前后置关系。
-- JIRA-001 到 JIRA-008 已补充参考代码位置。
-- JIRA-003 已补回 1000 排队场景下的出队耗时验收。
-- JIRA-008 story points 已从 2 调整为 3。
-- JIRA-010 已明确 11MB payload 对齐 10MB 上限并触发 1009 close。
-- 推荐执行顺序已明确 P0 gate：P0 全部改动和冒烟验证完成后，再启动 P1 改造。
+- The Release Checklist now includes a protocol-level no-regression gate.
+- JIRA-001 and JIRA-008 now state their ordering for the shared file.
+- JIRA-001 to JIRA-008 now have reference code locations.
+- JIRA-003 again includes the dequeue-time acceptance for the 1000-queued scenario.
+- JIRA-008 story points were raised from 2 to 3.
+- JIRA-010 now states that an 11MB payload is aligned to the 10MB limit and triggers a 1009 close.
+- The recommended execution order now defines a P0 gate: start P1 work only after all P0 changes and smoke checks are done.
 
 ---
 
-## 5. 不在本文档维护的内容
+## 5. Not maintained in this document
 
-- 不维护 Jira ticket 正文；统一在 `docs/internals/agent-comm-fix-jira-tasks.md` 修改。
-- 不维护业务代码实现方案；实现时按具体 ticket 读取对应文件。
-- 不维护历史中间稿；旧执行清单已合并进 Jira Task 文档。
+- Jira ticket bodies are not maintained here; edit them in `docs/internals/agent-comm-fix-jira-tasks.md`.
+- Business-code implementation plans are not maintained here; read the relevant files per ticket when implementing.
+- Intermediate drafts are not kept; the old execution checklist has been merged into the Jira task doc.

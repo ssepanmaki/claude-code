@@ -1,27 +1,27 @@
 ---
-title: "自定义 Sentry 错误上报配置"
-description: "通过环境变量连接自托管或 Cloud Sentry，实现 CLI 运行时的错误捕获与上报。不配置则完全静默。"
-keywords: ["sentry", "错误上报", "监控", "DSN", "自托管"]
+title: "Custom Sentry error reporting"
+description: "Connect a self-hosted or Cloud Sentry through environment variables to capture and report CLI runtime errors. Completely silent when not configured."
+keywords: ["sentry", "error reporting", "monitoring", "DSN", "self-hosted"]
 ---
 
-## 概述
+## Overview
 
-Claude Code 支持通过 Sentry 捕获运行时异常并上报到你自己指定的 Sentry 实例。
+Claude Code can capture runtime exceptions through Sentry and report them to a Sentry instance you specify.
 
-- **配置了 `SENTRY_DSN`**：自动初始化 Sentry SDK，捕获未处理异常和关键错误
-- **未配置**：所有 Sentry 调用均为 no-op，零开销
+- **`SENTRY_DSN` set**: the Sentry SDK initializes automatically and captures unhandled exceptions and key errors
+- **Not set**: every Sentry call is a no-op with zero overhead
 
-## 环境变量
+## Environment variables
 
-| 变量 | 必填 | 说明 |
+| Variable | Required | Description |
 |---|---|---|
-| `SENTRY_DSN` | 是 | Sentry 项目 DSN，如 `https://xxx@o123456.ingest.sentry.io/789` |
+| `SENTRY_DSN` | Yes | Sentry project DSN, such as `https://xxx@o123456.ingest.sentry.io/789` |
 
-只需要这一个变量，设置后即启用。
+This is the only variable needed; setting it enables Sentry.
 
-## 使用方式
+## Usage
 
-### 自托管 Sentry
+### Self-hosted Sentry
 
 ```bash
 SENTRY_DSN=https://public_key@your-sentry.example.com/123 \
@@ -35,72 +35,72 @@ SENTRY_DSN=https://public_key@o123456.ingest.sentry.io/789 \
 bun run dev
 ```
 
-### 不使用 Sentry（默认行为）
+### Without Sentry (default)
 
 ```bash
 bun run dev
-# SENTRY_DSN 未设置，所有 sentry 函数为 no-op
+# SENTRY_DSN is not set, so all sentry functions are no-ops
 ```
 
-## Sentry 服务端配置
+## Sentry server setup
 
-### 步骤
+### Steps
 
-1. **部署 Sentry 实例**（Docker 自托管 或 使用 [sentry.io](https://sentry.io) Cloud）
-2. **创建 Project**，选择 **Node.js** 平台
-3. 获取项目的 **DSN**（Settings → Projects → Client Keys → DSN）
-4. 将 DSN 设置为 `SENTRY_DSN` 环境变量
+1. **Deploy a Sentry instance** (self-host with Docker, or use [sentry.io](https://sentry.io) Cloud)
+2. **Create a Project** and choose the **Node.js** platform
+3. Get the project's **DSN** (Settings → Projects → Client Keys → DSN)
+4. Set the DSN as the `SENTRY_DSN` environment variable
 
-## 功能详情
+## Details
 
-### 错误捕获
+### Error capture
 
-- **自动捕获**：`SentryErrorBoundary` 包裹关键 React 组件，捕获渲染错误
-- **手动上报**：`errorLogSink` 在写入错误日志时同步上报到 Sentry
-- **优雅关闭**：进程退出时 `closeSentry()` 确保事件发送完毕（2s 超时）
+- **Automatic**: `SentryErrorBoundary` wraps key React components and captures render errors
+- **Manual**: `errorLogSink` reports to Sentry whenever it writes an error log
+- **Graceful shutdown**: `closeSentry()` makes sure events are flushed when the process exits (2 s timeout)
 
-### 安全过滤
+### Security filtering
 
-`beforeSend` 钩子会自动剥离以下敏感 header：
+The `beforeSend` hook automatically strips these sensitive headers:
 
 - `authorization`
 - `x-api-key`
 - `cookie`
 - `set-cookie`
 
-### 忽略的错误类型
+### Ignored error types
 
-以下错误模式会被忽略，不会上报：
+These error patterns are ignored and not reported:
 
-| 错误 | 原因 |
+| Error | Reason |
 |---|---|
-| `ECONNREFUSED` / `ECONNRESET` / `ENOTFOUND` / `ETIMEDOUT` | 网络不可达，不可操作 |
-| `AbortError` / `The user aborted a request` | 用户主动取消 |
-| `CancelError` | 交互式取消信号 |
+| `ECONNREFUSED` / `ECONNRESET` / `ENOTFOUND` / `ETIMEDOUT` | Network unreachable, not actionable |
+| `AbortError` / `The user aborted a request` | Cancelled by the user |
+| `CancelError` | Interactive cancel signal |
 
-### 其他配置
+### Other settings
 
-- **采样率**：`sampleRate: 1.0`（捕获全部错误事件）
-- **面包屑上限**：`maxBreadcrumbs: 20`（控制 payload 体积）
-- **性能事务**：已关闭（`beforeSendTransaction` 返回 `null`），仅上报错误
+- **Sample rate**: `sampleRate: 1.0` (all error events are captured)
+- **Breadcrumb limit**: `maxBreadcrumbs: 20` (keeps the payload small)
+- **Performance transactions**: disabled (`beforeSendTransaction` returns `null`); only errors are reported
 
 ## API
 
-| 函数 | 说明 |
+| Function | Description |
 |---|---|
-| `initSentry()` | 初始化 SDK，在 `src/entrypoints/init.ts` 中自动调用 |
-| `captureException(error, context?)` | 手动上报异常，可附加额外上下文 |
-| `setTag(key, value)` | 设置标签，用于 Sentry 面板分组过滤 |
-| `setUser({ id, email, username })` | 设置用户上下文，用于错误归因 |
-| `closeSentry(timeoutMs?)` | 刷出队列并关闭客户端，进程退出时调用 |
-| `isSentryInitialized()` | 检查是否已初始化 |
+| `initSentry()` | Initializes the SDK; called automatically in `src/entrypoints/init.ts` |
+| `captureException(error, context?)` | Reports an exception manually, with optional extra context |
+| `setTag(key, value)` | Sets a tag for grouping and filtering in the Sentry dashboard |
+| `setUser({ id, email, username })` | Sets the user context for error attribution |
+| `closeSentry(timeoutMs?)` | Flushes the queue and closes the client; call at process exit |
+| `isSentryInitialized()` | Checks whether Sentry has been initialized |
 
-## 实现文件
+## Implementation files
 
-| 文件 | 说明 |
+| File | Description |
 |---|---|
-| `src/utils/sentry.ts` | 核心 SDK 初始化与封装 |
-| `src/components/SentryErrorBoundary.ts` | React Error Boundary 组件 |
-| `src/utils/errorLogSink.ts` | 错误日志 sink，集成 `captureException` |
-| `src/utils/gracefulShutdown.ts` | 优雅退出，调用 `closeSentry()` |
-| `src/entrypoints/init.ts` | 启动时调用 `initSentry()` |
+| `src/utils/sentry.ts` | Core SDK initialization and wrapper |
+| `src/components/SentryErrorBoundary.ts` | React Error Boundary component |
+| `src/utils/errorLogSink.ts` | Error log sink, integrates `captureException` |
+| `src/utils/gracefulShutdown.ts` | Graceful exit, calls `closeSentry()` |
+| `src/entrypoints/init.ts` | Calls `initSentry()` at startup |

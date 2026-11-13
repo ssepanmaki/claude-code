@@ -1,41 +1,41 @@
 # LSP Integration
 
-Claude Code 内置了 Language Server Protocol (LSP) 集成，提供代码智能功能（跳转定义、查找引用、悬停信息、文档符号等）和被动的诊断反馈。
+Claude Code has built-in Language Server Protocol (LSP) integration. It provides code intelligence (go to definition, find references, hover info, document symbols, and more) and passive diagnostic feedback.
 
-## 快速开始
+## Quick start
 
-### 1. 安装 LSP 插件
+### 1. Install an LSP plugin
 
-在 Claude Code REPL 中使用 `/plugin` 命令搜索并安装 LSP 插件：
+In the Claude Code REPL, use the `/plugin` command to search for and install an LSP plugin:
 
 ```
 /plugin
 ```
 
-搜索 `lsp`，找到对应语言的插件（如 `typescript-lsp`），选择安装。
+Search for `lsp`, find the plugin for your language (for example `typescript-lsp`), and install it.
 
-安装后运行 `/reload-plugins` 使插件生效。
+After installing, run `/reload-plugins` to activate the plugin.
 
-LSP 插件安装后，后台的 LSP Server Manager 会自动加载并启动对应的语言服务器，无需手动配置。
+Once an LSP plugin is installed, the background LSP Server Manager loads it and starts the matching language server automatically. No manual configuration is needed.
 
-### 2. 启用 LSP Tool
+### 2. Enable the LSP tool
 
-LSP Tool 需要通过环境变量显式启用，Claude 才能主动发起代码智能查询：
+The LSP tool must be enabled explicitly through an environment variable before Claude can issue code intelligence queries on its own:
 
 ```bash
 ENABLE_LSP_TOOL=1 bun run dev
 ```
 
-不启用时，LSP 服务器仍然在后台运行并推送被动的诊断反馈（类型错误等）。
+When it is not enabled, LSP servers still run in the background and push passive diagnostic feedback (type errors and so on).
 
-## 自动推荐
+## Automatic recommendations
 
-除了手动 `/plugin` 搜索安装外，Claude Code 会在编辑文件时自动检测：
+Besides searching with `/plugin` manually, Claude Code detects the following while you edit files:
 
-1. 监听 `fileHistory.trackedFiles`，发现有新文件被编辑
-2. 扫描已安装的 marketplace，找到声明支持该文件扩展名的 LSP 插件
-3. 检查系统上是否已安装对应的 LSP 二进制（如 `typescript-language-server`）
-4. 满足条件时弹出推荐对话框，可选择安装
+1. It watches `fileHistory.trackedFiles` and notices newly edited files.
+2. It scans the installed marketplaces for an LSP plugin that declares support for the file extension.
+3. It checks whether the matching LSP binary (for example `typescript-language-server`) is installed on the system.
+4. When these conditions are met, it shows a recommendation dialog where you can choose to install.
 
 ```
 ┌───── LSP Plugin Recommendation ─────────────┐
@@ -55,18 +55,18 @@ ENABLE_LSP_TOOL=1 bun run dev
 └───────────────────────────────────────────────┘
 ```
 
-- 30 秒不操作自动关闭（算作 "No"）
-- 选 "Never" 不再推荐该插件
-- 选 "Disable" 关闭所有 LSP 推荐
-- 连续忽略 5 次后自动禁用推荐
+- The dialog closes automatically after 30 seconds without input (counted as "No").
+- Choosing "Never" stops recommending that plugin.
+- Choosing "Disable" turns off all LSP recommendations.
+- After 5 consecutive dismissals, recommendations are disabled automatically.
 
-## 架构概览
+## Architecture overview
 
 ```
 ┌─────────────────────────────────────────────────────┐
 │                    LSP Tool                         │
 │  packages/builtin-tools/src/tools/LSPTool/LSPTool.ts│
-│  (Claude 可调用的工具，9 种操作)                       │
+│  (tool Claude can call, 9 operations)               │
 └──────────────────────┬──────────────────────────────┘
                        │
 ┌──────────────────────▼──────────────────────────────┐
@@ -78,11 +78,11 @@ ENABLE_LSP_TOOL=1 bun run dev
 └──────────────────────┬──────────────────────────────┘
                        │
 ┌──────────────────────▼──────────────────────────────┐
-│           LSP Server Manager (实例)                   │
+│           LSP Server Manager (instance)              │
 │  src/services/lsp/LSPServerManager.ts               │
-│  - 管理多个 LSPServerInstance                        │
-│  - 按文件扩展名路由请求                               │
-│  - 文件同步 (didOpen/didChange/didSave/didClose)     │
+│  - manages multiple LSPServerInstance objects       │
+│  - routes requests by file extension                │
+│  - file sync (didOpen/didChange/didSave/didClose)   │
 └──────────────────────┬──────────────────────────────┘
                        │
          ┌─────────────┼─────────────┐
@@ -98,63 +98,64 @@ ENABLE_LSP_TOOL=1 bun run dev
 │ (JSON-RPC)   │ │ (JSON-RPC)   │ │ (JSON-RPC)   │
 └──────┬───────┘ └──────┬───────┘ └──────┬───────┘
        │                │                │
-  子进程 (stdio)    子进程 (stdio)    子进程 (stdio)
+  child process    child process    child process
+     (stdio)          (stdio)          (stdio)
 ```
 
-### 被动诊断反馈
+### Passive diagnostic feedback
 
 ```
 LSP Server ──publishDiagnostics──▶ passiveFeedback.ts
                                           │
                                           ▼
                                    LSPDiagnosticRegistry
-                                   (去重、容量限制)
+                                   (dedup, capacity limits)
                                           │
                                           ▼
                                    Attachment System
-                                   (异步注入到对话)
+                                   (injected into the conversation asynchronously)
 ```
 
-LSP 服务器会异步推送 `textDocument/publishDiagnostics` 通知，经去重和容量限制后作为 attachment 注入到 Claude 的对话上下文中。
+LSP servers push `textDocument/publishDiagnostics` notifications asynchronously. After deduplication and capacity limiting, they are injected into Claude's conversation context as attachments.
 
-## 核心模块
+## Core modules
 
-| 文件 | 职责 |
+| File | Responsibility |
 |------|------|
-| `src/services/lsp/manager.ts` | 全局单例，初始化/重初始化/关闭生命周期管理 |
-| `src/services/lsp/LSPServerManager.ts` | 多服务器管理，按文件扩展名路由，文件同步 |
-| `src/services/lsp/LSPServerInstance.ts` | 单个 LSP 服务器实例生命周期（启动/停止/重启/健康检查） |
-| `src/services/lsp/LSPClient.ts` | JSON-RPC 通信层（基于 `vscode-jsonrpc`），子进程管理 |
-| `src/services/lsp/config.ts` | 从插件加载 LSP 服务器配置 |
-| `src/services/lsp/LSPDiagnosticRegistry.ts` | 诊断信息注册、去重、容量限制 |
-| `src/services/lsp/passiveFeedback.ts` | 注册 `publishDiagnostics` 通知处理器 |
-| `packages/builtin-tools/src/tools/LSPTool/LSPTool.ts` | LSP Tool 实现（暴露给 Claude） |
-| `packages/builtin-tools/src/tools/LSPTool/schemas.ts` | 输入 schema（9 种操作的 discriminated union） |
-| `packages/builtin-tools/src/tools/LSPTool/formatters.ts` | 各操作结果的格式化 |
-| `packages/builtin-tools/src/tools/LSPTool/prompt.ts` | Tool 描述文本 |
-| `src/utils/plugins/lspPluginIntegration.ts` | 从插件加载、验证、环境变量解析、作用域管理 |
+| `src/services/lsp/manager.ts` | Global singleton; initialize / reinitialize / shutdown lifecycle management |
+| `src/services/lsp/LSPServerManager.ts` | Multi-server management, routing by file extension, file sync |
+| `src/services/lsp/LSPServerInstance.ts` | Lifecycle of a single LSP server instance (start / stop / restart / health check) |
+| `src/services/lsp/LSPClient.ts` | JSON-RPC communication layer (built on `vscode-jsonrpc`), child process management |
+| `src/services/lsp/config.ts` | Loads LSP server configuration from plugins |
+| `src/services/lsp/LSPDiagnosticRegistry.ts` | Diagnostic registration, deduplication, capacity limits |
+| `src/services/lsp/passiveFeedback.ts` | Registers the `publishDiagnostics` notification handler |
+| `packages/builtin-tools/src/tools/LSPTool/LSPTool.ts` | LSP tool implementation (exposed to Claude) |
+| `packages/builtin-tools/src/tools/LSPTool/schemas.ts` | Input schema (discriminated union of 9 operations) |
+| `packages/builtin-tools/src/tools/LSPTool/formatters.ts` | Result formatting for each operation |
+| `packages/builtin-tools/src/tools/LSPTool/prompt.ts` | Tool description text |
+| `src/utils/plugins/lspPluginIntegration.ts` | Loading from plugins, validation, environment variable resolution, scope management |
 
-## LSP Tool 支持的操作
+## Operations supported by the LSP tool
 
-| 操作 | LSP Method | 说明 |
+| Operation | LSP method | Description |
 |------|-----------|------|
-| `goToDefinition` | `textDocument/definition` | 跳转到符号定义 |
-| `findReferences` | `textDocument/references` | 查找所有引用 |
-| `hover` | `textDocument/hover` | 获取悬停信息（文档、类型） |
-| `documentSymbol` | `textDocument/documentSymbol` | 获取文档内所有符号 |
-| `workspaceSymbol` | `workspace/symbol` | 全工作区符号搜索 |
-| `goToImplementation` | `textDocument/implementation` | 查找接口/抽象方法的实现 |
-| `prepareCallHierarchy` | `textDocument/prepareCallHierarchy` | 获取位置处的调用层级项 |
-| `incomingCalls` | `callHierarchy/incomingCalls` | 查找调用此函数的所有函数 |
-| `outgoingCalls` | `callHierarchy/outgoingCalls` | 查找此函数调用的所有函数 |
+| `goToDefinition` | `textDocument/definition` | Jump to a symbol's definition |
+| `findReferences` | `textDocument/references` | Find all references |
+| `hover` | `textDocument/hover` | Get hover info (docs, types) |
+| `documentSymbol` | `textDocument/documentSymbol` | Get all symbols in a document |
+| `workspaceSymbol` | `workspace/symbol` | Search symbols across the whole workspace |
+| `goToImplementation` | `textDocument/implementation` | Find implementations of an interface or abstract method |
+| `prepareCallHierarchy` | `textDocument/prepareCallHierarchy` | Get the call hierarchy item at a position |
+| `incomingCalls` | `callHierarchy/incomingCalls` | Find all functions that call this function |
+| `outgoingCalls` | `callHierarchy/outgoingCalls` | Find all functions this function calls |
 
-所有操作需要 `filePath`、`line`（1-based）和 `character`（1-based）参数。
+Every operation requires the `filePath`, `line` (1-based), and `character` (1-based) parameters.
 
-## 插件开发：LSP 服务器配置
+## Plugin development: LSP server configuration
 
-LSP 服务器通过插件提供。插件的 `manifest.json` 中可以声明 LSP 服务器，支持三种格式：
+LSP servers are provided by plugins. A plugin's `manifest.json` can declare LSP servers in three formats:
 
-**1. 内联配置（在 manifest 中直接定义）**
+**1. Inline config (defined directly in the manifest)**
 
 ```json
 {
@@ -171,7 +172,7 @@ LSP 服务器通过插件提供。插件的 `manifest.json` 中可以声明 LSP 
 }
 ```
 
-**2. 引用外部 .lsp.json 文件**
+**2. Reference to an external .lsp.json file**
 
 ```json
 {
@@ -179,7 +180,7 @@ LSP 服务器通过插件提供。插件的 `manifest.json` 中可以声明 LSP 
 }
 ```
 
-**3. 数组混合格式**
+**3. Mixed array format**
 
 ```json
 {
@@ -192,73 +193,73 @@ LSP 服务器通过插件提供。插件的 `manifest.json` 中可以声明 LSP 
 }
 ```
 
-也可以在插件目录下直接放置 `.lsp.json` 文件，无需在 manifest 中声明。
+You can also place a `.lsp.json` file directly in the plugin directory without declaring it in the manifest.
 
-### LSP 服务器配置 Schema
+### LSP server config schema
 
-| 字段 | 类型 | 必填 | 说明 |
+| Field | Type | Required | Description |
 |------|------|------|------|
-| `command` | string | 是 | LSP 服务器可执行命令（不含空格） |
-| `args` | string[] | 否 | 命令行参数 |
-| `extensionToLanguage` | `Record<string, string>` | 是 | 文件扩展名到语言 ID 的映射（至少一个） |
-| `transport` | `"stdio"` \| `"socket"` | 否 | 通信方式，默认 `stdio` |
-| `env` | `Record<string, string>` | 否 | 启动服务器时设置的环境变量 |
-| `initializationOptions` | unknown | 否 | 传给服务器的初始化选项 |
-| `settings` | unknown | 否 | 通过 `workspace/didChangeConfiguration` 传递的设置 |
-| `workspaceFolder` | string | 否 | 工作区目录路径 |
-| `startupTimeout` | number | 否 | 启动超时时间（毫秒） |
-| `maxRestarts` | number | 否 | 最大重启次数（默认 3） |
+| `command` | string | Yes | Executable command for the LSP server (no spaces) |
+| `args` | string[] | No | Command-line arguments |
+| `extensionToLanguage` | `Record<string, string>` | Yes | Mapping from file extension to language ID (at least one) |
+| `transport` | `"stdio"` \| `"socket"` | No | Communication method; defaults to `stdio` |
+| `env` | `Record<string, string>` | No | Environment variables set when starting the server |
+| `initializationOptions` | unknown | No | Initialization options passed to the server |
+| `settings` | unknown | No | Settings passed through `workspace/didChangeConfiguration` |
+| `workspaceFolder` | string | No | Workspace directory path |
+| `startupTimeout` | number | No | Startup timeout in milliseconds |
+| `maxRestarts` | number | No | Maximum restart count (default 3) |
 
-### 环境变量替换
+### Environment variable substitution
 
-配置中的 `command`、`args`、`env`、`workspaceFolder` 支持：
+`command`, `args`, `env`, and `workspaceFolder` in the config support:
 
-- `${CLAUDE_PLUGIN_ROOT}` — 插件根目录
-- `${CLAUDE_PLUGIN_DATA}` — 插件数据目录
-- `${user_config.KEY}` — 用户在插件启用时配置的值
-- `${VAR}` — 系统环境变量
+- `${CLAUDE_PLUGIN_ROOT}`: the plugin root directory
+- `${CLAUDE_PLUGIN_DATA}`: the plugin data directory
+- `${user_config.KEY}`: a value the user set when enabling the plugin
+- `${VAR}`: a system environment variable
 
-## 生命周期管理
+## Lifecycle management
 
-### 服务器状态机
+### Server state machine
 
 ```
 stopped → starting → running
 running → stopping → stopped
-any     → error (失败时)
-error   → starting (重试时)
+any     → error (on failure)
+error   → starting (on retry)
 ```
 
-### 崩溃恢复
+### Crash recovery
 
-- LSP 服务器崩溃时状态设为 `error`
-- 下次请求时自动尝试重启（通过 `ensureServerStarted`）
-- 超过 `maxRestarts`（默认 3）次后放弃
+- When an LSP server crashes, its state is set to `error`.
+- The next request tries to restart it automatically (through `ensureServerStarted`).
+- After more than `maxRestarts` (default 3) attempts, it gives up.
 
-### 瞬态错误重试
+### Transient error retry
 
-- `ContentModified` 错误（LSP 错误码 -32801）会自动重试，最多 3 次
-- 使用指数退避：500ms → 1000ms → 2000ms
-- 常见于 rust-analyzer 等仍在索引项目的服务器
+- `ContentModified` errors (LSP error code -32801) are retried automatically, up to 3 times.
+- Retries use exponential backoff: 500ms → 1000ms → 2000ms.
+- These errors are common with servers such as rust-analyzer that are still indexing the project.
 
-### 诊断信息容量限制
+### Diagnostic capacity limits
 
-- 每个文件最多 10 条诊断
-- 总计最多 30 条诊断
-- 超出部分按严重性排序后截断（Error > Warning > Info > Hint）
-- 跨 turn 去重：已发送过的相同诊断不会重复发送
-- 文件编辑后清除该文件的已发送记录，允许新诊断通过
+- At most 10 diagnostics per file.
+- At most 30 diagnostics in total.
+- Anything beyond that is sorted by severity and truncated (Error > Warning > Info > Hint).
+- Cross-turn dedup: a diagnostic that was already sent is not sent again.
+- After a file is edited, its sent-record is cleared so new diagnostics can come through.
 
-### 插件刷新
+### Plugin refresh
 
-安装/卸载插件后使用 `/reload-plugins`，会调用 `reinitializeLspServerManager()`：
-1. 异步关闭旧服务器实例
-2. 重置状态为 `not-started`
-3. 调用 `initializeLspServerManager()` 重新加载插件配置
+After installing or uninstalling a plugin, use `/reload-plugins`. It calls `reinitializeLspServerManager()`, which:
+1. Shuts down the old server instances asynchronously.
+2. Resets the state to `not-started`.
+3. Calls `initializeLspServerManager()` to reload the plugin config.
 
-## 依赖
+## Dependencies
 
-- `vscode-jsonrpc` — JSON-RPC 通信（懒加载，仅在实际创建服务器实例时才 require）
-- `vscode-languageserver-protocol` — LSP 协议类型
-- `vscode-languageserver-types` — LSP 类型定义
-- `lru-cache` — 诊断去重缓存
+- `vscode-jsonrpc`: JSON-RPC communication (lazy-loaded; required only when a server instance is actually created)
+- `vscode-languageserver-protocol`: LSP protocol types
+- `vscode-languageserver-types`: LSP type definitions
+- `lru-cache`: diagnostic dedup cache

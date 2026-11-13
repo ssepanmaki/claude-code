@@ -184,10 +184,10 @@ export const FileWriteTool = buildTool({
     let fileMtimeMs: number
     try {
       const fileStat = await fs.stat(fullFilePath)
-      // 预检：如果路径已是一个存在的目录，及时拒绝并给出指引
-      // 避免 AI 模型传入目录路径（如 my-docs/analysis/api/）后，
-      // Write 工具先 mkdir 再写文件时抛出原始 EISDIR 错误，
-      // 导致模型不知如何处理、可能误删目录内容。
+      // Pre-check: if the path is already an existing directory, reject early with guidance
+      // to avoid the raw EISDIR error thrown when the AI model passes a directory path (e.g. my-docs/analysis/api/)
+      // and the Write tool does mkdir first and then writes the file,
+      // which leaves the model unsure how to proceed and may cause it to wrongly delete directory contents.
       if (fileStat.isDirectory()) {
         return {
           result: false,

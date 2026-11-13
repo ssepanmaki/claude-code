@@ -1,7 +1,7 @@
 const MODEL_EMAIL_MAP: Array<{ keywords: string[]; email: string }> = [
   { keywords: ['claude'], email: 'noreply@anthropic.com' },
-  // 由于找不到他们的邮箱和头像, 所以改为了使用我们的邮箱先记录, 后续官方有 github 能用的邮箱可以替换
-  // github 组织是不能用 co author 的
+  // Because their email and avatar could not be found, our own email is used for recording for now; it can be replaced once the vendor has a GitHub-usable email
+  // GitHub organizations cannot be used as co-authors
   {
     keywords: ['gpt', 'dall-e', 'o1-', 'o3-', 'o4-'],
     email: 'openai@claude-code-best.win',

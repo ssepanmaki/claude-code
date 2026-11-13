@@ -491,7 +491,7 @@ function getLocalGateDefault(feature: string): unknown | undefined {
  * Check if GrowthBook operations should be enabled
  */
 function isGrowthBookEnabled(): boolean {
-  // 适配器模式：有自定义服务器配置时直接启用
+  // Adapter mode: enable directly when there is a custom server config
   if (process.env.CLAUDE_GB_ADAPTER_URL && process.env.CLAUDE_GB_ADAPTER_KEY) {
     return true
   }
@@ -597,7 +597,7 @@ const getGrowthBookClient = memoize(
     const authHeaders = hasTrust
       ? getAuthHeaders()
       : { headers: {}, error: 'trust not established' }
-    // 适配器模式下不需要 auth，GrowthBook Cloud 用 clientKey 即可
+    // No auth is needed in adapter mode; GrowthBook Cloud only needs the clientKey
     const hasAuth = isAdapterMode || !authHeaders.error
     clientCreatedWithAuth = hasAuth
 

@@ -1,3 +1,3 @@
-/** 判断路径是否落在当前工具允许的合并工作目录内；与宿主 `pathInAllowedWorkingPath` 一致。 */
+/** Checks whether a path falls inside the merged working directories allowed for the current tool; same as the host `pathInAllowedWorkingPath`. */
 export type pathInAllowedWorkingPath =
   typeof import('src/utils/permissions/filesystem.js').pathInAllowedWorkingPath

@@ -47,7 +47,7 @@ jobs:
           test -s coverage/lcov.info
           grep -q '^SF:' coverage/lcov.info
 
-      # codecov 坏了，老是失败，先注释掉
+      # Codecov is broken and keeps failing; commented out for now
       # - name: Upload coverage to Codecov
       #   if: ${{ github.event_name != 'pull_request' || github.event.pull_request.head.repo.full_name == github.repository }}
       #   uses: codecov/codecov-action@75cd11691c0faa626561e295848008c8a7dddffe # v5, 2026-04-25

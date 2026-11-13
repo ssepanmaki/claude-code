@@ -19,16 +19,16 @@ import { jsonParse, jsonStringify } from '../slowOperations.js'
 import { getSystemDirectories } from '../systemDirectories.js'
 import { classifyFetchError, logPluginFetch } from './fetchTelemetry.js'
 
-/** DXT / MCPB `user_config` 中单字段的 JSON Schema 式描述（校验见 `validateUserConfig`）。 */
+/** Single-field JSON-Schema-style description in DXT / MCPB `user_config` (see `validateUserConfig` for validation). */
 export type McpbUserConfigurationOption = {
-  type: 'string' | 'number' | 'boolean' | 'file' | 'directory' // 控件/校验类型
-  required?: boolean // 是否必填
-  title?: string // 表单标签（缺省用 key）
-  description?: string // 帮助说明
-  sensitive?: boolean // true 时写入安全存储而非明文 settings
-  multiple?: boolean // string 类型时是否允许多值（数组）
-  min?: number // 数值下限
-  max?: number // 数值上限
+  type: 'string' | 'number' | 'boolean' | 'file' | 'directory' // control/validation type
+  required?: boolean // whether required
+  title?: string // form label (defaults to the key)
+  description?: string // help text
+  sensitive?: boolean // true when true, written to secure storage instead of plaintext settings
+  multiple?: boolean // string for string type, whether multiple values (an array) are allowed
+  min?: number // numeric lower bound
+  max?: number // numeric upper bound
 }
 
 /**

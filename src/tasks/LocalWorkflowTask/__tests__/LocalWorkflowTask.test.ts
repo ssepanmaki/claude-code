@@ -2,7 +2,7 @@ import { describe, expect, mock, test } from 'bun:test'
 import { debugMock } from '../../../../tests/mocks/debug.js'
 import { logMock } from '../../../../tests/mocks/log.js'
 
-// ─── Mocks（仅 mock 有副作用的依赖链）───
+// ─── Mocks (only mock the dependency chain with side effects) ───
 
 mock.module('src/utils/debug.ts', debugMock)
 mock.module('src/utils/log.ts', logMock)
@@ -62,20 +62,20 @@ function createSetState(): {
 // ─── Tests ───
 
 describe('failWorkflowTask', () => {
-  test('保存 error 字符串到 state（供 BackgroundTasksDialog 显示失败原因）', () => {
+  test('saves the error string into state (for BackgroundTasksDialog to show the failure reason)', () => {
     const { setAppState, getState } = createSetState()
     const taskId = registerLocalWorkflowTask(setAppState as any, {
       description: 'test',
       workflowName: 'wf',
       workflowFile: '/tmp/wf.ts',
     })
-    failWorkflowTask(taskId, setAppState as any, 'agent X 抛 Error: boom')
+    failWorkflowTask(taskId, setAppState as any, 'agent X threw Error: boom')
     const task = getState().tasks[taskId]
     expect(task.status).toBe('failed')
-    expect(task.error).toBe('agent X 抛 Error: boom')
+    expect(task.error).toBe('agent X threw Error: boom')
   })
 
-  test('不传 error 时 state.error 保持 undefined（向后兼容现有调用）', () => {
+  test('state.error stays undefined when no error is passed (backward compatible with existing callers)', () => {
     const { setAppState, getState } = createSetState()
     const taskId = registerLocalWorkflowTask(setAppState as any, {
       description: 'test',

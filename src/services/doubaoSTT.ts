@@ -178,9 +178,12 @@ export async function connectDoubaoStream(
         `[doubao-asr] Credential initialization failed: ${String(err)}`,
       ),
     )
-    callbacks.onError(`Doubao ASR 凭证初始化失败: ${String(err)}`, {
-      fatal: true,
-    })
+    callbacks.onError(
+      `Doubao ASR credential initialization failed: ${String(err)}`,
+      {
+        fatal: true,
+      },
+    )
     return null
   }
 
@@ -228,7 +231,7 @@ export async function connectDoubaoStream(
           case ResponseType.ERROR:
             logError(new Error(`[doubao-asr] Error: ${resp.errorMsg}`))
             if (!finalized) {
-              callbacks.onError(resp.errorMsg || 'Doubao ASR 识别错误')
+              callbacks.onError(resp.errorMsg || 'Doubao ASR recognition error')
             }
             break
           case ResponseType.SESSION_FINISHED:
@@ -246,7 +249,7 @@ export async function connectDoubaoStream(
     } catch (err) {
       logError(new Error(`[doubao-asr] Stream error: ${String(err)}`))
       if (!finalized) {
-        callbacks.onError(`Doubao ASR 连接错误: ${String(err)}`)
+        callbacks.onError(`Doubao ASR connection error: ${String(err)}`)
       }
       const r2 = finalizeHandle.resolve
       finalizeHandle.resolve = null

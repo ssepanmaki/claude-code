@@ -166,6 +166,6 @@ dist
 !.env.example
 .wrangler/
 
-# wrangler types 生成物（每次 wrangler types / dev / deploy 后会刷新，含 Cloudflare 运行时类型，体积大、会触发 biome lint）
+# wrangler types output (refreshed after every wrangler types / dev / deploy; contains Cloudflare runtime types, is large and triggers biome lint)
 worker-configuration.d.ts
 

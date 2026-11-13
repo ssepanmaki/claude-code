@@ -1,3 +1,3 @@
-/** Ink 快捷键「按键 + 动作」展示组件；与 `@anthropic/ink` 导出的 `KeyboardShortcutHint` 一致。 */
+/** Ink "key + action" shortcut display component; same as `KeyboardShortcutHint` exported by `@anthropic/ink`. */
 export type KeyboardShortcutHint =
   typeof import('@anthropic/ink').KeyboardShortcutHint

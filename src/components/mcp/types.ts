@@ -7,41 +7,41 @@ import type {
   McpStdioServerConfig,
 } from '../../services/mcp/types.js'
 
-/** `/mcp` 列表与菜单共用的服务器行基类字段。 */
+/** Base fields shared by server rows in the `/mcp` list and menus. */
 type ServerInfoBase = {
-  name: string // MCP 服务器规范化名称
-  client: MCPServerConnection // 连接态与配置载体
-  scope: ConfigScope // 配置来源作用域
+  name: string // normalized MCP server name
+  client: MCPServerConnection // connection state and config carrier
+  scope: ConfigScope // config source scope
 }
 
-/** stdio MCP 服务器在 `/mcp` 与插件管理 UI 中的展示形态。 */
+/** Display form of stdio MCP servers in `/mcp` and the plugin management UI. */
 export type StdioServerInfo = ServerInfoBase & {
-  transport: 'stdio' // 标准输入输出子进程
-  config: McpStdioServerConfig // stdio 启动参数
+  transport: 'stdio' // stdio subprocess
+  config: McpStdioServerConfig // stdio launch parameters
 }
 
-/** SSE MCP 服务器（含 OAuth 会话态）。 */
+/** SSE MCP server (including OAuth session state). */
 export type SSEServerInfo = ServerInfoBase & {
-  transport: 'sse' // 服务端推送事件流
-  isAuthenticated: boolean | undefined // OAuth/会话是否已就绪（未知时为 undefined）
-  config: McpSSEServerConfig // SSE URL 与头等
+  transport: 'sse' // server-sent events stream
+  isAuthenticated: boolean | undefined // whether OAuth/session is ready (undefined when unknown)
+  config: McpSSEServerConfig // SSE URL, headers, etc.
 }
 
-/** Streamable HTTP MCP 服务器。 */
+/** Streamable HTTP MCP server. */
 export type HTTPServerInfo = ServerInfoBase & {
-  transport: 'http' // HTTP 流式或轮询类远端
-  isAuthenticated: boolean | undefined // 远端鉴权是否完成
-  config: McpHTTPServerConfig // HTTP 端点配置
+  transport: 'http' // remote over HTTP streaming or polling
+  isAuthenticated: boolean | undefined // whether remote auth has completed
+  config: McpHTTPServerConfig // HTTP endpoint config
 }
 
-/** Claude.ai 代理型 MCP 端点。 */
+/** Claude.ai proxy-type MCP endpoint. */
 export type ClaudeAIServerInfo = ServerInfoBase & {
-  transport: 'claudeai-proxy' // 经 Claude.ai 的代理通道
-  isAuthenticated: boolean | undefined // 代理侧鉴权展示用
-  config: McpClaudeAIProxyServerConfig // 代理 id/url 等
+  transport: 'claudeai-proxy' // via the Claude.ai proxy channel
+  isAuthenticated: boolean | undefined // for displaying proxy-side auth
+  config: McpClaudeAIProxyServerConfig // proxy id/url, etc.
 }
 
-/** 非 agent 声明的、已连接 MCP 在 UI 中的判别联合。 */
+/** Discriminated union for connected MCP servers not declared by agents, as shown in the UI. */
 export type ServerInfo =
   | StdioServerInfo
   | SSEServerInfo
@@ -49,24 +49,24 @@ export type ServerInfo =
   | ClaudeAIServerInfo
 
 /**
- * 从 Agent frontmatter 提取、用于 `/mcp`「Agents」分组的 MCP 声明。
- * 字段按传输方式可选出现，便于菜单统一读取。
+ * MCP declarations extracted from Agent frontmatter, used for the `/mcp` "Agents" group.
+ * Fields appear optionally by transport so menus can read them uniformly.
  */
 export type AgentMcpServerInfo = {
-  name: string // 在 agent 内声明的服务器名
-  sourceAgents: string[] // 引用该声明的 agentType 列表
-  transport: 'stdio' | 'sse' | 'http' | 'ws' // 传输类别
-  command?: string // stdio：启动命令
-  url?: string // 远端：基础 URL
-  needsAuth: boolean // 是否依赖 OAuth/令牌
-  /** 远程传输在 UI 中展示的 OAuth 状态（agent 声明路径下通常未知）。 */
-  isAuthenticated?: boolean // UI 展示用；可选
+  name: string // server name declared inside the agent
+  sourceAgents: string[] // list of agentTypes that reference this declaration
+  transport: 'stdio' | 'sse' | 'http' | 'ws' // transport category
+  command?: string // stdio: launch command
+  url?: string // remote: base URL
+  needsAuth: boolean // whether OAuth/token is required
+  /** OAuth state shown in the UI for remote transports (usually unknown for agent-declared paths). */
+  isAuthenticated?: boolean // for UI display; optional
 }
 
-/** `/mcp` 设置面板的视图状态机。 */
+/** View state machine of the `/mcp` settings panel. */
 export type MCPViewState =
-  | { type: 'list'; defaultTab?: string } // 服务器/Agents 列表；可选默认 tab
-  | { type: 'server-menu'; server: ServerInfo } // 选中某服务器后的操作菜单
-  | { type: 'server-tools'; server: ServerInfo } // 该服务器的工具列表
-  | { type: 'server-tool-detail'; server: ServerInfo; toolIndex: number } // 单个工具详情
-  | { type: 'agent-server-menu'; agentServer: AgentMcpServerInfo } // agent 声明的 MCP 菜单
+  | { type: 'list'; defaultTab?: string } // server/Agents list; optional default tab
+  | { type: 'server-menu'; server: ServerInfo } // action menu after selecting a server
+  | { type: 'server-tools'; server: ServerInfo } // tool list of this server
+  | { type: 'server-tool-detail'; server: ServerInfo; toolIndex: number } // details of a single tool
+  | { type: 'agent-server-menu'; agentServer: AgentMcpServerInfo } // MCP menu for an agent-declared server

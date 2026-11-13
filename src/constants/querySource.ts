@@ -1,6 +1,6 @@
 /**
- * 标识一次模型/API 调用的业务来源，用于遥测拆分、缓存控制与 529 重试策略。
- * 值域随功能增长而扩展（含 `repl_main_thread:*`、`agent:*` 等前缀），故使用 `string`；
- * 常见字面量见各调用点及 `withRetry.ts` 中的 `FOREGROUND_529_RETRY_SOURCES`。
+ * Identifies the business source of a model/API call, used for telemetry breakdown, cache control and 529 retry policy.
+ * The value domain grows with features (including prefixes such as `repl_main_thread:*` and `agent:*`), so `string` is used;
+ * common literals appear at the call sites and in `FOREGROUND_529_RETRY_SOURCES` in `withRetry.ts`.
  */
-export type QuerySource = string // 与日志/统计中的 source 字段对齐的自由文本标签
+export type QuerySource = string // free-text label aligned with the source field in logs/statistics

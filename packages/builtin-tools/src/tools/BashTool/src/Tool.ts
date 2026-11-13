@@ -1,2 +1,2 @@
-/** 工具权限检查用的不可变上下文快照；与宿主 `src/Tool.js` 中 `ToolPermissionContext` 一致。 */
+/** Immutable context snapshot used for tool permission checks; same as `ToolPermissionContext` in the host `src/Tool.js`. */
 export type ToolPermissionContext = import('src/Tool.js').ToolPermissionContext

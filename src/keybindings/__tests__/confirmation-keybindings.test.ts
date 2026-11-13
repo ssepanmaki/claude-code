@@ -1,5 +1,5 @@
 /**
- * Tests for fix: 修复 n 快捷键导致关闭的问题
+ * Tests for fix: Tests for fix: fix the n shortcut causing a close
  *
  * Before the fix, 'y' and 'n' were bound to confirm:yes / confirm:no in the
  * Confirmation context, which caused accidental dismissal when typing those
@@ -40,7 +40,7 @@ function makeKey(overrides: Partial<Key> = {}): Key {
 
 const bindings = parseBindings(DEFAULT_BINDINGS)
 
-describe('Confirmation context — n/y keys removed (fix: 修复 n 快捷键导致关闭的问题)', () => {
+describe('Confirmation context — n/y keys removed (fix: the n shortcut caused a close)', () => {
   test('pressing "n" in Confirmation context should NOT resolve to confirm:no', () => {
     const result = resolveKey('n', makeKey(), ['Confirmation'], bindings)
     if (result.type === 'match') {

@@ -59,7 +59,7 @@ import type {
   SessionMessage,
   SessionMutationOptions,
 } from './sdk/runtimeTypes.js'
-// 与 settings / hooks schema 共用的钩子事件与 SessionEnd 退出原因字面量表
+// Literal tables of hook events and SessionEnd exit reasons, shared with the settings / hooks schema
 import { EXIT_REASONS, HOOK_EVENTS } from './sdk/coreSchemas.js'
 
 export type {
@@ -103,8 +103,8 @@ export type CronJitterConfig = {
   recurringMaxAgeMs: number
 }
 
-/** 会话钩子事件名（与 `HOOK_EVENTS` / settings schema 一致）。 */
-export type HookEvent = (typeof HOOK_EVENTS)[number] // 与 `coreSchemas.HOOK_EVENTS` 逐项对应
+/** Session hook event names (consistent with `HOOK_EVENTS` / the settings schema). */
+export type HookEvent = (typeof HOOK_EVENTS)[number] // corresponds item by item to `coreSchemas.HOOK_EVENTS`
 
-/** `SessionEnd` 钩子等使用的进程退出原因枚举。 */
-export type ExitReason = (typeof EXIT_REASONS)[number] // 与 `coreSchemas.EXIT_REASONS` 逐项对应
+/** Enum of process exit reasons used by `SessionEnd` hooks and others. */
+export type ExitReason = (typeof EXIT_REASONS)[number] // corresponds item by item to `coreSchemas.EXIT_REASONS`

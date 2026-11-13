@@ -1,8 +1,8 @@
 import type { EffortValue } from '../../utils/effort.js'
 
 /**
- * 光标在面板上的位置。仅面板内部使用，不进入 AppState / settings / API。
- * 'ultracode' 不是 EffortLevel；它在本面板里仅作视觉占位与文案引导。
+ * Cursor position on the panel. Used only inside the panel; never enters AppState / settings / API.
+ * 'ultracode' is not an EffortLevel; in this panel it serves only as a visual placeholder and copy guidance.
  */
 export type PanelPosition =
   | 'low'
@@ -25,7 +25,7 @@ export const HOME_POSITION: PanelPosition = 'low'
 export const END_POSITION: PanelPosition = 'ultracode'
 
 /**
- * 判断一个值是否可作为面板光标位置（不含 ultracode，因 ultracode 仅由面板内部产生）。
+ * Decide whether a value can be used as a panel cursor position (excluding ultracode, since ultracode is produced only inside the panel).
  */
 function isNonUltracodePosition(
   value: unknown,
@@ -38,9 +38,9 @@ function isNonUltracodePosition(
 }
 
 /**
- * 把 EffortValue 归一化为面板可用的光标位置。
- * - null / undefined / 数值（ant-only）/ ultracode → undefined（让上层用 displayed）
- * - 合法 string 档位 → 返回该档位
+ * Normalize an EffortValue into a cursor position usable by the panel.
+ * - null / undefined / number (ant-only) / ultracode → undefined (let the caller use displayed)
+ * - valid string tier → return that tier
  */
 function normalizeToPanelPosition(
   value: EffortValue | null | undefined,
@@ -72,12 +72,12 @@ export function isUltracode(cursor: PanelPosition): boolean {
 }
 
 /**
- * 决定面板挂载时的初始光标位置。
- * 优先级：env override（若是合法档位）> displayed level
+ * Decide the initial cursor position when the panel mounts.
+ * Priority: env override (if a valid tier) > displayed level
  *
- * @param envOverride    getEffortEnvOverride() 的返回值：EffortValue | null | undefined
+ * @param envOverride    return value of getEffortEnvOverride(): EffortValue | null | undefined
  * @param appStateEffort AppState.effortValue
- * @param displayed      getDisplayedEffortLevel(model, appStateEffort) —— 必传，避免此处再依赖 model
+ * @param displayed      getDisplayedEffortLevel(model, appStateEffort) — required, avoids depending on model here again
  */
 export function getInitialCursor(args: {
   envOverride: EffortValue | null | undefined
@@ -86,11 +86,11 @@ export function getInitialCursor(args: {
 }): PanelPosition {
   const fromEnv = normalizeToPanelPosition(args.envOverride)
   if (fromEnv !== undefined) return fromEnv
-  // displayed 已经是 EffortLevel（不含 ultracode），合法
+  // displayed is already an EffortLevel (excluding ultracode), so it is valid
   return args.displayed
 }
 
-// ---- 确认/取消决策（注入 ApplyFn 避免循环依赖 + 便于测试）----
+// ---- Confirm/cancel decision (ApplyFn is injected to avoid a circular dependency and ease testing) ----
 
 export type ConfirmOutcome =
   | {

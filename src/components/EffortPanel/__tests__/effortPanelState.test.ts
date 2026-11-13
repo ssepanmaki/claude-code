@@ -16,7 +16,7 @@ import {
 } from '../effortPanelState.js'
 
 describe('effortPanelState', () => {
-  test('PANEL_POSITIONS 顺序为 low → ultracode', () => {
+  test('PANEL_POSITIONS order is low → ultracode', () => {
     expect(PANEL_POSITIONS).toEqual([
       'low',
       'medium',
@@ -27,38 +27,38 @@ describe('effortPanelState', () => {
     ])
   })
 
-  test('moveLeft 在 low 处保持 low', () => {
+  test('moveLeft stays at low when already at low', () => {
     expect(moveLeft('low')).toBe('low')
   })
 
-  test('moveLeft 正常左移', () => {
+  test('moveLeft moves left normally', () => {
     expect(moveLeft('high')).toBe('medium')
     expect(moveLeft('ultracode')).toBe('max')
   })
 
-  test('moveRight 在 ultracode 处保持 ultracode', () => {
+  test('moveRight stays at ultracode when already at ultracode', () => {
     expect(moveRight('ultracode')).toBe('ultracode')
   })
 
-  test('moveRight 正常右移', () => {
+  test('moveRight moves right normally', () => {
     expect(moveRight('medium')).toBe('high')
     expect(moveRight('max')).toBe('ultracode')
   })
 
-  test('HOME_POSITION 等于 low', () => {
+  test('HOME_POSITION equals low', () => {
     expect(HOME_POSITION).toBe('low')
   })
 
-  test('END_POSITION 等于 ultracode', () => {
+  test('END_POSITION equals ultracode', () => {
     expect(END_POSITION).toBe('ultracode')
   })
 
-  test('isUltracode 守卫', () => {
+  test('isUltracode guard', () => {
     expect(isUltracode('ultracode')).toBe(true)
     expect(isUltracode('max')).toBe(false)
   })
 
-  test('getInitialCursor：env override 为合法档位时返回 env 值', () => {
+  test('getInitialCursorreturns the env value when the env override is a valid tier', () => {
     expect(
       getInitialCursor({
         envOverride: 'high',
@@ -68,7 +68,7 @@ describe('effortPanelState', () => {
     ).toBe('high')
   })
 
-  test('getInitialCursor：env 为 null（unset）时用 displayed', () => {
+  test('getInitialCursoruses displayed when env is null (unset)', () => {
     expect(
       getInitialCursor({
         envOverride: null,
@@ -78,7 +78,7 @@ describe('effortPanelState', () => {
     ).toBe('medium')
   })
 
-  test('getInitialCursor：env undefined 时用 displayed', () => {
+  test('getInitialCursoruses displayed when env is undefined', () => {
     expect(
       getInitialCursor({
         envOverride: undefined,
@@ -88,8 +88,8 @@ describe('effortPanelState', () => {
     ).toBe('high')
   })
 
-  test('getInitialCursor：env 是数值（ant-only）时落回 displayed', () => {
-    // 数值不是合法 PanelPosition，回退
+  test('getInitialCursorfalls back to displayed when env is numeric (ant-only)', () => {
+    // A number is not a valid PanelPosition; fall back
     expect(
       getInitialCursor({
         envOverride: 75,
@@ -99,7 +99,7 @@ describe('effortPanelState', () => {
     ).toBe('medium')
   })
 
-  test('PanelPosition 类型编译期检查（隐式）', () => {
+  test('PanelPosition type is checked at compile time (implicit)', () => {
     const p: PanelPosition = 'xhigh'
     expect(p).toBe('xhigh')
   })
@@ -108,13 +108,13 @@ describe('effortPanelState', () => {
 describe('computeConfirmOutcome', () => {
   const mockApply: ApplyFn = cursor => ({
     message: `applied:${cursor}`,
-    // 测试里 cursor 是 PanelPosition（含 ultracode），但 ApplyFn 的契约要求 EffortValue。
-    // 实际运行时 mockApply 只会被 computeConfirmOutcome 在非 ultracode 档位调用，
-    // 因此 cast 是安全的。生产代码用真 executeEffort 不会出现 ultracode。
+    // In the test the cursor is a PanelPosition (including ultracode), but the ApplyFn contract requires EffortValue.
+    // At runtime mockApply is only called by computeConfirmOutcome on non-ultracode tiers,
+    // so the cast is safe. Production code with the real executeEffort never sees ultracode.
     effortUpdate: { value: cursor as unknown as EffortValue },
   })
 
-  test('ultracode → kind=ultracode-hint，含 /ultracode 引导', () => {
+  test('ultracode → kind=ultracode-hintkind=ultracode-hint, includes the /ultracode guidance', () => {
     const out = computeConfirmOutcome('ultracode', mockApply)
     expect(out.kind).toBe('ultracode-hint')
     if (out.kind === 'ultracode-hint') {
@@ -123,7 +123,7 @@ describe('computeConfirmOutcome', () => {
     }
   })
 
-  test('ultracode 不调 applyFn（不会被副作用触发）', () => {
+  test('ultracode does not call applyFn (never triggered as a side effect)', () => {
     let called = false
     const spy: ApplyFn = c => {
       called = true
@@ -133,7 +133,7 @@ describe('computeConfirmOutcome', () => {
     expect(called).toBe(false)
   })
 
-  test('low → kind=apply，message 来自 applyFn，effortUpdate 透传', () => {
+  test('low → kind=applykind=apply, message comes from applyFn, effortUpdate passes through', () => {
     const out = computeConfirmOutcome('low', mockApply)
     expect(out.kind).toBe('apply')
     if (out.kind === 'apply') {
@@ -142,12 +142,12 @@ describe('computeConfirmOutcome', () => {
     }
   })
 
-  test('high → apply 路径不调 ultracode 分支', () => {
+  test('high → apply apply path does not take the ultracode branch', () => {
     const out = computeConfirmOutcome('high', mockApply)
     expect(out.kind).toBe('apply')
   })
 
-  test('applyFn 返回无 effortUpdate 时，outcome.effortUpdate 为 undefined', () => {
+  test('applyFn outcome.effortUpdate is undefined when applyFn returns no effortUpdate', () => {
     const noUpdate: ApplyFn = c => ({ message: `applied:${c}` })
     const out = computeConfirmOutcome('medium', noUpdate)
     expect(out.kind).toBe('apply')
@@ -157,7 +157,7 @@ describe('computeConfirmOutcome', () => {
   })
 })
 
-test('常量字符串', () => {
+test('constant strings', () => {
   expect(CANCEL_MESSAGE).toBe('Effort unchanged.')
   expect(ULTRACODE_HINT).toContain('/ultracode <context>')
 })

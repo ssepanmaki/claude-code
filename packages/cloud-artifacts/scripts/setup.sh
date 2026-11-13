@@ -19,11 +19,11 @@ cat <<'NEXT'
 
 ==> Done. Remaining manual steps:
 
-  1. Bind a custom domain to the Worker (POST + GET 都走 Worker，单一域名):
+  1. Bind a custom domain to the Worker (POST + GET both go through the Worker, single domain):
        Dashboard: Workers & Pages > cloud-artifacts > Settings > Domains & Routes > Add > Custom Domain
-       填入你的 domain（如 artifacts.example.com），Cloudflare 会自动加 DNS 记录和 SSL。
+       Enter your domain (e.g. artifacts.example.com); Cloudflare adds the DNS record and SSL automatically.
 
-  2. Update wrangler.toml [vars] PUBLIC_URL 为上一步的 domain（带 https://，如 https://artifacts.example.com）。
+  2. Update wrangler.toml [vars] PUBLIC_URL to the domain from the previous step (with https://, e.g. https://artifacts.example.com).
 
   3. Deploy:
        bun run deploy

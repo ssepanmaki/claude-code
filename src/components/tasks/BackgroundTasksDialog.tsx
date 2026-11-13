@@ -106,12 +106,12 @@ type ListItem =
 // ~1.3K lines into external builds. Gate with feature() + require so the
 // bundler can dead-code-eliminate the branch.
 /* eslint-disable @typescript-eslint/no-require-imports */
-// WorkflowDetailDialog 已移除：workflow 详情改由 /workflows 面板展示。
+// WorkflowDetailDialog was removed: workflow details are now shown by the /workflows panel.
 const workflowTaskModule = feature('WORKFLOW_SCRIPTS')
   ? (require('src/tasks/LocalWorkflowTask/LocalWorkflowTask.js') as typeof import('src/tasks/LocalWorkflowTask/LocalWorkflowTask.js'))
   : null;
 const killWorkflowTask = workflowTaskModule?.killWorkflowTask ?? null;
-// skipWorkflowAgent / retryWorkflowAgent 仅由 /workflows 面板调用（原详情对话框已移除）。
+// skipWorkflowAgent / retryWorkflowAgent are only called by the /workflows panel (the original detail dialog was removed).
 // Relative path, not `src/...` path-mapping — Bun's DCE can statically
 // resolve + eliminate `./` requires, but path-mapped strings stay opaque
 // and survive as dead literals in the bundle. Matches tasks.ts pattern.
@@ -437,10 +437,10 @@ export function BackgroundTasksDialog({ onDone, toolUseContext, initialDetailTas
           />
         );
       case 'local_workflow': {
-        // shift+下/Enter 进入的 workflow 详情。原 WorkflowDetailDialog 已移除，
-        // 详情改由 /workflows 面板展示，但此处仍需一个能退出的占位视图——
-        // 否则用户进入后 Esc/←/q 全无效，卡死。照 MonitorMcpDetailDialog 模式：
-        // ←/Esc 返回（goBackToList：单任务关闭、多任务回列表），x kill（running）。
+        // Workflow detail entered via shift+down/Enter. The original WorkflowDetailDialog was removed,
+        // and details are now shown by the /workflows panel, but a placeholder view that can be exited is still needed here —
+        // otherwise Esc/←/q do nothing after entering and the user is stuck. Following the MonitorMcpDetailDialog pattern:
+        // ←/Esc goes back (goBackToList: closes for a single task, returns to the list for several), x kills (running).
         const onKill =
           task.status === 'running' && killWorkflowTask ? () => killWorkflowTask(task.id, setAppState) : undefined;
         return (
@@ -478,11 +478,11 @@ export function BackgroundTasksDialog({ onDone, toolUseContext, initialDetailTas
             >
               {task.status === 'failed' && task.error ? (
                 <Box flexDirection="column">
-                  <Text color="error">失败原因：{task.error}</Text>
-                  <Text color="subtle">用 /workflows 查看阶段与 agent 实时进度</Text>
+                  <Text color="error">Failure reason: {task.error}</Text>
+                  <Text color="subtle">Use /workflows to see live phase and agent progress</Text>
                 </Box>
               ) : (
-                <Text color="subtle">用 /workflows 查看阶段与 agent 实时进度</Text>
+                <Text color="subtle">Use /workflows to see live phase and agent progress</Text>
               )}
             </Dialog>
           </Box>

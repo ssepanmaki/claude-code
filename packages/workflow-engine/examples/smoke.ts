@@ -1,13 +1,13 @@
 /**
- * 冒烟端到端入口 —— 真实 SDK + 引擎，最小验证端到端通路。
- * 3 次模型调用（2 角度并行 schema + 1 综合），秒级完成、低成本。
- * 覆盖：runWorkflow、parallel（屏障）、agent(schema) 结构化、agent 文本、进度事件。
+ * Smoke end-to-end entry — real SDK + engine, minimal verification of the end-to-end path.
+ * 3 model calls (2 parallel angles with schema + 1 synthesis), finishes in seconds at low cost.
+ * Covers: runWorkflow, parallel (barrier), structured agent(schema), text agent, progress events.
  *
- * 用法：
+ * Usage:
  *   ANTHROPIC_API_KEY=sk-... \
  *     bun run packages/workflow-engine/examples/smoke.ts
  *
- * 可选：ANTHROPIC_MODEL（默认 claude-sonnet-4-5）
+ * Optional: ANTHROPIC_MODEL (defaults to claude-sonnet-4-5)
  */
 import Anthropic from '@anthropic-ai/sdk'
 import { homedir } from 'node:os'
@@ -33,15 +33,15 @@ const POINT_SCHEMA = {
   properties: { point: { type: 'string' } },
 }
 
-// 最小 workflow：2 角度并行（schema 结构化）→ 综合（文本）。脚本内用 + 拼接避免 ${}。
+// Minimal workflow: 2 parallel angles (structured via schema) → synthesis (text). Concatenate with + inside the script to avoid ${}.
 const SMOKE_SCRIPT =
   `
 export const meta = { name: 'smoke', description: 'minimal end-to-end smoke' }
 phase('Smoke')
-const angles = ['一句话定义', '一个最核心价值']
+const angles = ['a one-sentence definition', 'the single core value']
 const points = await parallel(
   angles.map(a => () =>
-    agent('用简短一句话（30 字内）说明 workflow 编排的「' + a + '」。', {
+    agent('In one short sentence (under 30 words) explain the "' + a + '" of workflow orchestration.', {
       label: 'p:' + a,
       schema: ` +
   JSON.stringify(POINT_SCHEMA) +
@@ -51,18 +51,18 @@ const points = await parallel(
 )
 const clean = points.filter(Boolean)
 const joined = clean.map(p => p.point).join('；')
-const summary = await agent('把以下要点综合成一句中文结论。要点：' + joined, {
+const summary = await agent('Synthesize the following points into a one-sentence conclusion. Points: ' + joined, {
   label: 'summary',
 })
 return { points: clean, summary }
 `
 
-// API 并发上限（独立于引擎的 CPU semaphore——LLM API 对并发远比 CPU 敏感，默认 3）。
+// API concurrency limit (independent of the engine's CPU semaphore — LLM APIs are far more sensitive to concurrency than CPU; default 3).
 const apiSem = new Semaphore(
   Math.max(1, Number(process.env.WORKFLOW_API_CONCURRENCY) || 3),
 )
 
-/** 429/5xx/连接错误指数退避重试，最多 4 次。 */
+/** Retry on 429/5xx/connection errors with exponential backoff, at most 4 times. */
 async function withRetry<T>(fn: () => Promise<T>, retries = 4): Promise<T> {
   for (let attempt = 0; ; attempt++) {
     try {
@@ -101,7 +101,7 @@ async function llmAgent(params: AgentRunParams): Promise<AgentRunResult> {
   const client = clientRef.client
   if (client === null) return { kind: 'dead' }
   const schemaInstruction = params.schema
-    ? '\n\n以单独 JSON 对象回答（无围栏无解释），匹配 schema：\n' +
+    ? '\n\nAnswer with a single JSON object (no fences, no explanation) matching the schema:\n' +
       JSON.stringify(params.schema)
     : ''
   const release = await apiSem.acquire()
@@ -212,7 +212,7 @@ function makePorts(runsDir: string): WorkflowPorts {
 async function main(): Promise<void> {
   const apiKey = process.env.ANTHROPIC_API_KEY
   if (!apiKey) {
-    console.error('✗ 缺少 ANTHROPIC_API_KEY 环境变量')
+    console.error('✗ Missing ANTHROPIC_API_KEY environment variable')
     process.exit(1)
   }
   clientRef.client = new Anthropic({ apiKey, logLevel: 'off' })
@@ -238,11 +238,11 @@ async function main(): Promise<void> {
     points: Array<{ point: string }>
     summary: string
   }
-  console.log('\n━━━━━━━━ 冒烟结果 ━━━━━━━━')
+  console.log('\n━━━━━━━━ Smoke result ━━━━━━━━')
   for (const p of ret.points) console.log(`• ${p.point}`)
-  console.log(`\n综合：${ret.summary}`)
+  console.log(`\nSummary: ${ret.summary}`)
   console.log(
-    `\n✓ PASS：端到端通路正常（${ret.points.length} 要点 + 综合，3 次模型调用）`,
+    `\n✓ PASS: end-to-end path OK (${ret.points.length} points + synthesis, 3 model calls)`,
   )
 }
 

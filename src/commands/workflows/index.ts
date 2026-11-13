@@ -3,8 +3,9 @@ import type { Command } from '../../types/command.js'
 const workflows = {
   type: 'local-jsx',
   name: 'workflows',
-  description: 'Workflow 监控面板：实时 run/phase/agent 进度，键盘控制',
-  // 延迟加载面板实现，避免启动时拉入 Ink/React 依赖。
+  description:
+    'Workflow monitoring panel: live run/phase/agent progress, keyboard controls',
+  // Lazy-load the panel implementation to avoid pulling in Ink/React dependencies at startup.
   load: () => import('../../workflow/panel/panelCall.js'),
 } satisfies Command
 

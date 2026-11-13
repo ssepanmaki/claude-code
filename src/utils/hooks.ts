@@ -358,22 +358,22 @@ export interface HookResult {
 }
 
 export type AggregatedHookResult = {
-  message?: HookResultMessage // 插入会话的钩子消息（含系统/附件类），供 UI 与后续轮次展示
-  blockingError?: HookBlockingError // 致命阻塞：附带命令与错误文案，调用方应中止当前工具/流程
-  preventContinuation?: boolean // 为 true 时请求不再继续后续对话轮次（与 stopReason 配套）
-  stopReason?: string // 停止继续时的可读原因，用于日志、遥测或向用户解释为何结束
-  hookPermissionDecisionReason?: string // 钩子对权限决策的补充说明，常与 permissionBehavior 一同产出
-  hookSource?: string // 产生本次权限/改参结果的定义来源（如 settings 与 policy 合并后的条目来源）
-  permissionBehavior?: PermissionResult['behavior'] // 多钩并行时按 deny > ask > allow 聚合后的权限行为
-  additionalContexts?: string[] // 注入模型上下文的补充片段（如 UserPromptSubmit），可与多条钩子结果合并
-  initialUserMessage?: string // 会话启动等场景预置的首条用户侧文案，供首轮上下文使用
-  updatedInput?: Record<string, unknown> // 钩子改写后的工具入参；可在 allow/ask 时与权限一起产出，也可单独改参
-  updatedMCPToolOutput?: unknown // PostToolUse 钩子对 MCP 工具原始输出的替换内容
-  permissionRequestResult?: PermissionRequestResult // PermissionRequest 事件钩子的 allow/deny 及可选改参
-  watchPaths?: string[] // SessionStart 等声明的监视路径，供文件变更相关逻辑使用
-  elicitationResponse?: ElicitationResponse // Elicitation 钩子的交互/采集结果（MCP elicit 流程）
-  elicitationResultResponse?: ElicitationResponse // ElicitationResult 钩子对上一轮引导的后续响应数据
-  retry?: boolean // PermissionDenied 等场景是否建议用户重试当前操作
+  message?: HookResultMessage // hook message inserted into the conversation (including system/attachment kinds), shown by the UI and later turns
+  blockingError?: HookBlockingError // fatal block: carries the command and error text; the caller should abort the current tool/flow
+  preventContinuation?: boolean // when true, requests that no further conversation turns continue (paired with stopReason)
+  stopReason?: string // human-readable reason for stopping, used in logs, telemetry or to explain to the user why it ended
+  hookPermissionDecisionReason?: string // extra explanation of the hook's permission decision, often produced together with permissionBehavior
+  hookSource?: string // definition source that produced this permission/input-rewrite result (e.g. entry source after settings and policy are merged)
+  permissionBehavior?: PermissionResult['behavior'] // permission behavior aggregated as deny > ask > allow when several hooks run in parallel
+  additionalContexts?: string[] // extra snippets injected into the model context (e.g. UserPromptSubmit), mergeable across multiple hook results
+  initialUserMessage?: string // first user-side text preset in scenarios such as session start, for first-turn context
+  updatedInput?: Record<string, unknown> // tool input rewritten by a hook; may be produced with the permission on allow/ask, or on its own
+  updatedMCPToolOutput?: unknown // PostToolUse replacement for the raw MCP tool output from a PostToolUse hook
+  permissionRequestResult?: PermissionRequestResult // PermissionRequest allow/deny and optional input rewrite from a PermissionRequest event hook
+  watchPaths?: string[] // SessionStart watch paths declared by SessionStart etc., used by file-change-related logic
+  elicitationResponse?: ElicitationResponse // Elicitation interaction/collection result of an Elicitation hook (MCP elicit flow)
+  elicitationResultResponse?: ElicitationResponse // ElicitationResult follow-up response data of an ElicitationResult hook to the previous elicitation
+  retry?: boolean // PermissionDenied whether the user is advised to retry the current operation in scenarios such as PermissionDenied
 }
 
 /**

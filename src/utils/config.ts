@@ -341,7 +341,7 @@ export type GlobalConfig = {
   hasVisitedExtraUsage?: boolean // Whether the user has visited /extra-usage — hides credit upsells
 
   // Display language preference
-  preferredLanguage?: 'auto' | 'en' | 'zh' // auto = follow system locale, en = English, zh = 中文
+  preferredLanguage?: 'auto' | 'en' | 'zh' // auto = follow system locale, en = English, zh = Chinese
 
   // Voice mode notice tracking
   voiceNoticeSeenCount?: number // Number of times the voice-mode-available notice has been shown
@@ -1744,7 +1744,7 @@ export function getAutoUpdaterDisabledReason(): AutoUpdaterDisabledReason | null
   if (process.env.NODE_ENV === 'development') {
     return { type: 'development' }
   }
-  // 本项目默认关闭自动更新；通过 ENABLE_AUTOUPDATER=1 显式开启
+  // This project disables auto-update by default; enable it explicitly with ENABLE_AUTOUPDATER=1
   if (!isEnvTruthy(process.env.ENABLE_AUTOUPDATER)) {
     return { type: 'config' }
   }

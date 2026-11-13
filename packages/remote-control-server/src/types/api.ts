@@ -1,4 +1,4 @@
-/** API 请求/响应类型定义 */
+/** API request/response type definitions */
 
 // Hono context variable types
 declare module 'hono' {

@@ -3,19 +3,19 @@ import { type DOMElement, useAnimationFrame } from '@anthropic/ink'
 const RIPPLE_INTERVAL_MS = 60
 
 /**
- * ultracode 波纹动画 hook。
+ * ultracode ripple animation hook.
  *
- * 设计：
- * - 仅当 enabled=true（cursor === 'ultracode' 或退出淡出未结束）时订阅时钟，
- *   pass null 时 useAnimationFrame 内部不订阅 ClockContext，setInterval 不触发。
- * - 返回 [ref, time]：ref 附到波纹容器（驱动 viewport-pause），time
- *   用于 computeRippleLine 计算各行的波纹相位。
+ * Design:
+ * - Subscribes to the clock only when enabled=true (cursor === 'ultracode', or the exit fade-out has not finished),
+ *   when passing null useAnimationFrame does not subscribe to ClockContext internally, so setInterval never fires.
+ * - Returns [ref, time]: ref is attached to the ripple container (drives viewport-pause), and time
+ *   is used by computeRippleLine to compute the ripple phase of each row.
  *
- * enabled=false 时返回 time=0（下游基于 enabled 直接不渲染波纹层，
- * 但 0 仍是合法值，避免意外的 phase 输出 NaN）。
+ * When enabled=false it returns time=0 (downstream simply does not render the ripple layer based on enabled,
+ * but 0 is still a valid value, avoiding an unexpected NaN phase output).
  *
- * 注意：调用方应传 showingRipple（on ultracode || fade > 0），不是 rippleActive，
- * 这样退出动画期间时钟继续推进，fade useEffect 才有 tick 触发。
+ * Note: callers should pass showingRipple (on ultracode || fade > 0), not rippleActive,
+ * so the clock keeps advancing during the exit animation and the fade useEffect has ticks to fire on.
  */
 export function useRippleFrame(
   enabled: boolean,

@@ -1,5 +1,5 @@
 /**
- * Tests for fix: 修复穷鬼模式的写入问题
+ * Tests for fix: Tests for fix: fix the write problem in budget mode
  *
  * Before the fix, poorMode was an in-memory boolean that reset on restart.
  * After the fix, it reads from / writes to settings.json via

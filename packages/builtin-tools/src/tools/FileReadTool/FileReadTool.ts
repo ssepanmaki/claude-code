@@ -464,9 +464,9 @@ export const FileReadTool = buildTool({
       return { result: true }
     }
 
-    // 预检：如果路径已是一个存在的目录，及时拒绝并给出指引
-    // 避免 AI 模型用 Read 工具读取目录路径时抛出原始 EISDIR 错误，
-    // 模型拿到错误后不知该用 ls 列目录，可能做出错误恢复决策。
+    // Pre-check: if the path is already an existing directory, reject early with guidance
+    // to avoid the raw EISDIR error when the AI model reads a directory path with the Read tool;
+    // after such an error the model does not know to use ls to list the directory and may make a wrong recovery decision.
     try {
       const fileStat = await getFsImplementation().stat(fullFilePath)
       if (fileStat.isDirectory()) {
@@ -478,7 +478,7 @@ export const FileReadTool = buildTool({
       }
     } catch (e) {
       if (!isENOENT(e)) throw e
-      // ENOENT = 文件还不存在，放行，call() 会通过 findSimilarFile 给出友好建议
+      // ENOENT = the file does not exist yet; let it through, call() will give a friendly suggestion via findSimilarFile
     }
 
     // Binary extension check (string check on extension only, no I/O).

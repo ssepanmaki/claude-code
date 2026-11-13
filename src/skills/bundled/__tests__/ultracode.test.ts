@@ -71,11 +71,11 @@ describe('registerUltracodeSkill', () => {
 
     const ultracode = getBundledSkills().find(s => s.name === 'ultracode')!
     const blocks = await asPrompt(ultracode).getPromptForCommand(
-      '迁移 auth 模块',
+      'migrate the auth module',
       {} as never,
     )
     const text = (blocks[0] as { type: 'text'; text: string }).text
-    expect(text.endsWith('迁移 auth 模块\n')).toBe(true)
+    expect(text.endsWith('migrate the auth module\n')).toBe(true)
     expect(text).toContain('User input')
   })
 

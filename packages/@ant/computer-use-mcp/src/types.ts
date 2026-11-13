@@ -9,23 +9,23 @@ import type {
 export type ScreenshotDims = Omit<ScreenshotResult, 'base64'>
 
 /**
- * Logger 第二参数的可选类型（与 claude-for-chrome-mcp 对齐）。
- * 实践中多为 catch 到的 Error。
+ * Optional type of the Logger's second argument (aligned with claude-for-chrome-mcp).
+ * In practice usually a caught Error.
  */
 export type LoggerDetail = Error | NodeJS.ErrnoException
 
-/** 将 unknown 收窄为 LoggerDetail，供 catch 块传给 logger 使用。 */
+/** Narrows unknown to LoggerDetail, for catch blocks to pass to the logger. */
 export function toLoggerDetail(detail: unknown): LoggerDetail | undefined {
   return detail instanceof Error ? detail : undefined
 }
 
-/** 宿主注入的日志接口（与 claude-for-chrome-mcp/src/types.ts 对齐）。 */
+/** Logger interface injected by the host (aligned with claude-for-chrome-mcp/src/types.ts). */
 export interface Logger {
-  info: (message: string, detail?: LoggerDetail) => void // 信息
-  error: (message: string, detail?: LoggerDetail) => void // 错误
-  warn: (message: string, detail?: LoggerDetail) => void // 警告
-  debug: (message: string, detail?: LoggerDetail) => void // 调试
-  silly: (message: string, detail?: LoggerDetail) => void // 最细粒度调试
+  info: (message: string, detail?: LoggerDetail) => void // info
+  error: (message: string, detail?: LoggerDetail) => void // error
+  warn: (message: string, detail?: LoggerDetail) => void // warning
+  debug: (message: string, detail?: LoggerDetail) => void // debug
+  silly: (message: string, detail?: LoggerDetail) => void // finest-grained debug
 }
 
 /**

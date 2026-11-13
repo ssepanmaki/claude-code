@@ -374,8 +374,8 @@ function PipeStatusInline(): React.ReactNode {
       <Box height={1} paddingLeft={2}>
         <Text dimColor>
           {selectedPipes.length > 0
-            ? `当前普通 prompt 走 ${routeMode === 'local' ? '本地 main' : '已选 sub'}；切换不会清空选择`
-            : '当前未选择 pipe；普通 prompt 会在本地 main 对话执行'}
+            ? `Plain prompts currently go to ${routeMode === 'local' ? 'local main' : 'the selected sub'}; switching does not clear the selection`
+            : 'No pipe selected; plain prompts run in the local main conversation'}
         </Text>
       </Box>
       {allPipes.map((name, idx) => {

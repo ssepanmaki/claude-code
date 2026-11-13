@@ -1,2 +1,2 @@
-/** Grep（内容搜索）工具在 API 中的注册名称字面量（与 `GREP_TOOL_NAME` 常量 `'Grep'` 一致）。 */
+/** Registered name literal of the Grep (content search) tool in the API (matches the `GREP_TOOL_NAME` constant `'Grep'`). */
 export type GREP_TOOL_NAME = 'Grep'

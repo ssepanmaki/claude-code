@@ -4,7 +4,7 @@
 
 import type { ToolCallContent, PermissionOption, PlanEntry } from '../acp/types'
 
-// 工具调用状态
+// Tool call status
 export type ToolCallStatus =
   | 'running'
   | 'complete'
@@ -13,7 +13,7 @@ export type ToolCallStatus =
   | 'rejected'
   | 'canceled'
 
-// 工具调用数据
+// Tool call data
 export interface ToolCallData {
   id: string
   title: string
@@ -21,27 +21,27 @@ export interface ToolCallData {
   content?: ToolCallContent[]
   rawInput?: Record<string, unknown>
   rawOutput?: Record<string, unknown>
-  // 权限请求（仅当 status === "waiting_for_confirmation"）
+  // Permission request (only when status === "waiting_for_confirmation")
   permissionRequest?: {
     requestId: string
     options: PermissionOption[]
   }
-  // 独立权限请求（无匹配工具调用时创建）
+  // Standalone permission request (created when there is no matching tool call)
   isStandalonePermission?: boolean
 }
 
-// 助手消息块 — 普通消息或思考过程
+// Assistant message block — a normal message or a thinking process
 export type AssistantChunk =
   | { type: 'message'; text: string }
   | { type: 'thought'; text: string }
 
-// 用户消息中的图片
+// Image in a user message
 export interface UserMessageImage {
   mimeType: string
   data: string // base64 encoded
 }
 
-// 用户消息条目
+// User message entry
 export interface UserMessageEntry {
   type: 'user_message'
   id: string
@@ -49,27 +49,27 @@ export interface UserMessageEntry {
   images?: UserMessageImage[]
 }
 
-// 助手消息条目
+// Assistant message entry
 export interface AssistantMessageEntry {
   type: 'assistant_message'
   id: string
   chunks: AssistantChunk[]
 }
 
-// 工具调用条目
+// Tool call entry
 export interface ToolCallEntry {
   type: 'tool_call'
   toolCall: ToolCallData
 }
 
-// Plan 展示条目（Agent 执行计划）
+// Plan display entry (Agent execution plan)
 export interface PlanDisplayEntry {
   type: 'plan'
   id: string
   entries: PlanEntry[]
 }
 
-// 统一聊天条目类型
+// Unified chat entry type
 export type ThreadEntry =
   | UserMessageEntry
   | AssistantMessageEntry
@@ -77,16 +77,16 @@ export type ThreadEntry =
   | PlanDisplayEntry
 
 // =============================================================================
-// Chat 组件 Props 类型
+// Chat component props types
 // =============================================================================
 
-// ChatInput 提交消息
+// Message submitted from ChatInput
 export interface ChatInputMessage {
   text: string
   images?: UserMessageImage[]
 }
 
-// 权限请求条目（用于 PermissionPanel）
+// Permission request entry (for PermissionPanel)
 export interface PendingPermission {
   requestId: string
   toolName: string
@@ -95,7 +95,7 @@ export interface PendingPermission {
   options?: PermissionOption[]
 }
 
-// 会话列表条目（用于 SessionSidebar）
+// Session list entry (for SessionSidebar)
 export interface SessionListItem {
   id: string
   title?: string | null

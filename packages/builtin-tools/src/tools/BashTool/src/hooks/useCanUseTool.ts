@@ -1,2 +1,2 @@
-/** 工具调用权限判定回调（交互/自动模式分支）；与宿主 `src/hooks/useCanUseTool.tsx` 中 `CanUseToolFn` 一致。 */
+/** Tool-call permission decision callback (interactive/automatic mode branches); same as `CanUseToolFn` in the host `src/hooks/useCanUseTool.tsx`. */
 export type CanUseToolFn = import('src/hooks/useCanUseTool.js').CanUseToolFn

@@ -21,7 +21,7 @@ import type {
   PendingPermission,
 } from './types'
 
-// SSE Event Bus — 复用自 rcs-transport.ts，仅保留连接管理
+// SSE Event Bus — reused from rcs-transport.ts, keeping only connection management
 type SSEEventHandler = (event: SessionEvent) => void
 
 class SSEBus {
@@ -60,11 +60,11 @@ class SSEBus {
   }
 }
 
-// 全局 SSE bus 实例
+// Global SSE bus instance
 export const sseBus = new SSEBus()
 
 // =============================================================================
-// RCS Chat Adapter — 将 SSE 事件转为 ThreadEntry
+// RCS Chat Adapter — converts SSE events to ThreadEntry
 // =============================================================================
 
 function mapToolStatus(status: string): ToolCallStatus {
@@ -126,7 +126,7 @@ export class RCSChatAdapter {
     this.onPermissionRequest = options?.onPermissionRequest
   }
 
-  /** 初始化：绑定会话、加载历史、连接 SSE */
+  /** Initialize: bind the session, load history, connect SSE */
   async init(): Promise<void> {
     try {
       await apiBind(this.sessionId)
@@ -138,7 +138,7 @@ export class RCSChatAdapter {
     this.connectSSE()
   }
 
-  /** 加载历史事件并转为 ThreadEntry */
+  /** Load history events and convert them to ThreadEntry */
   async loadHistory(): Promise<void> {
     const { events } = await apiFetchSessionHistory(this.sessionId)
     if (!events || events.length === 0) return
@@ -242,13 +242,13 @@ export class RCSChatAdapter {
     this.setEntries(historyEntries)
   }
 
-  /** 连接 SSE 事件流 */
+  /** Connect the SSE event stream */
   connectSSE(): void {
     sseBus.connect(this.sessionId)
     this.unsub = sseBus.onEvent(event => this.handleEvent(event))
   }
 
-  /** 断开 SSE */
+  /** Disconnect SSE */
   disconnect(): void {
     if (this.unsub) {
       this.unsub()
@@ -257,7 +257,7 @@ export class RCSChatAdapter {
     sseBus.disconnect()
   }
 
-  /** 处理 SSE 事件 */
+  /** Handle SSE events */
   handleEvent(event: SessionEvent): void {
     const type = event.type
     const payload = event.payload || ({} as EventPayload)
@@ -267,7 +267,7 @@ export class RCSChatAdapter {
     if (/Remote Control connecting/i.test(serialized)) return
 
     switch (type) {
-      // ---- 助手消息 ----
+      // ---- Assistant message ----
       case 'assistant': {
         const content =
           typeof payload.content === 'string' ? payload.content : ''
@@ -338,7 +338,7 @@ export class RCSChatAdapter {
         break
       }
 
-      // ---- 工具调用 ----
+      // ---- Tool call ----
       case 'tool_use': {
         const p = payload as Record<string, unknown>
         const toolCallId = (p.tool_call_id as string) || `call-${Date.now()}`
@@ -355,7 +355,7 @@ export class RCSChatAdapter {
         break
       }
 
-      // ---- 工具结果 ----
+      // ---- Tool result ----
       case 'tool_result': {
         const p = payload as Record<string, unknown>
         const callId = (p.tool_call_id as string) || ''
@@ -379,7 +379,7 @@ export class RCSChatAdapter {
         break
       }
 
-      // ---- 权限请求 ----
+      // ---- Permission request ----
       case 'control_request':
       case 'permission_request': {
         const req = payload.request as Record<string, unknown> | undefined
@@ -430,7 +430,7 @@ export class RCSChatAdapter {
         break
       }
 
-      // ---- 会话状态 ----
+      // ---- Session status ----
       case 'session_status': {
         if (typeof payload.status === 'string') {
           this.onStatusChange?.(payload.status)
@@ -438,7 +438,7 @@ export class RCSChatAdapter {
         break
       }
 
-      // ---- 错误 ----
+      // ---- Error ----
       case 'error': {
         const errorMsg = String(
           payload.message || payload.content || 'Unknown error',
@@ -447,7 +447,7 @@ export class RCSChatAdapter {
         break
       }
 
-      // ---- 忽略的事件类型 ----
+      // ---- Ignored event types ----
       case 'partial_assistant':
       case 'result':
       case 'result_success':
@@ -461,7 +461,7 @@ export class RCSChatAdapter {
     }
   }
 
-  /** 发送用户消息 */
+  /** Send a user message */
   async sendMessage(text: string, images?: UserMessageImage[]): Promise<void> {
     if (!text.trim() && (!images || images.length === 0)) return
 
@@ -483,7 +483,7 @@ export class RCSChatAdapter {
     })
   }
 
-  /** 响应权限请求 */
+  /** Respond to a permission request */
   async respondPermission(
     requestId: string,
     approved: boolean,
@@ -514,7 +514,7 @@ export class RCSChatAdapter {
     )
   }
 
-  /** 中断当前操作 */
+  /** Interrupt the current operation */
   async interrupt(): Promise<void> {
     // Mark running tools as canceled
     this.setEntries(prev =>

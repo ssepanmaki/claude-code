@@ -120,7 +120,7 @@ describe('round-trip conversions', () => {
 // These tests exercise the pure discovery helper with mock dependencies.
 // Using the DI variant (rather than mocking modules) keeps these tests
 // hermetic — no `mock.module` calls, so other tests in the same `bun test`
-// process are unaffected. See CLAUDE.md "跨文件 mock 污染" for context.
+// process are unaffected. See CLAUDE.md "Cross-file mock pollution" for context.
 
 /** Build a deps object where only specific paths "exist". */
 function makeDeps(opts: {

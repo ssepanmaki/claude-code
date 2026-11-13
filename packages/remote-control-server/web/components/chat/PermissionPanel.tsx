@@ -3,7 +3,7 @@ import { cn } from '../../src/lib/utils';
 import { ShieldAlert, Check, X } from 'lucide-react';
 
 // =============================================================================
-// 权限请求面板 — 固定在输入框上方（Anthropic warm token style）
+// Permission request panel — fixed above the input box (Anthropic warm token style)
 // =============================================================================
 
 interface PermissionPanelProps {
@@ -27,7 +27,7 @@ export function PermissionPanel({ requests, onRespond, className }: PermissionPa
 }
 
 // =============================================================================
-// 单个权限卡片 — warm warning tokens + left-border accent
+// Single permission card — warm warning tokens + left-border accent
 // =============================================================================
 
 interface PermissionCardProps {
@@ -52,7 +52,7 @@ function PermissionCard({ request, onRespond }: PermissionCardProps) {
           className="h-8 px-3 rounded-lg bg-brand text-white text-xs font-medium hover:bg-brand-light transition-colors flex items-center gap-1.5"
         >
           <Check className="h-3.5 w-3.5" />
-          允许
+          Allow
         </button>
         <button
           type="button"
@@ -60,7 +60,7 @@ function PermissionCard({ request, onRespond }: PermissionCardProps) {
           className="h-8 px-3 rounded-lg border border-warning-border/30 text-warning-text text-xs font-medium hover:bg-warning-bg transition-colors flex items-center gap-1.5"
         >
           <X className="h-3.5 w-3.5" />
-          拒绝
+          Deny
         </button>
       </div>
     </div>

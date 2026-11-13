@@ -1,27 +1,27 @@
 import type { Dispatch, ReactNode, SetStateAction } from 'react'
 
-/** 向导中每一步的组件（无 props 或由 Wizard 包裹后注入上下文）。 */
+/** Component for each wizard step (no props, or wrapped by Wizard with injected context). */
 export type WizardStepComponent = (() => ReactNode) | React.ComponentType
 
-/** `WizardProvider` 的声明 props（与实现处交叉类型合并）。 */
+/** Declared props of `WizardProvider` (merged with the implementation as an intersection type). */
 export type WizardProviderProps = {
-  steps: WizardStepComponent[] // 步骤组件序列
-  children?: ReactNode // 可选：自定义包裹层；缺省时渲染当前步组件
-  title: string // 标题栏文案
-  showStepCounter?: boolean // 是否显示「第 n / 共 m 步」
+  steps: WizardStepComponent[] // sequence of step components
+  children?: ReactNode // optional: custom wrapper; renders the current step when omitted
+  title: string // title bar text
+  showStepCounter?: boolean // whether to show "step n of m"
 }
 
-/** 向导上下文：当前步骤索引、累积数据与导航。 */
+/** Wizard context: current step index, accumulated data and navigation. */
 export type WizardContextValue<T extends Record<string, unknown>> = {
-  currentStepIndex: number // 当前步骤下标
-  totalSteps: number // 步骤总数
-  wizardData: T // 各步写入的聚合数据
-  setWizardData: Dispatch<SetStateAction<T>> // 整体替换向导数据
-  updateWizardData: (updates: Partial<T>) => void // 局部合并更新
-  goNext: () => void // 下一步；末步则标记完成
-  goBack: () => void // 上一步或退出
-  goToStep: (index: number) => void // 非线性跳步（写入历史栈）
-  cancel: () => void // 放弃并清空历史
-  title: string // 与 Provider 同步的标题
-  showStepCounter: boolean // 是否展示步数计数
+  currentStepIndex: number // current step index
+  totalSteps: number // total number of steps
+  wizardData: T // aggregated data written by each step
+  setWizardData: Dispatch<SetStateAction<T>> // replace the whole wizard data
+  updateWizardData: (updates: Partial<T>) => void // merge a partial update
+  goNext: () => void // next step; marks completion on the last step
+  goBack: () => void // previous step or exit
+  goToStep: (index: number) => void // non-linear jump (pushes onto the history stack)
+  cancel: () => void // abandon and clear history
+  title: string // title kept in sync with the Provider
+  showStepCounter: boolean // whether to show the step counter
 }

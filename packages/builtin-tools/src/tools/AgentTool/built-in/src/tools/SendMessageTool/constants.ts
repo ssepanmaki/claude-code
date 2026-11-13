@@ -1,2 +1,2 @@
-/** SendMessage（向用户/通道发消息）工具在 API 中的注册名称字面量（与 `SEND_MESSAGE_TOOL_NAME` 常量一致）。 */
+/** Registered name literal of the SendMessage (send a message to a user/channel) tool in the API (matches the `SEND_MESSAGE_TOOL_NAME` constant). */
 export type SEND_MESSAGE_TOOL_NAME = 'SendMessage'

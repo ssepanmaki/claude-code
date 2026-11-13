@@ -753,14 +753,14 @@ export async function main() {
 
   process.on('exit', () => {
     resetCursor();
-    // 杀掉所有 running workflow，避免孤儿 task 留在 AppState 里
+    // Kill all running workflows so orphan tasks do not remain in AppState
     try {
       const { peekWorkflowService } = require('./workflow/service.js') as {
         peekWorkflowService: () => { shutdown: () => void } | null;
       };
       peekWorkflowService()?.shutdown();
     } catch {
-      // workflow 未启用或已卸载——忽略
+      // workflow is not enabled or has been unloaded — ignore
     }
   });
   process.on('SIGINT', () => {

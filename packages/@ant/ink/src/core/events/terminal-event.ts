@@ -103,8 +103,8 @@ export class TerminalEvent extends Event {
 
 import type { EventHandlerProps } from './event-handlers.js'
 
-/** 终端事件系统的目标节点（DOM 树节点或根节点）。 */
+/** Target node of the terminal event system (a DOM tree node or the root node). */
 export type EventTarget = {
-  parentNode: EventTarget | undefined // 父节点，根节点为 undefined
-  _eventHandlers?: Partial<EventHandlerProps> // 事件处理器，与 dom.ts DOMElement 同构
+  parentNode: EventTarget | undefined // parent node; undefined for the root node
+  _eventHandlers?: Partial<EventHandlerProps> // event handlers, isomorphic with DOMElement in dom.ts
 }

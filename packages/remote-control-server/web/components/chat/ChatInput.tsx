@@ -6,7 +6,7 @@ import type { AvailableCommand } from '../../src/acp/types';
 import { CommandMenu } from './CommandMenu';
 import imageCompression from 'browser-image-compression';
 
-// 图片压缩配置
+// Image compression config
 const IMAGE_COMPRESSION_OPTIONS = {
   maxSizeMB: 2,
   maxWidthOrHeight: 2048,
@@ -15,7 +15,7 @@ const IMAGE_COMPRESSION_OPTIONS = {
 };
 
 // =============================================================================
-// Anthropic 风格聊天输入框 — 底部居中浮动卡片，橙色焦点环
+// Anthropic-style chat input — floating card centered at the bottom, orange focus ring
 // =============================================================================
 
 interface ChatInputProps {
@@ -24,9 +24,9 @@ interface ChatInputProps {
   onInterrupt?: () => void;
   disabled?: boolean;
   placeholder?: string;
-  /** 是否支持图片上传 */
+  /** Whether image upload is supported */
   supportsImages?: boolean;
-  /** Agent 提供的可用 slash 命令 */
+  /** Slash commands available from the Agent */
   commands?: AvailableCommand[];
   className?: string;
 }
@@ -36,7 +36,7 @@ export function ChatInput({
   isLoading = false,
   onInterrupt,
   disabled = false,
-  placeholder = '给 Claude 发送消息…',
+  placeholder = 'Send a message to Claude…',
   supportsImages = false,
   commands,
   className,
@@ -57,7 +57,7 @@ export function ChatInput({
     setImages([]);
     setShowCommandMenu(false);
     setCommandFilter('');
-    // 重置 textarea 高度
+    // Reset textarea height
     if (textareaRef.current) {
       textareaRef.current.style.height = 'auto';
     }
@@ -100,7 +100,7 @@ export function ChatInput({
       const value = e.target.value;
       setText(value);
 
-      // 检测 slash 命令模式：仅在输入开头输入 / 时触发
+      // Detect slash-command mode: only triggered when / is typed at the start of the input
       if (value.startsWith('/') && commands && commands.length > 0) {
         setShowCommandMenu(true);
         setCommandFilter(value.slice(1).split(/\s/)[0] || '');
@@ -109,7 +109,7 @@ export function ChatInput({
         setCommandFilter('');
       }
 
-      // 自动调整高度
+      // Auto-adjust height
       const el = e.target;
       el.style.height = 'auto';
       el.style.height = Math.min(el.scrollHeight, 200) + 'px';
@@ -117,7 +117,7 @@ export function ChatInput({
     [commands, showCommandMenu],
   );
 
-  // 粘贴图片
+  // Paste image
   const handlePaste = useCallback(
     async (e: ClipboardEvent) => {
       if (!supportsImages) return;
@@ -131,7 +131,7 @@ export function ChatInput({
     [supportsImages],
   );
 
-  // 选择文件
+  // Select file
   const handleFileSelect = useCallback(async () => {
     if (!fileInputRef.current) return;
     const files = fileInputRef.current.files;
@@ -139,7 +139,7 @@ export function ChatInput({
 
     const newImages = await processImageFiles(Array.from(files));
     setImages(prev => [...prev, ...newImages]);
-    // 清空 input 以便重复选择
+    // Clear the input so the same file can be selected again
     fileInputRef.current.value = '';
   }, []);
 
@@ -192,7 +192,7 @@ export function ChatInput({
             'focus-within:border-brand/50 focus-within:shadow-[0_0_0_3px_rgba(217,119,87,0.15)] transition-all',
           )}
         >
-          {/* 图片预览 */}
+          {/* Image preview */}
           {images.length > 0 && (
             <div className="flex flex-wrap gap-2 px-3 pt-3">
               {images.map((img, i) => (
@@ -215,9 +215,9 @@ export function ChatInput({
             </div>
           )}
 
-          {/* 输入区域 — Anthropic 单行紧凑布局 */}
+          {/* Input area — Anthropic single-row compact layout */}
           <div className="flex items-end gap-2 px-3 py-2.5">
-            {/* 左侧附件按钮 */}
+            {/* Attachment button on the left */}
             {supportsImages && (
               <>
                 <button
@@ -240,7 +240,7 @@ export function ChatInput({
               </>
             )}
 
-            {/* Slash 命令按钮 */}
+            {/* Slash command button */}
             {commands && commands.length > 0 && (
               <button
                 type="button"
@@ -252,7 +252,7 @@ export function ChatInput({
                     : 'text-text-muted hover:text-text-secondary hover:bg-surface-1/50',
                 )}
                 disabled={disabled}
-                title="命令列表"
+                title="Command list"
               >
                 <Slash className="h-4 w-4" />
               </button>
@@ -275,7 +275,7 @@ export function ChatInput({
               )}
             />
 
-            {/* 右侧发送/取消按钮 */}
+            {/* Send/cancel button on the right */}
             <button
               type="button"
               onClick={isLoading ? onInterrupt : handleSubmit}
@@ -296,16 +296,16 @@ export function ChatInput({
       </div>
       {/* end relative */}
 
-      {/* 提示文本 */}
+      {/* Hint text */}
       <div className="text-center mt-1.5">
-        <span className="text-[11px] text-text-muted font-display">Enter 发送，Shift+Enter 换行</span>
+        <span className="text-[11px] text-text-muted font-display">Enter to send, Shift+Enter for a new line</span>
       </div>
     </div>
   );
 }
 
 // =============================================================================
-// 图片处理工具
+// Image handling utilities
 // =============================================================================
 
 async function processImageFiles(files: File[]): Promise<UserMessageImage[]> {

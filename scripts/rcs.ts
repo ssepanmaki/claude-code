@@ -1,5 +1,5 @@
 /**
- * 启动 Remote Control Server
+ * Start the Remote Control Server
  *
  * Usage:
  *   bun run scripts/rcs.ts

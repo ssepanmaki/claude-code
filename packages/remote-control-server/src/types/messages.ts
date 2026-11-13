@@ -1,4 +1,4 @@
-/** SDK 消息类型 — 与 CC CLI bridge 模块兼容 */
+/** SDK message types — compatible with the CC CLI bridge module */
 export interface SDKMessage {
   type: string
   content?: unknown

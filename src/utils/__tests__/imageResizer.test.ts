@@ -1,5 +1,5 @@
 /**
- * Tests for fix: 修复截图 MIME 类型硬编码导致 API 拒绝的问题
+ * Tests for fix: Tests for fix: fix the screenshot MIME type being hardcoded, which made the API reject it
  *
  * macOS screencapture outputs PNG but the code was hardcoding "image/jpeg",
  * causing API errors. The fix detects the actual format from magic bytes.

@@ -1,7 +1,7 @@
 import { nanoid } from 'nanoid'
 
-// TOKEN 通过 `wrangler secret put TOKEN` 注入，wrangler types 不为 secret 生成类型
-// 所以这里显式扩展全局 Env（与 worker-configuration.d.ts 合并）
+// TOKEN is injected via `wrangler secret put TOKEN`; wrangler types does not generate types for secrets,
+// so the global Env is extended explicitly here (merged with worker-configuration.d.ts)
 declare global {
   interface Env {
     TOKEN: string
@@ -12,7 +12,7 @@ const HASH_PATTERN = /^[A-Za-z0-9_-]{1,128}$/
 const TTL_PREFIXES = ['7d', '30d']
 const ALLOWED_TTLS = [7, 30]
 const HTML_CONTENT_TYPE = 'text/html; charset=utf-8'
-// GET /<prefix>/<id>.html —— prefix 与 lifecycle rule 对应，限制只能是 7d 或 30d
+// GET /<prefix>/<id>.html — prefix corresponds to the lifecycle rule and is restricted to 7d or 30d
 const GET_PATH_PATTERN = /^\/(7d|30d)\/([A-Za-z0-9_-]{1,128})\.html$/
 
 export default {
@@ -29,7 +29,7 @@ export default {
   },
 } satisfies ExportedHandler<Env>
 
-// GET /7d/<id>.html 或 /30d/<id>.html —— 从 R2 读，返回 text/html
+// GET /7d/<id>.html or /30d/<id>.html — read from R2, return text/html
 async function handleGet(url: URL, env: Env): Promise<Response> {
   const match = GET_PATH_PATTERN.exec(url.pathname)
   if (!match) {
@@ -86,7 +86,7 @@ async function handleUpload(
       return json({ error: 'invalid_hash' }, 400)
     }
     id = hashParam
-    // 覆盖：先删所有 ttl prefix 下可能的旧 key（R2 delete 不存在的 key 不报错）
+    // Overwrite: first delete possible old keys under every ttl prefix (R2 delete does not error on a missing key)
     await Promise.all(
       TTL_PREFIXES.map(p => env.BUCKET.delete(`${p}/${id}.html`)),
     )

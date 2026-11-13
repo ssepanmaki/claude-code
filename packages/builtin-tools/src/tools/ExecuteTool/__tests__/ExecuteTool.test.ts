@@ -1,9 +1,9 @@
 /**
  * ExecuteTool.test.ts
  *
- * 薄层子进程包装器，在独立的 bun:test 进程中运行实际测试。
- * 这样可以防止其他测试文件的 mock.module() 漏出（例如 agentToolUtils.test.ts
- * 对 src/Tool.js 的 mock）影响 ExecuteTool 的测试。
+ * Thin subprocess wrapper that runs the actual tests in a separate bun:test process.
+ * This prevents mock.module() from other test files leaking in (for example the mock of src/Tool.js in agentToolUtils.test.ts)
+ * from affecting the ExecuteTool tests.
  */
 import { describe, test, expect } from 'bun:test'
 import { resolve, relative } from 'path'

@@ -192,7 +192,7 @@ export class WindowsTerminalBackend implements PaneBackend {
       throw new Error(`Unknown Windows Terminal pane id: ${paneId}`)
     }
 
-    // 拒绝 ready 态重 spawn（避免同 pidFile 双进程竞争）
+    // Reject re-spawn in the ready state (avoids two processes racing on the same pidFile)
     if (pane.status === 'ready' || pane.status === 'killing') {
       throw new Error(
         `Pane ${paneId} already spawned (status=${pane.status}); create a new pane to re-launch`,
@@ -206,9 +206,9 @@ export class WindowsTerminalBackend implements PaneBackend {
     if (pane.status === 'dead') {
       throw new Error(`Pane ${paneId} is dead; create a new pane`)
     }
-    // pane.status === 'registered' → 继续
+    // pane.status === 'registered' → continue
 
-    // 提前赋值 spawnPromise 在任何 await 前（inner Promise 包装）
+    // Assign spawnPromise early, before any await (wrapped in an inner Promise)
     // Attach a no-op .catch() immediately to prevent unhandled rejection warnings
     // in case killPane never awaits spawnPromise (e.g. sendCommandToPane fails
     // before killPane is called).
@@ -323,27 +323,27 @@ export class WindowsTerminalBackend implements PaneBackend {
       return false
     }
 
-    // 1. 解 kill-while-spawn race：await spawn 完成（不论成功失败）
+    // 1. Resolve the kill-while-spawn race: await spawn completion (success or failure)
     if (pane.status === 'spawning' && pane.spawnPromise) {
       await pane.spawnPromise.catch(() => {})
     }
 
-    // 2. TOCTOU 修正：重读 status/pid
+    // 2. TOCTOU fix: re-read status/pid
     if (pane.status === 'dead') {
       this.panes.delete(paneId)
       return false
     }
     if (pane.status !== 'ready') {
-      // 还在其它非终态（理论不可达，保险）
+      // Still in some other non-terminal state (theoretically unreachable, defensive)
       return false
     }
 
     pane.status = 'killing'
 
-    // 3. 优先用缓存 pid
+    // 3. Prefer the cached pid
     let pid: number | undefined = pane.pid
 
-    // 4. fallback：缓存没有则读盘（保留 retry 3×500ms）
+    // 4. Fallback: if there is no cache, read from disk (keeping retry 3×500ms)
     if (pid === undefined) {
       let pidContent: string | null = null
       for (let attempt = 0; attempt < 3; attempt++) {
@@ -373,7 +373,7 @@ export class WindowsTerminalBackend implements PaneBackend {
       pid = parsed
     }
 
-    // 5. 执行 Stop-Process
+    // 5. Run Stop-Process
     const result = await this.runCommand('powershell.exe', [
       '-NoLogo',
       '-NoProfile',
@@ -381,7 +381,7 @@ export class WindowsTerminalBackend implements PaneBackend {
       `Stop-Process -Id ${pid} -Force -ErrorAction Stop`,
     ])
 
-    // 6. 不管成功失败都清缓存 + 标 dead + 从 map 删（防 PID 复用误杀）
+    // 6. Whether it succeeded or failed, clear the cache + mark dead + delete from the map (prevents killing the wrong process on PID reuse)
     pane.pid = undefined
     pane.status = 'dead'
     this.panes.delete(paneId)

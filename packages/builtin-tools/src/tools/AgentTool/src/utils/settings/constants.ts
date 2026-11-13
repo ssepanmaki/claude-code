@@ -1,3 +1,3 @@
-/** 设置文件来源层级标识（用户/项目/本地等）；与宿主 `src/utils/settings/constants.js` 中 `SettingSource` 一致。 */
+/** Settings file source layer identifier (user/project/local, etc.); same as `SettingSource` in the host `src/utils/settings/constants.js`. */
 export type SettingSource =
   import('src/utils/settings/constants.js').SettingSource

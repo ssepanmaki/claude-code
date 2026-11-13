@@ -11,8 +11,8 @@ import {
 } from '../ai-elements/conversation';
 
 // =============================================================================
-// 统一聊天视图 — Anthropic 编辑式排版
-// 无气泡间距，用垂直 rhythm 区分消息块
+// Unified chat view — Anthropic editorial typography
+// No bubble spacing; vertical rhythm separates message blocks
 // =============================================================================
 
 interface ChatViewProps {
@@ -27,14 +27,14 @@ export function ChatView({
   entries,
   isLoading = false,
   onPermissionRespond,
-  emptyTitle = '开始对话',
-  emptyDescription = '输入消息开始聊天',
+  emptyTitle = 'Start a conversation',
+  emptyDescription = 'Type a message to start chatting',
 }: ChatViewProps) {
-  // 将相邻的 ToolCallEntry 合并为一组
+  // Merge adjacent ToolCallEntry items into one group
   const grouped = groupToolCalls(entries);
   const hasMessages = entries.length > 0;
 
-  // 检查是否正在加载（最后一个条目是用户消息）
+  // Check whether loading (the last entry is a user message)
   const showThinking = isLoading && entries.length > 0 && entries[entries.length - 1]?.type === 'user_message';
 
   return (
@@ -52,7 +52,7 @@ export function ChatView({
                   </div>
                 );
               }
-              // 工具调用组 — 紧贴在助手消息下方
+              // Tool call group — sits right under the assistant message
               return (
                 <div key={`group-${i}`} className="-mt-2">
                   <ToolCallGroup entries={item.entries} onPermissionRespond={onPermissionRespond} />
@@ -60,7 +60,7 @@ export function ChatView({
               );
             })}
 
-            {/* 思考指示器 — Anthropic 打字动画 */}
+            {/* Thinking indicator — Anthropic typing animation */}
             {showThinking && (
               <div className="flex gap-4 items-start">
                 <div className="w-8 h-8 rounded-lg bg-brand/8 flex items-center justify-center flex-shrink-0">
@@ -90,16 +90,16 @@ export function ChatView({
 }
 
 // =============================================================================
-// 间距逻辑 — 用户消息前后间距大，工具调用紧贴
+// Spacing logic — large spacing around user messages, tool calls tucked tight
 // =============================================================================
 
 function entrySpacing(entries: ThreadEntry[], index: number): string {
   const entry = entries[index];
-  // 用户消息前后大留白 — Claude.ai 式宽松间距
+  // Large whitespace around user messages — Claude.ai-style airy spacing
   if (entry?.type === 'user_message') {
     return 'pt-10 pb-3';
   }
-  // 助手消息 — 工具调用紧贴，否则多留白
+  // Assistant message — tool calls tucked tight, otherwise more whitespace
   if (entry?.type === 'assistant_message') {
     const next = entries[index + 1];
     if (next?.type === 'tool_call') {
@@ -107,7 +107,7 @@ function entrySpacing(entries: ThreadEntry[], index: number): string {
     }
     return 'pt-3 pb-8';
   }
-  // Plan 条目
+  // Plan entry
   if (entry?.type === 'plan') {
     return 'pt-3 pb-3';
   }
@@ -115,7 +115,7 @@ function entrySpacing(entries: ThreadEntry[], index: number): string {
 }
 
 // =============================================================================
-// 单条目渲染器
+// Single-entry renderer
 // =============================================================================
 
 function EntryRenderer({
@@ -142,7 +142,7 @@ function EntryRenderer({
 }
 
 // =============================================================================
-// 工具调用分组逻辑
+// Tool call grouping logic
 // =============================================================================
 
 type GroupedItem = { type: 'single'; entry: ThreadEntry } | { type: 'tool_group'; entries: ToolCallEntry[] };

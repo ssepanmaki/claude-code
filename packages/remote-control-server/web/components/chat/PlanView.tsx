@@ -5,7 +5,7 @@ import { cn } from '../../src/lib/utils';
 import { CheckCircle2, Loader2, Circle } from 'lucide-react';
 
 // =============================================================================
-// Plan 展示组件 — 执行计划可视化
+// Plan display component — execution plan visualization
 // =============================================================================
 
 interface PlanDisplayProps {
@@ -41,7 +41,7 @@ export function PlanDisplay({ entry }: PlanDisplayProps) {
             <path d="M4 2L8 6L4 10" stroke="currentColor" strokeWidth="1.5" fill="none" />
           </svg>
 
-          <span className="text-xs font-display font-medium text-text-secondary">执行计划</span>
+          <span className="text-xs font-display font-medium text-text-secondary">Execution plan</span>
 
           <span className="text-[10px] text-text-muted font-mono">
             {completed}/{total}
@@ -74,7 +74,7 @@ export function PlanDisplay({ entry }: PlanDisplayProps) {
 }
 
 // =============================================================================
-// 单条 Plan 条目
+// Single Plan entry
 // =============================================================================
 
 function PlanEntryRow({ entry }: { entry: PlanEntry }) {
@@ -98,7 +98,7 @@ function PlanEntryRow({ entry }: { entry: PlanEntry }) {
 }
 
 // =============================================================================
-// 状态图标
+// Status icon
 // =============================================================================
 
 function StatusIcon({ status }: { status: PlanEntryStatus }) {
@@ -113,7 +113,7 @@ function StatusIcon({ status }: { status: PlanEntryStatus }) {
 }
 
 // =============================================================================
-// 优先级标签
+// Priority label
 // =============================================================================
 
 function PriorityBadge({ priority }: { priority: PlanEntryPriority }) {
@@ -124,9 +124,9 @@ function PriorityBadge({ priority }: { priority: PlanEntryPriority }) {
   };
 
   const labels: Record<PlanEntryPriority, string> = {
-    high: '高',
-    medium: '中',
-    low: '低',
+    high: 'High',
+    medium: 'Medium',
+    low: 'Low',
   };
 
   return (

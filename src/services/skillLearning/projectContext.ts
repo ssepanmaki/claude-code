@@ -51,7 +51,7 @@ export function getProjectContextPath(projectId: string): string {
 // cache without limit. Each entry holds a SkillLearningProjectContext
 // (instinct + skill lists), so the cap ensures bounded memory regardless
 // of cwd diversity. `defines.ts` originally flagged this as
-// "无淘汰机制（非 GB 级主因）" — this fix closes that gap.
+// "no eviction mechanism (not the main cause of GB-level usage)" — this fix closes that gap.
 const PROJECT_CONTEXT_CACHE_MAX = 32
 const PROJECT_CONTEXT_CACHE_TRIM_TO = 24
 const contextCache = new Map<string, SkillLearningProjectContext>()

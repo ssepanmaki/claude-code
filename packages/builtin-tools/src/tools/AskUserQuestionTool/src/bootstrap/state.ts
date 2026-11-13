@@ -1,7 +1,7 @@
-/** 返回当前允许展示的通道列表（含名称、连接状态等）；与宿主 `src/bootstrap/state.js` 中 `getAllowedChannels` 一致。 */
+/** Returns the list of channels currently allowed to be shown (name, connection state, etc.); same as `getAllowedChannels` in the host `src/bootstrap/state.js`. */
 export type getAllowedChannels =
   typeof import('src/bootstrap/state.js').getAllowedChannels
 
-/** 返回问题预览渲染格式（Markdown/HTML）或未配置；与宿主 `getQuestionPreviewFormat` 一致。 */
+/** Returns the question preview render format (Markdown/HTML) or unconfigured; same as the host `getQuestionPreviewFormat`. */
 export type getQuestionPreviewFormat =
   typeof import('src/bootstrap/state.js').getQuestionPreviewFormat

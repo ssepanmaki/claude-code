@@ -109,7 +109,7 @@ function convertInternalUserMessage(
       result.push(convertToolResult(tr))
     }
 
-    // 如果有图片，构建多模态 content 数组
+    // If there are images, build a multimodal content array
     if (imageParts.length > 0) {
       const multiContent: Array<
         | { type: 'text'; text: string }
@@ -233,10 +233,10 @@ function convertInternalAssistantMessage(
 }
 
 /**
- * 将 Anthropic image 块转换为 OpenAI image_url 格式。
+ * Convert an Anthropic image block to the OpenAI image_url format.
  *
- * Anthropic 格式: { type: "image", source: { type: "base64", media_type: "image/png", data: "..." } }
- * OpenAI 格式: { type: "image_url", image_url: { url: "data:image/png;base64,..." } }
+ * Anthropic format: { type: "image", source: { type: "base64", media_type: "image/png", data: "..." } }
+ * OpenAI format: { type: "image_url", image_url: { url: "data:image/png;base64,..." } }
  */
 function convertImageBlockToOpenAI(
   block: Record<string, unknown>,
@@ -254,7 +254,7 @@ function convertImageBlockToOpenAI(
     }
   }
 
-  // url 类型的图片直接传递
+  // Pass url-type images through directly
   if (source.type === 'url' && typeof source.url === 'string') {
     return {
       type: 'image_url',

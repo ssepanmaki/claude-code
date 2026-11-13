@@ -1,11 +1,11 @@
 /**
- * registry 多后端路由演示（mock adapter，无需 API key）。
+ * registry multi-backend routing demo (mock adapter, no API key needed).
  *
- * 两个 adapter：strong（被 researcher 路由命中）+ fast（默认）。
- * 脚本里 agent({agentType:'researcher'}) → strong，其余 → fast。
- * 证明 agent 后端可通过 AgentAdapterRegistry 插拔 + 路由，引擎不关心实现。
+ * Two adapters: strong (matched by the researcher route) + fast (default).
+ * In the script agent({agentType:'researcher'}) → strong, everything else → fast.
+ * Proves the agent backend can be plugged in and routed via AgentAdapterRegistry; the engine does not care about the implementation.
  *
- * 用法：bun run packages/workflow-engine/examples/registry-demo.ts
+ * Usage: bun run packages/workflow-engine/examples/registry-demo.ts
  */
 import { tmpdir } from 'node:os'
 import { join } from 'node:path'
@@ -53,14 +53,14 @@ const registry = new AgentAdapterRegistry()
 const SCRIPT = `
 export const meta = { name: 'registry-demo', description: 'multi-adapter routing' }
 phase('Route')
-const research = await agent('深度调研任务', { agentType: 'researcher', label: 'research' })
-const quick = await agent('快速小任务', { label: 'quick' })
+const research = await agent('Deep research task', { agentType: 'researcher', label: 'research' })
+const quick = await agent('Quick small task', { label: 'quick' })
 return { research, quick }
 `
 
 function makePorts(runsDir: string): WorkflowPorts {
   return {
-    // registry 优先，agentRunner 仅作形状占位（不会被调到）
+    // The registry takes priority; agentRunner is only a shape placeholder (never called)
     agentRunner: { runAgentToResult: async () => ({ kind: 'dead' }) },
     agentAdapterRegistry: registry,
     progressEmitter: {
@@ -115,7 +115,7 @@ if (import.meta.main) {
         `research(agentType:researcher) → ${ret.research.startsWith('[strong]') ? 'strong adapter ✓' : '??'}`,
       )
       console.log(
-        `quick(默认)               → ${ret.quick.startsWith('[fast]') ? 'fast adapter ✓' : '??'}`,
+        `quick(default)           → ${ret.quick.startsWith('[fast]') ? 'fast adapter ✓' : '??'}`,
       )
     }
   } finally {

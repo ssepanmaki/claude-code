@@ -1,57 +1,57 @@
 /**
- * EffortPanel ultracode 档位的背景波纹动画 —— 纯函数模块（颜色驱动）。
+ * EffortPanel ultracode tier background ripple animation — pure function module (color driven).
  *
- * 设计：
- * - 仅在 cursor 停在 ultracode 时启动（订阅时钟由 useRippleFrame 控制）
- * - 震源：面板右下（ultracode 字符位置），向左/上辐射同心圆波
- * - 每位置强度（0~1）→ 颜色（suggestion 系暗紫蓝渐变）
- * - 文字 overlay 在波纹之上（last-write-wins，颜色可单独指定）
+ * Design:
+ * - Starts only when the cursor rests on ultracode (the subscription clock is controlled by useRippleFrame)
+ * - Source: bottom-right of the panel (the ultracode glyph position), radiating concentric waves left/up
+ * - Per-position intensity (0~1) → color (dark purple-blue gradient of the suggestion family)
+ * - Text overlays sit on top of the ripple (last-write-wins, color can be set independently)
  *
- * 渲染模型：每位置一个 cell（char + color），相邻同色合并为 segment。
- * 渲染层用 Box flexDirection="row" + 多个 Text 段输出（每段一个 color）。
+ * Render model: one cell (char + color) per position; adjacent same-color cells merge into segments.
+ * The render layer outputs a Box flexDirection="row" with multiple Text segments (one color each).
  *
- * 所有函数纯：相同入参 → 相同出参，便于单测 + 帧快照。
+ * All functions are pure: same inputs → same outputs, which eases unit tests + frame snapshots.
  */
 
 /**
- * suggestion 系颜色梯度（暗背景 → suggestion 色）。
+ * Color gradient of the suggestion family (dark background → suggestion color).
  *
- * 设计：所有强度都映射到具体颜色（不返回 transparent），让整面板都是
- * "暗紫蓝海洋"作为底色，波峰在底色上流动。这样波纹颜色变化更明显，
- * 波谷也有暗色（不会"消失"）。
+ * Design: every intensity maps to a concrete color (never transparent), so the whole panel is
+ * a "dark purple-blue ocean" base color with wave crests flowing over it. This makes the ripple
+ * color changes more visible, and troughs stay dark too (they do not "disappear").
  *
- * 最暗档用 #1a1f3a（紫黑，亮度 ~12%），不是纯黑——避免远端波谷
- * 看起来像"硬黑边"。波峰最高升到 suggestion (#5769F7)，避免与
- * 文字 overlay（也用 suggestion 系）同色互相吞噬。
+ * The darkest tier is #1a1f3a (purple-black, ~12% luminance), not pure black — so distant
+ * troughs do not look like a "hard black edge". Crests top out at suggestion (#5769F7), avoiding
+ * the same color as text overlays (also suggestion family), which would swallow each other.
  *
- * 这些是 base 颜色（hueShift=0 时返回）。生产代码会传 hueShift 让
- * 整个梯度绕色相环旋转，制造主色随时间漂移的视觉效果。
+ * These are the base colors (returned when hueShift=0). Production code passes hueShift so the
+ * whole gradient rotates around the hue wheel, creating a drifting-primary-color effect over time.
  */
 const RIPPLE_COLOR_STOPS = [
-  '#1a1f3a', // 0.00 ~ 0.14 — 最暗（紫黑底色，非纯黑）
+  '#1a1f3a', // 0.00 ~ 0.14 — darkest (purple-black base, not pure black)
   '#1f2543', // 0.14 ~ 0.28
   '#252c55', // 0.28 ~ 0.42
   '#2e3870', // 0.42 ~ 0.56
   '#3a4582', // 0.56 ~ 0.70
   '#4a5bb0', // 0.70 ~ 0.84
-  '#5769F7', // 0.84 ~ 1.00 — suggestion (波峰)
+  '#5769F7', // 0.84 ~ 1.00 — suggestion (wave crest)
 ] as const
 
 /**
- * 色相连续旋转速度（度/ms）。
- * 周期 = 360 / 0.03 = 12000ms = 12s，远慢于波纹相位（~1.6s），
- * 让主色漂移感"ambient"而非"动画"。
+ * Continuous hue rotation speed (degrees/ms).
+ * Period = 360 / 0.03 = 12000ms = 12s, far slower than the ripple phase (~1.6s),
+ * so the color drift feels "ambient" rather than "animated".
  *
- * 连续旋转（非 sin 振荡）让色相 0~360° 全色环都被访问：
- * 蓝 233° → 紫 270° → 品红 300° → 红 0° → 橙 30° → 黄 60° →
- * 绿 120° → 青 180° → 蓝 233°（一圈）。
+ * Continuous rotation (not sin oscillation) visits the whole 0~360° hue wheel:
+ * blue 233° → purple 270° → magenta 300° → red 0° → orange 30° → yellow 60° →
+ * green 120° → cyan 180° → blue 233° (one full turn).
  */
 const HUE_ROTATION_DEG_PER_MS = 0.03
 
 /**
- * hex → {h, s, l}（h 单位度，s/l 为 0~1）。
+ * hex → {h, s, l} (h in degrees, s/l in 0~1).
  *
- * 标准 RGB → HSL 转换。非法 hex（非 #rrggbb）→ h=0, s=0, l=0（黑）。
+ * Standard RGB → HSL conversion. Invalid hex (not #rrggbb) → h=0, s=0, l=0 (black).
  */
 function hexToHsl(hex: string): { h: number; s: number; l: number } {
   if (!/^#[0-9a-fA-F]{6}$/.test(hex)) return { h: 0, s: 0, l: 0 }
@@ -79,7 +79,7 @@ function hexToHsl(hex: string): { h: number; s: number; l: number } {
 /**
  * {h, s, l} → hex。
  *
- * 标准 HSL → RGB 转换。h 自动 mod 360 处理。
+ * Standard HSL → RGB conversion. h is automatically taken mod 360.
  */
 function hslToHex(h: number, s: number, l: number): string {
   const hNorm = ((h % 360) + 360) % 360
@@ -117,39 +117,39 @@ function hslToHex(h: number, s: number, l: number): string {
 }
 
 /**
- * 把 hex 颜色绕色相环旋转 hueShift 度。
+ * Rotate a hex color around the hue wheel by hueShift degrees.
  *
- * 保持饱和度和亮度不变，仅旋转 hue。用于让 RIPPLE_COLOR_STOPS 整体
- * 漂移到不同色相（蓝→青→紫→蓝循环），制造主色随时间变化的效果。
+ * Keeps saturation and lightness unchanged and rotates only the hue. Used to make RIPPLE_COLOR_STOPS as a whole
+ * drift to different hues (blue→cyan→purple→blue cycle), so the primary color changes over time.
  *
- * 非法 hex 原样返回（防御式）。
+ * Invalid hex is returned as-is (defensive).
  */
 export function rotateHue(hex: string, hueShift: number): string {
   if (!/^#[0-9a-fA-F]{6}$/.test(hex)) return hex
-  if (hueShift === 0) return hex // 快路径：避免无意义 round-trip
+  if (hueShift === 0) return hex // fast path: avoid a pointless round-trip
   const { h, s, l } = hexToHsl(hex)
   return hslToHex(h + hueShift, s, l)
 }
 
 /**
- * 根据 time 计算当前色相偏移（度，连续旋转）。
+ * Compute the current hue offset from time (degrees, continuous rotation).
  *
- * 返回值始终在 [0, 360) 区间，单调递增（模 360）。
- * 周期约 12s 一圈，覆盖完整色环。
+ * The return value is always in [0, 360) and monotonically increasing (mod 360).
+ * About 12s per turn, covering the full color wheel.
  */
 export function getHueShiftAtTime(time: number): number {
   return (time * HUE_ROTATION_DEG_PER_MS) % 360
 }
 
 /**
- * 强度（任意实数）→ 颜色字符串。
+ * Intensity (any real number) → color string.
  *
- * 钳到 [0, 1]，按 RIPPLE_COLOR_STOPS 分级。永不返回 transparent。
- * intensity=0 → 最暗档（#1a1f3a，作为面板底色）。
+ * Clamped to [0, 1] and bucketed by RIPPLE_COLOR_STOPS. Never returns transparent.
+ * intensity=0 → darkest tier (#1a1f3a, used as the panel base color).
  *
- * @param hueShift 整个色阶绕色相环旋转的度数（0 = base 颜色）。
- *                 生产代码传 getHueShiftAtTime(time) 实现主色漂移。
- *                 测试代码传 0（默认）获得确定性输出。
+ * @param hueShift degrees by which the whole color scale rotates around the hue wheel (0 = base colors).
+ *                 Production code passes getHueShiftAtTime(time) to drift the primary color.
+ *                 Test code passes 0 (default) for deterministic output.
  */
 export function intensityToColor(intensity: number, hueShift = 0): string {
   const v = intensity < 0 ? 0 : intensity > 1 ? 1 : intensity
@@ -162,15 +162,15 @@ export function intensityToColor(intensity: number, hueShift = 0): string {
 }
 
 /**
- * 'transparent' 字面量。intensityToColor 永不返回它（保留为兼容性导出）。
- * 渲染层可用此常量做语义判定（如 cell 是 overlay 文字而非波纹背景）。
+ * The 'transparent' literal. intensityToColor never returns it (kept as a compatibility export).
+ * The render layer may use this constant for semantic checks (e.g. a cell is overlay text rather than ripple background).
  */
 export const TRANSPARENT = 'transparent'
 
 /**
- * 单位置 cell：char + color。
- * - color 为 'transparent' 时渲染层不染色（背景保持终端默认）。
- * - 文字 overlay cell 用具体颜色（suggestion / warning 等）。
+ * Single-position cell: char + color.
+ * - When color is 'transparent' the render layer applies no color (background stays the terminal default).
+ * - Text overlay cells use a concrete color (suggestion / warning, etc.).
  */
 export type Cell = {
   char: string
@@ -178,8 +178,8 @@ export type Cell = {
 }
 
 /**
- * 渲染段：相邻同 color 的 cells 合并。
- * 减少 React Text 节点数量（一行从 72 个 Text 降到 ~5-10 个）。
+ * Render segment: adjacent cells with the same color are merged.
+ * Reduces the number of React Text nodes (a row drops from 72 Text nodes to ~5-10).
  */
 export type Segment = {
   text: string
@@ -187,48 +187,48 @@ export type Segment = {
 }
 
 /**
- * 文字 overlay：在某行的 x 位置覆盖 text 字符串。
- * - color undefined 时保留底层波纹 cell 自身颜色（仅替换 char）
- * - color 指定时同时覆盖 char + color
+ * Text overlay: covers the text string at x position on a given row.
+ * - When color is undefined, the underlying ripple cell color is kept (only char is replaced)
+ * - When color is given, both char + color are overwritten
  *
- * 后渲染的 overlay 在相同位置覆盖先渲染的（last-write-wins）。
+ * An overlay rendered later covers an earlier one at the same position (last-write-wins).
  */
 export type Overlay = {
   text: string
-  /** 起始列；可为负（前缀被截断） */
+  /** Start column; may be negative (prefix gets truncated) */
   x: number
-  /** overlay 字符颜色；undefined = 保留底层波纹颜色 */
+  /** Overlay glyph color; undefined = keep the underlying ripple color */
   color?: string
 }
 
 /**
- * 波纹背景字符。
- * 用空格让背景留空、只靠 color 染色（视觉上像"颜色斑点"）。
- * 空格宽度稳定（永远 1 列），不像可变宽度 unicode 字符。
+ * Ripple background character.
+ * A space leaves the background empty and relies on color only (visually like "color blobs").
+ * A space has stable width (always 1 column), unlike variable-width unicode characters.
  */
 const RIPPLE_BG_CHAR = ' '
 
 /**
- * 计算面板某一行 y 的完整波纹 cell 列表。
+ * Compute the full list of ripple cells for row y of the panel.
  *
- * 波纹数学（v6.1 — 平滑呼吸 + 主色全色环旋转）：
+ * Ripple math (v6.1 — smooth breathing + primary color rotating through the full hue wheel):
  *   dx = x - sourceX
- *   dy = (y - sourceY) * 1.5    （y 方向视觉拉伸，行高 > 字宽）
+ *   dy = (y - sourceY) *   dy = (y - sourceY) * 1.5    (visual stretch along y, since row height > glyph width)
  *   dist = sqrt(dx² + dy²)
- *   phase = dist * 0.35 - time * 0.004   （速度调慢至原 1/3）
- *   wave = (sin(phase) + 1) / 2          （[−1,1] → [0,1]，平滑无平带）
- *   falloff = max(0, 1 - dist / 90)       （覆盖半径扩到 90）
+ *   phase = dist * 0.35 - time *   phase = dist * 0.35 - time * 0.004   (speed slowed to 1/3 of the original)
+ *   wave = (sin(phase) + 1) / 2          ([−1,1] → [0,1], smooth with no flat band)
+ *   falloff = max(0, 1 - dist / 90)       (coverage radius extended to 90)
  *   intensity = wave * falloff
- *   hueShift = (time * 0.03) % 360        （连续旋转，12s 一圈全色环）
+ *   hueShift = (time *   hueShift = (time * 0.03) % 360        (continuous rotation, one full wheel per 12s)
  *   color = intensityToColor(intensity, hueShift)
  *
- * v6.1 改 hueShift 为连续旋转（v6 是 sin±25° 振荡，色域太窄到不了
- * 红黄）。现在每 12s 走完一圈完整色环：蓝→紫→品红→红→橙→黄→绿→青→蓝。
- * 两个时间常数（相位 0.004 vs hue 0.03）解耦，让"流动"和"变色"不同步。
+ * v6.1 changes hueShift to continuous rotation (v6 was a sin±25° oscillation whose gamut was too narrow to
+ * reach red/yellow). Now a full hue wheel is traversed every 12s: blue→purple→magenta→red→orange→yellow→green→cyan→blue.
+ * The two time constants (phase 0.004 vs hue 0.03) are decoupled so "flow" and "color change" are out of sync.
  *
- * 每位置强度经 intensityToColor → 颜色字符串（永不 transparent），写入 cell。
+ * Each position's intensity goes through intensityToColor → color string (never transparent) and is written into the cell.
  *
- * @returns 长度严格等于 width 的 Cell 数组
+ * @returns Cell array whose length is exactly width
  */
 export function computeRippleCells(args: {
   y: number
@@ -248,12 +248,12 @@ export function computeRippleCells(args: {
     const dy = (y - sourceY) * 1.5
     const dist = Math.sqrt(dx * dx + dy * dy)
 
-    // 主波纹相位（速度调慢：原 0.012 → 0.004，约 1/3 速）
+    // Main ripple phase (speed slowed: 0.012 → 0.004, about 1/3 speed)
     const phase = dist * 0.35 - time * 0.004
-    // 平滑呼吸：[−1,1] → [0,1]，无平带，无双倍频率
+    // Smooth breathing: [−1,1] → [0,1], no flat band, no double frequency
     const wave = (Math.sin(phase) + 1) / 2
 
-    // 距离衰减（覆盖半径扩到 90：原 40）
+    // Distance falloff (coverage radius extended to 90: was 40)
     const falloff = Math.max(0, 1 - dist / 90)
     const intensity = wave * falloff
 
@@ -266,16 +266,16 @@ export function computeRippleCells(args: {
 }
 
 /**
- * 把 overlays 文字覆盖到 cells。
+ * Overlay the overlays text onto cells.
  *
- * 行为：
- * - 文字字符永远胜出（替换底层 cell.char）
- * - overlay.color 为 undefined 时保留底层 cell.color（仅替换 char）
- * - overlay.color 指定时同时覆盖 char + color
- * - 超出右边界的文字被截断
- * - x 为负时跳过前 |x| 个字符
+ * Behavior:
+ * - Text characters always win (replacing the underlying cell.char)
+ * - When overlay.color is undefined, the underlying cell.color is kept (only char is replaced)
+ * - When overlay.color is given, both char + color are overwritten
+ * - Text beyond the right edge is truncated
+ * - When x is negative, the first |x| characters are skipped
  *
- * 不修改原数组，返回新数组（防御式拷贝）。
+ * Does not mutate the original array; returns a new one (defensive copy).
  */
 export function applyOverlaysToCells(
   cells: Cell[],
@@ -299,10 +299,10 @@ export function applyOverlaysToCells(
 }
 
 /**
- * 合并相邻同色 cells 为 segments。
+ * Merge adjacent same-color cells into segments.
  *
- * 用于减少渲染节点：一行 72 cells 可能只有 5-10 个颜色变化点，
- * 合并后只需渲染 N 个 Text 段而非 N 个单字符 Text。
+ * Used to reduce render nodes: a row of 72 cells may have only 5-10 color change points,
+ * so after merging only N Text segments are rendered instead of N single-character Text nodes.
  */
 export function cellsToSegments(cells: Cell[]): Segment[] {
   if (cells.length === 0) return []
@@ -322,14 +322,14 @@ export function cellsToSegments(cells: Cell[]): Segment[] {
 }
 
 /**
- * 把 hex 颜色按 fade 因子（0~1）缩放亮度。
+ * Scale a hex color's luminance by a fade factor (0~1).
  *
- * 用于进入/退出动画：
- * - fade ≤ 0.01 → TRANSPARENT（cell 不渲染背景，等同终端默认）
- * - fade = 0.5  → 颜色 RGB 各分量减半（暗紫蓝）
- * - fade = 1    → 原色（完整波纹）
+ * Used for enter/exit animations:
+ * - fade ≤ 0.01 → TRANSPARENT (cell renders no background, same as terminal default)
+ * - fade = 0.5  → each RGB component halved (dark purple-blue)
+ * - fade = 1    → original color (full ripple)
  *
- * 非法 hex（非 #rrggbb 格式）原样返回（防御式）。
+ * Invalid hex (not #rrggbb format) is returned as-is (defensive).
  */
 export function fadeColor(color: string, fade: number): string {
   if (color === TRANSPARENT) return TRANSPARENT
@@ -352,9 +352,9 @@ export function fadeColor(color: string, fade: number): string {
 }
 
 /**
- * 把整行 cells 的颜色按 fade 缩放（用于进入/退出动画）。
+ * Scale the colors of a whole row of cells by fade (for enter/exit animations).
  *
- * 不修改原数组，返回新数组。
+ * Does not mutate the original array; returns a new one.
  */
 export function fadeCells(cells: Cell[], fade: number): Cell[] {
   return cells.map(c => ({ char: c.char, color: fadeColor(c.color, fade) }))

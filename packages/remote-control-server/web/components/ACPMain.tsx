@@ -37,18 +37,18 @@ export function ACPMain({ client, agentId }: ACPMainProps) {
 
   return (
     <div className="flex h-full w-full">
-      {/* 侧边栏 — Anthropic warm sidebar, hidden on mobile */}
+      {/* Sidebar — Anthropic warm sidebar, hidden on mobile */}
       <div
         className={cn(
           'hidden md:flex flex-col border-r border-border/60 bg-surface-1/50 transition-all duration-200 flex-shrink-0',
           sidebarCollapsed ? 'w-12' : 'w-64',
         )}
       >
-        {/* 头部 */}
+        {/* Header */}
         <div className="flex items-center justify-between px-3 py-4">
           {!sidebarCollapsed && (
             <span className="text-xs font-display font-semibold text-text-muted uppercase tracking-widest px-1">
-              会话
+              Sessions
             </span>
           )}
           <div className={cn('flex items-center gap-0.5', sidebarCollapsed && 'mx-auto')}>
@@ -59,7 +59,7 @@ export function ACPMain({ client, agentId }: ACPMainProps) {
                   // ChatInterface handles new session internally
                 }}
                 className="h-7 w-7 flex items-center justify-center rounded-lg text-text-muted hover:text-brand hover:bg-brand/10 transition-colors"
-                title="新会话"
+                title="New session"
               >
                 <Plus className="h-4 w-4" />
               </button>
@@ -74,7 +74,7 @@ export function ACPMain({ client, agentId }: ACPMainProps) {
           </div>
         </div>
 
-        {/* 会话列表 */}
+        {/* Session list */}
         {!sidebarCollapsed && (
           <div className="flex-1 overflow-y-auto">
             <SidebarSessionList client={client} onSelectSession={handleSelectSession} />
@@ -82,7 +82,7 @@ export function ACPMain({ client, agentId }: ACPMainProps) {
         )}
       </div>
 
-      {/* 聊天区域 */}
+      {/* Chat area */}
       <div className="flex-1 flex flex-col min-w-0">
         <ChatInterface client={client} agentId={agentId} />
       </div>
@@ -91,7 +91,7 @@ export function ACPMain({ client, agentId }: ACPMainProps) {
 }
 
 // =============================================================================
-// 侧边栏会话列表 — Anthropic 分段式（今天/昨天/更早）
+// Sidebar session list — Anthropic-style sections (today / yesterday / earlier)
 // =============================================================================
 
 function SidebarSessionList({
@@ -155,7 +155,7 @@ function SidebarSessionList({
   if (loading && sessions.length === 0) {
     return (
       <div className="flex items-center justify-center py-8">
-        <span className="text-xs text-text-muted font-display">加载中...</span>
+        <span className="text-xs text-text-muted font-display">Loading...</span>
       </div>
     );
   }
@@ -163,16 +163,16 @@ function SidebarSessionList({
   if (sessions.length === 0) {
     return (
       <div className="flex items-center justify-center py-8">
-        <span className="text-xs text-text-muted font-display">暂无会话</span>
+        <span className="text-xs text-text-muted font-display">No sessions yet</span>
       </div>
     );
   }
 
-  // 按日期分组
+  // Group by date
   const groups = groupByRecency(sorted);
 
   return (
-    <nav className="py-1" aria-label="历史会话">
+    <nav className="py-1" aria-label="Session history">
       {groups.map((group, gi) => (
         <div key={group.label}>
           {gi > 0 && <div className="mx-3 my-2 border-t border-border/40" />}
@@ -199,7 +199,7 @@ function SidebarSessionList({
             >
               <MessageSquare className="h-3.5 w-3.5 flex-shrink-0 opacity-50" />
               <span className="text-[13px] font-display truncate leading-snug">
-                {session.title && session.title.trim() ? session.title : '新会话'}
+                {session.title && session.title.trim() ? session.title : 'New session'}
               </span>
             </button>
           ))}
@@ -210,7 +210,7 @@ function SidebarSessionList({
 }
 
 // =============================================================================
-// 按日期分组：今天 / 昨天 / 更早
+// Group by date: today / yesterday / earlier
 // =============================================================================
 
 interface SessionGroup {
@@ -224,9 +224,9 @@ function groupByRecency(sessions: AgentSessionInfo[]): SessionGroup[] {
   const yesterday = new Date(today.getTime() - 86400000);
 
   const groups: SessionGroup[] = [
-    { label: '今天', sessions: [] },
-    { label: '昨天', sessions: [] },
-    { label: '更早', sessions: [] },
+    { label: 'Today', sessions: [] },
+    { label: 'Yesterday', sessions: [] },
+    { label: 'Earlier', sessions: [] },
   ];
 
   for (const session of sessions) {

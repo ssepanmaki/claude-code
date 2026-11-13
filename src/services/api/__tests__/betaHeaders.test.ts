@@ -1,19 +1,19 @@
 /**
- * Beta header 安全性测试
+ * Beta header safety tests
  *
- * 验证：
- * 1. 空字符串 beta header 不会泄漏到 API 请求中
- * 2. getExtraBodyParams 正确合并 beta headers
- * 3. 常量层可能产生空值的 beta header 被妥善处理
- * 4. SDK 的 betas.toString() 行为与预期一致
+ * Verifies:
+ * 1. Empty-string beta headers do not leak into API requests
+ * 2. getExtraBodyParams merges beta headers correctly
+ * 3. Beta headers that the constants layer may produce as empty values are handled properly
+ * 4. The SDK's betas.toString() behavior matches expectations
  */
 import { describe, expect, test } from 'bun:test'
 
-// ── Part 1: SDK 层面的 toString 行为验证 ─────────────────────────
+// ── Part 1: verify toString behavior at the SDK level ──
 
 describe('SDK betas.toString() behavior', () => {
   test('empty string in array produces invalid header value', () => {
-    // 这就是导致 400 的根因：SDK 对 betas 调用 toString()
+    // This is the root cause of the 400: the SDK calls toString() on betas
     const betas = [
       'claude-code-20250219',
       '',
@@ -21,8 +21,8 @@ describe('SDK betas.toString() behavior', () => {
     ]
     const headerValue = betas.toString()
 
-    // 产生 "claude-code-20250219,,interleaved-thinking-2025-05-14"
-    // 逗号之间的空值就是 API 拒绝的 ``
+    // Produces "claude-code-20250219,,interleaved-thinking-2025-05-14"
+    // The empty value between the commas is the `` the API rejects
     expect(headerValue).toContain(',,')
     expect(headerValue).toBe(
       'claude-code-20250219,,interleaved-thinking-2025-05-14',
@@ -70,22 +70,22 @@ describe('SDK betas.toString() behavior', () => {
   })
 })
 
-// ── Part 2: 常量层空值检测 ───────────────────────────────────────
+// ── Part 2: empty-value detection in the constants layer ──
 
 describe('beta header constants safety', () => {
   test('known potentially-empty constants are identified', () => {
-    // 这些常量在特定条件下可能是空字符串
-    // 测试的目的是确认我们知道哪些是空的，以便防御
+    // These constants may be empty strings under certain conditions
+    // The purpose of the test is to confirm which ones are empty so we can defend against them
 
-    // CACHE_EDITING_BETA_HEADER — 上游未公开，永远为空
-    // 动态 import 以避免 bun:bundle 依赖
-    // 这里我们直接测试值
-    const CACHE_EDITING_VALUE = '' // 对应 constants/betas.ts:50
+    // CACHE_EDITING_BETA_HEADER — not public upstream, always empty
+    // Dynamic import to avoid the bun:bundle dependency
+    // Here we test the values directly
+    const CACHE_EDITING_VALUE = '' // corresponds to constants/betas.ts:50
     expect(CACHE_EDITING_VALUE).toBe('')
     expect(Boolean(CACHE_EDITING_VALUE)).toBe(false)
 
-    // CLI_INTERNAL_BETA_HEADER — USER_TYPE !== 'ant' 时为空
-    // 在测试环境中 USER_TYPE 通常不是 'ant'
+    // CLI_INTERNAL_BETA_HEADER — empty when USER_TYPE !== 'ant'
+    // USER_TYPE is usually not 'ant' in the test environment
     const CLI_INTERNAL_VALUE =
       process.env.USER_TYPE === 'ant' ? 'cli-internal-2026-02-09' : ''
     if (process.env.USER_TYPE !== 'ant') {
@@ -97,16 +97,16 @@ describe('beta header constants safety', () => {
     const emptyHeader = ''
     const validHeader = 'some-beta-2025-01-01'
 
-    // 模拟 claude.ts 中的 truthy 检查
+    // Simulate the truthy check in claude.ts
     const betasParams: string[] = []
 
-    // 空 header — 不应被 push
+    // Empty header — should not be pushed
     if (emptyHeader) {
       betasParams.push(emptyHeader)
     }
     expect(betasParams).toEqual([])
 
-    // 有效 header — 应被 push
+    // Valid header — should be pushed
     if (validHeader) {
       betasParams.push(validHeader)
     }
@@ -114,17 +114,17 @@ describe('beta header constants safety', () => {
   })
 })
 
-// ── Part 3: getExtraBodyParams beta 合并逻辑 ─────────────────────
+// ── Part 3: getExtraBodyParams beta merge logic ──
 
 describe('getExtraBodyParams beta merge', () => {
-  // getExtraBodyParams 从 CLAUDE_CODE_EXTRA_BODY 解析 JSON 并合并 betaHeaders
-  // 我们在这里验证合并逻辑的边界情况
+  // getExtraBodyParams parses JSON from CLAUDE_CODE_EXTRA_BODY and merges betaHeaders
+  // Here we verify the edge cases of the merge logic
 
   test('empty beta headers array should not add anthropic_beta', () => {
     const result: Record<string, unknown> = {}
     const betaHeaders: string[] = []
 
-    // 模拟 getExtraBodyParams 中的合并逻辑
+    // Simulate the merge logic in getExtraBodyParams
     if (betaHeaders && betaHeaders.length > 0) {
       result.anthropic_beta = betaHeaders
     }
@@ -135,7 +135,7 @@ describe('getExtraBodyParams beta merge', () => {
   test('beta headers with empty strings should be filtered', () => {
     const betaHeaders = ['valid-header', '', 'another-valid']
 
-    // 修复后的逻辑应该在合并前过滤
+    // The fixed logic should filter before merging
     const clean = betaHeaders.filter(Boolean)
     expect(clean).toEqual(['valid-header', 'another-valid'])
   })
@@ -150,7 +150,7 @@ describe('getExtraBodyParams beta merge', () => {
   })
 })
 
-// ── Part 4: ANTHROPIC_BETAS 环境变量解析 ─────────────────────────
+// ── Part 4: ANTHROPIC_BETAS environment variable parsing ──
 
 describe('ANTHROPIC_BETAS env var parsing', () => {
   test('empty string env var produces no betas', () => {
@@ -196,53 +196,53 @@ describe('ANTHROPIC_BETAS env var parsing', () => {
   })
 })
 
-// ── Part 5: 完整请求参数模拟 ─────────────────────────────────────
+// ── Part 5: simulate the full request parameters ──
 
 describe('request params beta assembly (simulated)', () => {
   test('simulates the full beta assembly pipeline with empty constants', () => {
-    // 模拟 claude.ts 中 paramsFromContext 的 beta 组装流程
+    // Simulate the beta assembly flow of paramsFromContext in claude.ts
     const CLAUDE_CODE_HEADER = 'claude-code-20250219'
     const INTERLEAVED_HEADER = 'interleaved-thinking-2025-05-14'
     const CONTEXT_1M_HEADER = 'context-1m-2025-08-07'
-    const CACHE_EDITING_HEADER = '' // 空！
-    const AFK_MODE_HEADER = '' // 也是空！
+    const CACHE_EDITING_HEADER = '' // empty!
+    const AFK_MODE_HEADER = '' // also empty!
 
-    // Step 1: 基础 betas（来自 getAllModelBetas）
+    // Step 1: base betas (from getAllModelBetas)
     const baseBetas = [
       CLAUDE_CODE_HEADER,
       INTERLEAVED_HEADER,
       CONTEXT_1M_HEADER,
     ]
 
-    // Step 2: paramsFromContext 中的动态添加
+    // Step 2: dynamic additions in paramsFromContext
     const betasParams = [...baseBetas]
 
-    // 模拟 cache editing latch 触发但 header 为空
+    // Simulate the cache editing latch firing while the header is empty
     const cacheEditingHeaderLatched = true
     if (
       cacheEditingHeaderLatched &&
-      CACHE_EDITING_HEADER && // ← 修复：truthy 检查
+      CACHE_EDITING_HEADER && // <- fix: truthy check
       !betasParams.includes(CACHE_EDITING_HEADER)
     ) {
       betasParams.push(CACHE_EDITING_HEADER)
     }
 
-    // 模拟 AFK mode latch 触发但 header 为空
+    // Simulate the AFK mode latch firing while the header is empty
     const afkHeaderLatched = true
-    // feature('TRANSCRIPT_CLASSIFIER') 为 false 时，整个 if block 不进入
-    // 但假设进入了，header 也是空的
+    // When feature('TRANSCRIPT_CLASSIFIER') is false, the whole if block is not entered
+    // But assuming it is entered, the header is empty too
     if (
       afkHeaderLatched &&
-      AFK_MODE_HEADER && // 空字符串，不会进入
+      AFK_MODE_HEADER && // empty string, will not enter
       !betasParams.includes(AFK_MODE_HEADER)
     ) {
       betasParams.push(AFK_MODE_HEADER)
     }
 
-    // Step 3: 最终过滤（我们的防御层）
+    // Step 3: final filtering (our defense layer)
     const filteredBetas = betasParams.filter(Boolean)
 
-    // 验证：没有空字符串泄漏
+    // Verify: no empty string leaks
     expect(filteredBetas).not.toContain('')
     expect(filteredBetas).toEqual([
       CLAUDE_CODE_HEADER,
@@ -250,47 +250,47 @@ describe('request params beta assembly (simulated)', () => {
       CONTEXT_1M_HEADER,
     ])
 
-    // 验证：toString() 不会产生 ,,
+    // Verify: toString() does not produce ,,
     expect(filteredBetas.toString()).not.toContain(',,')
   })
 
   test('simulates the bug scenario WITHOUT fix', () => {
-    // 重现修复前的行为，验证 bug 确实存在
-    const CACHE_EDITING_HEADER = '' // 空值
+    // Reproduce the pre-fix behavior to verify the bug really exists
+    const CACHE_EDITING_HEADER = '' // empty value
 
     const betasParams = [
       'claude-code-20250219',
       'interleaved-thinking-2025-05-14',
     ]
 
-    // 修复前：没有 truthy 检查，空字符串被 push
+    // Before the fix: no truthy check, the empty string is pushed
     const cacheEditingHeaderLatched = true
     if (
       cacheEditingHeaderLatched &&
-      // 注意：没有 CACHE_EDITING_HEADER && 检查
-      !betasParams.includes(CACHE_EDITING_HEADER) // '' 不在数组中 → true
+      // Note: no CACHE_EDITING_HEADER && check
+      !betasParams.includes(CACHE_EDITING_HEADER) // '' is not in the array → true
     ) {
-      betasParams.push(CACHE_EDITING_HEADER) // push 了空字符串！
+      betasParams.push(CACHE_EDITING_HEADER) // pushed an empty string!
     }
 
-    // 证明 bug：数组包含空字符串
+    // Proves the bug: the array contains an empty string
     expect(betasParams).toContain('')
-    // SDK toString() 会产生尾部逗号（空字符串在末尾）或 ,,（在中间）
-    // 两者都是 API 不接受的无效 header 值
+    // SDK toString() yields a trailing comma (empty string at the end) or ,, (in the middle)
+    // Both are invalid header values that the API does not accept
     const headerStr = betasParams.toString()
-    // 空字符串在末尾 → 尾部逗号 "a,b,"
-    // 空字符串在中间 → 连续逗号 "a,,b"
+    // Empty string at the end → trailing comma "a,b,"
+    // Empty string in the middle → consecutive commas "a,,b"
     expect(headerStr.endsWith(',') || headerStr.includes(',,')).toBe(true)
   })
 
   test('useBetas flag correctly handles empty-after-filter', () => {
-    // 如果所有 betas 都是空字符串，过滤后应该不发送 betas 参数
+    // If all betas are empty strings, the betas parameter should not be sent after filtering
     const betasParams = ['', '']
     const filteredBetas = betasParams.filter(Boolean)
     const useBetas = filteredBetas.length > 0
 
     expect(useBetas).toBe(false)
-    // API 请求不应包含 betas 字段
+    // The API request should not contain a betas field
     const requestParams = {
       model: 'claude-opus-4-6',
       max_tokens: 1024,

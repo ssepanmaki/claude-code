@@ -5,11 +5,11 @@ import { MessageResponse } from '../ai-elements/message';
 import { Reasoning, ReasoningTrigger, ReasoningContent } from '../ai-elements/reasoning';
 import { ChevronDown } from 'lucide-react';
 
-// 用户消息折叠最大高度（px）
+// Max collapsed height of a user message (px)
 const COLLAPSED_MAX_HEIGHT = 200;
 
 // =============================================================================
-// 用户消息 — 右对齐，品牌色淡底，可折叠
+// User message — right-aligned, light brand-color background, collapsible
 // =============================================================================
 
 interface UserBubbleProps {
@@ -34,7 +34,7 @@ export function UserBubble({ entry }: UserBubbleProps) {
   return (
     <div className="flex justify-end">
       <div className="max-w-[85%] sm:max-w-[70%]">
-        {/* 图片附件 */}
+        {/* Image attachments */}
         {entry.images && entry.images.length > 0 && (
           <div className="flex flex-wrap gap-2 mb-2 justify-end">
             {entry.images.map((img, i) => (
@@ -42,7 +42,7 @@ export function UserBubble({ entry }: UserBubbleProps) {
             ))}
           </div>
         )}
-        {/* 文本内容 — 品牌色淡底 + 折叠 */}
+        {/* Text content — light brand-color background + collapse */}
         {entry.content && (
           <div className="relative rounded-2xl rounded-br-md bg-user-bubble border border-user-bubble-border overflow-hidden">
             <div
@@ -55,7 +55,7 @@ export function UserBubble({ entry }: UserBubbleProps) {
             >
               {esc(entry.content)}
             </div>
-            {/* 折叠渐变遮罩 + 展开按钮 */}
+            {/* Collapse gradient mask + expand button */}
             {!expanded && overflowing && (
               <div className="absolute bottom-0 inset-x-0 flex flex-col items-center pt-8 bg-gradient-to-t from-user-bubble via-user-bubble/80 to-transparent">
                 <button
@@ -63,7 +63,7 @@ export function UserBubble({ entry }: UserBubbleProps) {
                   onClick={() => setExpanded(true)}
                   className="flex items-center gap-1 px-3 py-1 rounded-full text-xs font-display font-medium text-white/90 hover:bg-white/15 transition-colors"
                 >
-                  <span>展开</span>
+                  <span>Expand</span>
                   <ChevronDown className="h-3 w-3" />
                 </button>
               </div>
@@ -76,7 +76,7 @@ export function UserBubble({ entry }: UserBubbleProps) {
 }
 
 // =============================================================================
-// 助手消息 — 左对齐，无背景卡片，编辑式排版
+// Assistant message — left-aligned, no background card, editorial typography
 // =============================================================================
 
 interface AssistantBubbleProps {
@@ -97,7 +97,7 @@ export function AssistantBubble({ entry, isStreaming }: AssistantBubbleProps) {
           />
         </svg>
       </div>
-      {/* 内容 — 无卡片背景，直接排版 */}
+      {/* Content — no card background, laid out directly */}
       <div className="flex-1 min-w-0 space-y-4">
         {/* Sender label */}
         <span className="text-sm font-semibold text-text-primary font-display">Claude</span>
@@ -114,7 +114,7 @@ export function AssistantBubble({ entry, isStreaming }: AssistantBubbleProps) {
               </Reasoning>
             );
           }
-          // 普通消息块 — 直接输出，无包裹卡片
+          // Normal message block — output directly, no wrapping card
           return (
             <div key={i} className="message-content text-text-primary leading-[1.75]">
               <MessageResponse>{chunk.text}</MessageResponse>
@@ -127,7 +127,7 @@ export function AssistantBubble({ entry, isStreaming }: AssistantBubbleProps) {
 }
 
 // =============================================================================
-// 图片缩略图 — 点击放大
+// Image thumbnail — click to enlarge
 // =============================================================================
 
 function ImageThumbnail({ image }: { image: UserMessageImage }) {

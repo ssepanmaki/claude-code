@@ -1,37 +1,37 @@
 // research-report.workflow.mjs
-// 技术研究报告 workflow。
-// 由 run.ts 通过 @claude-code-best/workflow-engine 的 runWorkflow() 直接执行——
-// 不经 Workflow 工具、不经核心 runAgent。脚本内的 agent / parallel / pipeline /
-// phase / log / args 均为引擎运行时注入的全局（见 src/engine/script.ts 的沙箱）。
+// Technical research report workflow.
+// Executed directly by run.ts through runWorkflow() of @claude-code-best/workflow-engine —
+// without the Workflow tool or the core runAgent. agent / parallel / pipeline /
+// phase / log / args inside the script are globals injected by the engine runtime (see the sandbox in src/engine/script.ts).
 //
-// 编排：多角度并行调研（parallel 屏障）→ 逐条深挖（pipeline 无屏障）→ 综合成报告。
+// Orchestration: parallel multi-angle research (parallel barrier) → per-finding deep dive (pipeline, no barrier) → synthesize into a report.
 
 export const meta = {
   name: 'research-report',
   description:
     'Multi-angle tech research → deep-read → synthesize into a Markdown report',
-  whenToUse: '调研一个技术主题：从多个角度并行研究、逐条深挖、综合成结构化报告',
+  whenToUse: 'Research a technical topic: investigate from several angles in parallel, dive into each finding, and synthesize a structured report',
   phases: [
-    { title: 'Research', detail: '多角度并行调研（parallel 屏障）' },
-    { title: 'DeepRead', detail: '逐条深挖（pipeline 无屏障）' },
-    { title: 'Synthesize', detail: '综合成 Markdown 报告' },
+    { title: 'Research', detail: 'Parallel multi-angle research (parallel barrier)' },
+    { title: 'DeepRead', detail: 'Per-finding deep dive (pipeline, no barrier)' },
+    { title: 'Synthesize', detail: 'Synthesize into a Markdown report' },
   ],
 }
 
-// agent(schema) 让子 agent 返回「校验对象」而非纯文本。
+// agent(schema) makes the sub-agent return a "validated object" instead of plain text.
 const ANGLE_SCHEMA = {
   type: 'object',
   required: ['angle', 'findings'],
   properties: {
-    angle: { type: 'string', description: '本次调研的角度名' },
+    angle: { type: 'string', description: 'Name of the angle for this research' },
     findings: {
       type: 'array',
       items: {
         type: 'object',
         required: ['claim', 'evidence'],
         properties: {
-          claim: { type: 'string', description: '一句话结论' },
-          evidence: { type: 'string', description: '依据/来源/理由' },
+          claim: { type: 'string', description: 'One-sentence conclusion' },
+          evidence: { type: 'string', description: 'Basis / source / rationale' },
         },
       },
     },
@@ -43,76 +43,76 @@ const DEEP_SCHEMA = {
   required: ['claim', 'analysis', 'confidence'],
   properties: {
     claim: { type: 'string' },
-    analysis: { type: 'string', description: '机理/前提/边界/反例' },
+    analysis: { type: 'string', description: 'Mechanism / preconditions / boundaries / counterexamples' },
     confidence: { type: 'string', enum: ['high', 'medium', 'low'] },
   },
 }
 
-// ---- 输入（由 run.ts 通过 args 透传）----
+// ---- Input (passed through by run.ts via args) ----
 const topic = args.topic
 if (typeof topic !== 'string' || topic.length === 0) {
-  throw new Error('research-report 需要 args.topic（研究主题字符串）')
+  throw new Error('research-report requires args.topic (the research topic string)')
 }
 const angles =
   Array.isArray(args.angles) && args.angles.length > 0
     ? args.angles
-    : ['核心概念与原理', '主流方案与对比', '工程实践与权衡', '生态与趋势']
+    : ['Core concepts and principles', 'Mainstream approaches and comparison', 'Engineering practice and trade-offs', 'Ecosystem and trends']
 
-// ---- Phase 1：多角度并行调研。parallel = 屏障，等所有角度完成后才继续。----
+// ---- Phase 1: parallel multi-angle research. parallel = barrier; continue only after all angles finish. ----
 phase('Research')
-log(`主题「${topic}」：${angles.length} 个角度并行调研中`)
+log(`Topic "${topic}": researching ${angles.length} angles in parallel`)
 const researched = await parallel(
   angles.map(
     a => () =>
       agent(
-        `你是资深技术研究分析师。针对技术主题「${topic}」，从「${a}」角度调研，给出该角度下 2-4 条最关键的技术发现，每条须附依据。`,
+        `You are a senior technical research analyst. For the technical topic "${topic}", investigate from the angle "${a}" and give the 2-4 most important technical findings under that angle, each with supporting evidence.`,
         { label: `research:${a}`, phase: 'Research', schema: ANGLE_SCHEMA },
       ),
   ),
 )
-// parallel 返回 (object|null)[]：skipped/dead 的角度为 null，过滤后展平
+// parallel returns (object|null)[]: skipped/dead angles are null; filter and flatten
 const allFindings = researched
   .filter(Boolean)
   .flatMap(r => r.findings.map(f => ({ ...f, angle: r.angle })))
-log(`收集到 ${allFindings.length} 条发现，进入深挖`)
+log(`Collected ${allFindings.length} findings, moving on to the deep dive`)
 
 if (allFindings.length === 0) {
   return {
     topic,
-    report: '（所有角度调研均失败，无可用发现）',
+    report: '(All angles failed; no findings available)',
     anglesCovered: 0,
     findingsDeepened: 0,
   }
 }
 
-// ---- Phase 2：逐条深挖。pipeline = 无屏障，每条发现独立跑完所有 stage，互不等待。----
+// ---- Phase 2: per-finding deep dive. pipeline = no barrier; each finding runs through all stages independently without waiting on others. ----
 phase('DeepRead')
 const deepened = await pipeline(
   allFindings,
   f =>
     agent(
-      `针对以下技术发现，深入分析其机理、成立前提、适用边界与可能的反例：\n结论：${f.claim}\n依据：${f.evidence}\n角度：${f.angle}`,
+      `Analyze the following technical finding in depth: its mechanism, preconditions, boundaries of applicability and possible counterexamples:\nConclusion: ${f.claim}\nEvidence: ${f.evidence}\nAngle: ${f.angle}`,
       { label: `deep:${f.angle}`, phase: 'DeepRead', schema: DEEP_SCHEMA },
     ),
-  // 第二个 stage：按置信度标注交叉价值（演示多 stage pipeline 链式传递）。
-  // stage-1 若 dead 返回 null，这里显式守卫——避免对 null 取属性（否则被 pipeline
-  // 的 per-item catch 吞掉、整条静默丢失）。
+  // Second stage: annotate cross-cutting value by confidence (demonstrates chained passing in a multi-stage pipeline).
+  // If stage-1 died and returned null, guard explicitly here — avoid reading properties of null (otherwise the pipeline's
+  // per-item catch swallows it and the whole item is silently lost).
   d =>
     d
       ? {
           ...d,
           crossCutting:
-            d.confidence === 'high' ? '可作为报告主干' : '需谨慎引用或佐证',
+            d.confidence === 'high' ? 'Can serve as the backbone of the report' : 'Cite with caution or corroborate',
         }
       : null,
 )
 const deepFindings = deepened.filter(Boolean)
-log(`深挖完成 ${deepFindings.length}/${allFindings.length} 条`)
+log(`Deep dive finished: ${deepFindings.length}/${allFindings.length} findings`)
 
-// ---- Phase 3：综合成 Markdown 报告（无 schema → 返回纯文本）----
+// ---- Phase 3: synthesize into a Markdown report (no schema → returns plain text) ----
 phase('Synthesize')
 const report = await agent(
-  `你是首席技术分析师。基于以下经深挖的技术发现，综合一份结构化研究报告（纯 Markdown 叙述）。\n要求：含摘要、分角度分析、关键结论、落地建议与风险；用自然语言陈述每条发现并标注 confidence。\n禁止：在报告中粘贴 JSON 代码块或原样引用下方输入数据。\n\n主题：${topic}\n\n深度发现（JSON，仅供你理解，不要原样输出）：\n${JSON.stringify(deepFindings)}`,
+  `You are the chief technical analyst. Based on the following deep-dived technical findings, synthesize a structured research report (pure Markdown prose).\nRequirements: include an abstract, per-angle analysis, key conclusions, recommendations and risks; state each finding in natural language and note its confidence.\nForbidden: pasting JSON code blocks into the report or quoting the input data below verbatim.\n\nTopic: ${topic}\n\nDeep findings (JSON, for your understanding only; do not output verbatim):\n${JSON.stringify(deepFindings)}`,
   { label: 'synthesize', phase: 'Synthesize', maxTokens: 8192 },
 )
 

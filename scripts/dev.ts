@@ -18,7 +18,7 @@ const defines = {
   ...getMacroDefines(),
   // React production mode — prevents 6,889+ _debugStack Error objects
   // (12MB) from accumulating during long-running sessions.
-  // dev 模式使用 development 模式
+  // dev mode uses development mode
   'process.env.NODE_ENV': JSON.stringify('production'),
 }
 

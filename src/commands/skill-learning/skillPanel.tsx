@@ -13,30 +13,30 @@ type SkillAction = {
 
 const ACTION_LABEL_COLUMN_WIDTH = 28;
 
-const ABOUT_TEXT = `# Skill Learning (自动学习)
+const ABOUT_TEXT = `# Skill Learning (automatic learning)
 
-Skill Learning 是一个闭环学习系统，通过观察用户的操作模式自动提取直觉(instinct)，
-并在达到阈值后生成可复用的 skill 文件、agent 和 command。
+Skill Learning is a closed-loop learning system that automatically extracts instincts by observing the user's action patterns,
+and once a threshold is reached it generates reusable skill files, agents and commands.
 
-## 工作流程
-1. **Observe** — 记录每轮对话中的工具调用、用户纠正、错误解决模式
-2. **Analyze** — 使用启发式或 LLM 后端分析观察数据，提取 instinct candidate
-3. **Evolve** — 将高置信度 instinct 聚类，生成 skill/agent/command 候选
-4. **Lifecycle** — 对生成的 skill 进行去重、版本比较、归档或替换
+## Workflow
+1. **Observe** — record tool calls, user corrections and error-resolution patterns in each conversation turn
+2. **Analyze** — analyze the observations with a heuristic or LLM backend to extract instinct candidates
+3. **Evolve** — cluster high-confidence instincts and generate skill/agent/command candidates
+4. **Lifecycle** — dedupe, version-compare, archive or replace the generated skills
 
-## 子命令
-- /skill-learning status       — 查看当前项目的观察和直觉数量
-- /skill-learning ingest       — 从 transcript 导入观察数据
-- /skill-learning evolve       — 生成 skill 候选 (--generate 写入磁盘)
-- /skill-learning export       — 导出 instinct 为 JSON
-- /skill-learning import       — 导入 instinct JSON
-- /skill-learning prune        — 清理过期的 pending instinct
-- /skill-learning promote      — 将 instinct/gap 提升为全局范围
-- /skill-learning projects     — 列出所有已知的项目范围
+## Subcommands
+- /skill-learning status       — show the observation and instinct counts for the current project
+- /skill-learning ingest       — import observations from the transcript
+- /skill-learning evolve       — generate skill candidates (--generate writes to disk)
+- /skill-learning export       — export instincts as JSON
+- /skill-learning import       — import instinct JSON
+- /skill-learning prune        — clean up expired pending instincts
+- /skill-learning promote      — promote an instinct/gap to global scope
+- /skill-learning projects     — list all known project scopes
 
-## 启用方式
-- SKILL_LEARNING_ENABLED=1 或 FEATURE_SKILL_LEARNING=1
-- 状态: ${isSkillLearningEnabled() ? '已启用' : '未启用'}
+## How to enable
+- SKILL_LEARNING_ENABLED=1 or FEATURE_SKILL_LEARNING=1
+- Status: ${isSkillLearningEnabled() ? 'enabled' : 'disabled'}
 `;
 
 async function getStatusText(): Promise<string> {

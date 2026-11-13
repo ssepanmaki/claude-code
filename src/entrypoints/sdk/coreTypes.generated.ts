@@ -1,8 +1,8 @@
 /**
- * Stub：自动生成的 SDK Core 类型。
+ * Stub: auto-generated SDK Core types.
  *
- * 在完整构建中，这些类型会基于 coreSchemas.ts 中的 Zod schema 自动生成。
- * 这里提供的是类型化的 stub，用于覆盖代码库中引用到的所有相关类型。
+ * In a full build these types are generated automatically from the Zod schemas in coreSchemas.ts.
+ * This file provides typed stubs covering all related types referenced in the codebase.
  */
 
 import type { UUID } from 'crypto'
@@ -65,15 +65,15 @@ export type RewindFilesResult = {
 // Account
 export type AccountInfo = Record<string, unknown>
 
-// 钩子输入类型
+// Hook input types
 export type HookInputBase = {
-  session_id: string // 会话 ID
-  transcript_path: string // 转录文件路径
-  cwd: string // 当前工作目录
-  permission_mode?: string // 权限模式（可选）
-  /** 仅在从子代理触发的钩子中存在 */
+  session_id: string // session ID
+  transcript_path: string // transcript file path
+  cwd: string // current working directory
+  permission_mode?: string // permission mode (optional)
+  /** Only present in hooks triggered from a subagent */
   agent_id?: string
-  /** 在子代理钩子中存在，或在使用 --agent 启动的主线程会话中存在 */
+  /** Present in subagent hooks, or in main-thread sessions started with --agent */
   agent_type?: string
 }
 
@@ -295,8 +295,8 @@ export type SyncHookJSONOutput = {
               behavior: 'allow'
               updatedInput?: Record<string, unknown>
               /**
-               * 注意：钩子使用的 JSON schema 为 PermissionUpdateSchema()，
-               * 它是一个比传统 `{path, permission}` 结构更丰富的联合类型。
+               * Note: the JSON schema used by hooks is PermissionUpdateSchema(),
+               * a union type richer than the legacy `{path, permission}` structure.
                */
               updatedPermissions?: unknown[]
             }

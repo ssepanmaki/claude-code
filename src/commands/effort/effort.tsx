@@ -165,7 +165,7 @@ export async function call(onDone: LocalJSXCommandOnDone, _context: unknown, arg
     if (args === 'current' || args === 'status') {
       return <ShowCurrentEffort onDone={onDone} />;
     }
-    // 完全无参 → 打开交互面板
+    // No arguments at all → open the interactive panel
     return <EffortPanelWrapper onDone={onDone} />;
   }
 

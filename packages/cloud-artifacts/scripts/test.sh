@@ -1,11 +1,11 @@
 #!/usr/bin/env bash
-# cloud-artifacts 端到端测试脚本
-# 用法：
+# cloud-artifacts end-to-end test script
+# Usage:
 #   WORKER_URL=https://cloud-artifacts.claude-code-best.workers.dev \
 #   TOKEN=claude-code-best \
 #   bash scripts/test.sh
 #
-# 如本机连不上 workers.dev，可通过代理：
+# If workers.dev is unreachable from this machine, go through a proxy:
 #   HTTPS_PROXY=http://127.0.0.1:7890 bash scripts/test.sh ...
 
 set -uo pipefail
@@ -15,19 +15,19 @@ TOKEN="${TOKEN:-claude-code-best}"
 TMP="$(mktemp -d)"
 trap 'rm -rf "$TMP"' EXIT
 
-# 颜色
+# Colors
 G=$'\033[32m'; R=$'\033[31m'; Y=$'\033[33m'; D=$'\033[0m'
 
-# 准备测试 html
+# Prepare test html
 echo '<!doctype html><title>t</title><h1>hello v1</h1>' > "$TMP/v1.html"
 echo '<!doctype html><title>t</title><h1>hello v2 (overwritten)</h1>' > "$TMP/v2.html"
 
-# 11MB 的 html（用于 413 测试）
+# 11MB html (for the 413 test)
 yes '<p>x</p>' | head -c 11000000 > "$TMP/big.html"
 
 pass=0; fail=0
-# expect: 主断言 status code；如代理把所有 status 抹平为 200 但 body 仍是 error JSON，
-# 则按 body 中的 error 字段做 fallback 断言（标 [via body]）。
+# expect: primary assertion is the status code; if a proxy flattens every status to 200 but the body is still an error JSON,
+# fall back to asserting on the error field in the body (marked [via body]).
 expect() {
   local label="$1" want_code="$2" resp="$3" code="$4" body="$5"
   if [[ "$code" == "$want_code" ]]; then
@@ -36,7 +36,7 @@ expect() {
     pass=$((pass+1))
     return
   fi
-  # 代理透传 fallback：HTTP 200 + body 是 {"error":"..."} JSON
+  # Proxy passthrough fallback: HTTP 200 + body is {"error":"..."} JSON
   if [[ "$code" == "200" && "$body" == {\"error\":* ]]; then
     local want_error=""
     case "$want_code" in
@@ -44,7 +44,7 @@ expect() {
       415) want_error="unsupported_media_type" ;;
       413) want_error="payload_too_large" ;;
       404) want_error="not_found" ;;
-      400) want_error="invalid_" ;; # invalid_ttl 或 invalid_hash，前缀匹配
+      400) want_error="invalid_" ;; # invalid_ttl invalid_ttl or invalid_hash, prefix match
     esac
     if [[ -z "$want_error" ]] || echo "$body" | grep -q "\"error\":\"$want_error"; then
       printf "${G}✓ %s -> HTTP 200 [via body] %s${D}\n" "$label" "$body"
@@ -64,20 +64,20 @@ call() {
   expect "$label" "$want" "" "$(cat "$TMP/code")" "$(cat "$TMP/resp")"
 }
 
-echo "===== 错误用例 ====="
+echo "===== Error cases ====="
 
-# 1. 401 未授权
+# 1. 401 unauthorized
 call "no token" 401 \
   -X POST "$WORKER_URL/upload" \
   -H "Content-Type: text/html" --data-binary "@$TMP/v1.html"
 
-# 2. 401 token 错
+# 2. 401 wrong token
 call "wrong token" 401 \
   -X POST "$WORKER_URL/upload" \
   -H "Authorization: Bearer wrong" \
   -H "Content-Type: text/html" --data-binary "@$TMP/v1.html"
 
-# 3. 415 错误 MIME
+# 3. 415 wrong MIME
 call "wrong content-type" 415 \
   -X POST "$WORKER_URL/upload" \
   -H "Authorization: Bearer $TOKEN" \
@@ -89,7 +89,7 @@ call "ttl=999" 400 \
   -H "Authorization: Bearer $TOKEN" \
   -H "Content-Type: text/html" --data-binary "@$TMP/v1.html"
 
-# 5. 400 invalid_ttl (负数)
+# 5. 400 invalid_ttl (negative number)
 call "ttl=0" 400 \
   -X POST "$WORKER_URL/upload?ttl=0" \
   -H "Authorization: Bearer $TOKEN" \
@@ -107,35 +107,35 @@ call "11MB body" 413 \
   -H "Authorization: Bearer $TOKEN" \
   -H "Content-Type: text/html" --data-binary "@$TMP/big.html"
 
-# 8. 404 not_found (错路径)
+# 8. 404 not_found (wrong path)
 call "wrong path" 404 \
   -X POST "$WORKER_URL/notupload" \
   -H "Authorization: Bearer $TOKEN" \
   -H "Content-Type: text/html" --data-binary "@$TMP/v1.html"
 
 echo
-echo "===== 成功用例 ====="
+echo "===== Success cases ====="
 
-# 9. 200 随机 ID + 7 天（默认）
-echo "--- 默认上传（随机 ID + 7 天）---"
+# 9. 200 random ID + 7 days (default)
+echo "--- Default upload (random ID + 7 days) ---"
 curl -sS -o "$TMP/resp" -w "HTTP %{http_code}\n" \
   -X POST "$WORKER_URL/upload" \
   -H "Authorization: Bearer $TOKEN" \
   -H "Content-Type: text/html" --data-binary "@$TMP/v1.html"
 cat "$TMP/resp"; echo
 RANDOM_ID=$(python3 -c "import json,sys;print(json.load(open('$TMP/resp'))['id'])" 2>/dev/null || echo "")
-[[ -n "$RANDOM_ID" ]] && printf "${G}随机 ID: %s${D}\n" "$RANDOM_ID"
+[[ -n "$RANDOM_ID" ]] && printf "${G}Random ID: %s${D}\n" "$RANDOM_ID"
 
-# 10. 200 自定义 hash + 30 天
-echo "--- 自定义 hash + 30 天 ---"
+# 10. 200 custom hash + 30 days
+echo "--- Custom hash + 30 days ---"
 curl -sS -o "$TMP/resp" -w "HTTP %{http_code}\n" \
   -X POST "$WORKER_URL/upload?ttl=30&hash=test-artifact-v1" \
   -H "Authorization: Bearer $TOKEN" \
   -H "Content-Type: text/html" --data-binary "@$TMP/v1.html"
 cat "$TMP/resp"; echo
 
-# 11. 覆盖（同 hash）
-echo "--- 覆盖：同 hash 上传 v2 ---"
+# 11. Overwrite (same hash)
+echo "--- Overwrite: upload v2 with the same hash ---"
 curl -sS -o "$TMP/resp" -w "HTTP %{http_code}\n" \
   -X POST "$WORKER_URL/upload?ttl=30&hash=test-artifact-v1" \
   -H "Authorization: Bearer $TOKEN" \
@@ -143,20 +143,20 @@ curl -sS -o "$TMP/resp" -w "HTTP %{http_code}\n" \
 cat "$TMP/resp"; echo
 
 echo
-echo "===== R2 写入验证（不走 CDN，走 Cloudflare API） ====="
+echo "===== R2 R2 write verification (bypasses the CDN, goes through the Cloudflare API) ====="
 
-# 用 wrangler r2 object get 验证文件实际写入了 R2
+# Use wrangler r2 object get to verify the file was actually written to R2
 if [[ -n "$RANDOM_ID" ]]; then
-  echo "--- 验证随机 ID 文件存在: 7d/$RANDOM_ID.html ---"
+  echo "--- Verify the random-ID file exists: 7d/$RANDOM_ID.html ---"
   npx wrangler r2 object get "cloud-artifacts/7d/$RANDOM_ID.html" --remote --file "$TMP/got.html" 2>&1 | tail -5
-  echo "下载内容：" ; cat "$TMP/got.html" 2>/dev/null
+  echo "Downloaded content:" ; cat "$TMP/got.html" 2>/dev/null
 fi
 
-echo "--- 验证覆盖后 test-artifact-v1 是 v2 内容 ---"
+echo "--- Verify test-artifact-v1 has the v2 content after overwrite ---"
 npx wrangler r2 object get "cloud-artifacts/30d/test-artifact-v1.html" --remote --file "$TMP/got2.html" 2>&1 | tail -5
-echo "下载内容：" ; cat "$TMP/got2.html" 2>/dev/null
+echo "Downloaded content:" ; cat "$TMP/got2.html" 2>/dev/null
 
 echo
-echo "===== 汇总 ====="
+echo "===== Summary ====="
 printf "${G}pass=%d${D} ${R}fail=%d${D}\n" "$pass" "$fail"
 [[ "$fail" -gt 0 ]] && exit 1 || exit 0

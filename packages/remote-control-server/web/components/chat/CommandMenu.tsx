@@ -83,7 +83,7 @@ export function CommandMenu({ commands, filter, onSelect, onClose, className }: 
     <div ref={containerRef} className={cn('rounded-xl border border-border bg-surface-2 shadow-lg', className)}>
       <div className="max-h-[320px] overflow-y-auto py-1">
         {filtered.length === 0 ? (
-          <div className="text-xs text-text-muted font-display py-3 text-center">没有匹配的命令</div>
+          <div className="text-xs text-text-muted font-display py-3 text-center">No matching commands</div>
         ) : (
           filtered.map((cmd, index) => (
             <button

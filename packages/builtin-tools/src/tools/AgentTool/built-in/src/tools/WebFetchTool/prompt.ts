@@ -1,2 +1,2 @@
-/** WebFetch（拉取并处理 URL 内容）工具在 API 中的注册名称字面量（与 `WEB_FETCH_TOOL_NAME` 常量一致）。 */
+/** Registered name literal of the WebFetch (fetch and process URL content) tool in the API (matches the `WEB_FETCH_TOOL_NAME` constant). */
 export type WEB_FETCH_TOOL_NAME = 'WebFetch'

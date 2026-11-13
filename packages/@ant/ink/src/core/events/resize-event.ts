@@ -1,5 +1,5 @@
-/** 终端尺寸变化时 `onResize` 回调收到的事件载荷（与 `stdout.columns` / `stdout.rows` 一致）。 */
+/** Event payload received by the `onResize` callback when the terminal size changes (consistent with `stdout.columns` / `stdout.rows`). */
 export type ResizeEvent = {
-  columns: number // 当前终端列数（宽度）
-  rows: number // 当前终端行数（高度）
+  columns: number // current terminal column count (width)
+  rows: number // current terminal row count (height)
 }

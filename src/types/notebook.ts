@@ -1,102 +1,102 @@
-/** Jupyter / nbformat 单元格类型。 */
+/** Jupyter / nbformat cell type. */
 export type NotebookCellType =
-  | 'code' // 可执行代码格
-  | 'markdown' // 文档格
-  | 'raw' // 原始文本格
+  | 'code' // executable code cell
+  | 'markdown' // documentation cell
+  | 'raw' // raw text cell
 
-/** 原始 notebook 中的流式输出单元。 */
+/** Streaming output cell in a raw notebook. */
 export type NotebookStreamCellOutput = {
-  output_type: 'stream' // stdout/stderr 流
-  text?: string | string[] // 流片段，可为多段拼接
+  output_type: 'stream' // stdout/stderr stream
+  text?: string | string[] // stream chunk; may be several concatenated parts
 }
 
-/** execute_result / display_data 的 data 载荷（节选常用键）。 */
+/** data payload of execute_result / display_data (common keys only). */
 export type NotebookDisplayData = Record<string, unknown> & {
-  'text/plain'?: string | string[] // 纯文本回退表示
+  'text/plain'?: string | string[] // plain-text fallback representation
 }
 
-/** 原始 notebook 中的执行结果或展示型输出。 */
+/** Execution result or display output in a raw notebook. */
 export type NotebookRichCellOutput = {
-  output_type: 'execute_result' | 'display_data' // 执行结果或富展示
-  data?: NotebookDisplayData // MIME 桶（含图片/png 等）
+  output_type: 'execute_result' | 'display_data' // execution result or rich display
+  data?: NotebookDisplayData // MIME bundle (including image/png etc.)
 }
 
-/** 原始 notebook 中的错误输出。 */
+/** Error output in a raw notebook. */
 export type NotebookErrorCellOutput = {
-  output_type: 'error' // 内核报错
-  ename: string // 异常类型名
-  evalue: string // 异常消息
-  traceback: string[] // 栈跟踪行数组
+  output_type: 'error' // kernel error
+  ename: string // exception type name
+  evalue: string // exception message
+  traceback: string[] // traceback lines
 }
 
-/** 单元格原始输出联合（解析自 ipynb）。 */
+/** Union of raw cell outputs (parsed from ipynb). */
 export type NotebookCellOutput =
   | NotebookStreamCellOutput
   | NotebookRichCellOutput
   | NotebookErrorCellOutput
 
-/** 解析前的 notebook 单元格（nbformat 子集）。 */
+/** Notebook cell before parsing (nbformat subset). */
 export type NotebookCell = {
-  id?: string // 单元格 id（nbformat≥4.5 常见）
-  cell_type: NotebookCellType // 单元类型
-  source: string | string[] // 单元源码
-  execution_count?: number | null // 代码格执行计数
-  outputs?: NotebookCellOutput[] // 代码格输出列表
-  metadata?: Record<string, unknown> // 额外元数据（编辑工具会写入）
+  id?: string // cell id (common in nbformat >= 4.5)
+  cell_type: NotebookCellType // cell type
+  source: string | string[] // cell source
+  execution_count?: number | null // execution count of a code cell
+  outputs?: NotebookCellOutput[] // output list of a code cell
+  metadata?: Record<string, unknown> // extra metadata (written by the edit tool)
 }
 
-/** Notebook 顶层 metadata 中与语言相关的子集。 */
+/** Language-related subset of the notebook's top-level metadata. */
 export type NotebookMetadata = {
   language_info?: {
-    name?: string // 默认内核语言名（如 python）
+    name?: string // default kernel language name (e.g. python)
   }
 }
 
-/** 磁盘上的 `.ipynb` 根结构（用于读入与增量编辑）。 */
+/** On-disk `.ipynb` root structure (used for reading and incremental edits). */
 export type NotebookContent = {
-  nbformat?: number // 主版本号（缺省按 4 处理）
-  nbformat_minor?: number // 次版本号（影响 id 策略等）
-  cells: NotebookCell[] // 单元序列
-  metadata: NotebookMetadata // 文档级元数据
+  nbformat?: number // major version (defaults to 4 when absent)
+  nbformat_minor?: number // minor version (affects id strategy, etc.)
+  cells: NotebookCell[] // cell sequence
+  metadata: NotebookMetadata // document-level metadata
 }
 
-/** 规范化后的内联图片载荷（送入模型 image block）。 */
+/** Normalized inline image payload (fed to the model image block). */
 export type NotebookOutputImage = {
-  image_data: string // base64 无空白
-  media_type: 'image/png' | 'image/jpeg' // MIME 子类型
+  image_data: string // base64 with no whitespace
+  media_type: 'image/png' | 'image/jpeg' // MIME subtype
 }
 
-/** 经 `processOutput` 规范化后的流式输出（供工具消息使用）。 */
+/** Streaming output normalized by `processOutput` (for tool messages). */
 export type NotebookCellSourceStreamOutput = {
   output_type: 'stream'
-  text: string // 已截断/拼接后的文本
+  text: string // text after truncation/concatenation
 }
 
-/** 经 `processOutput` 规范化后的富输出。 */
+/** Rich output normalized by `processOutput`. */
 export type NotebookCellSourceRichOutput = {
   output_type: 'execute_result' | 'display_data'
-  text?: string // 从 text/plain 提取的正文
-  image?: NotebookOutputImage // 若有 image/png 或 jpeg
+  text?: string // body text extracted from text/plain
+  image?: NotebookOutputImage // present if there is an image/png or jpeg
 }
 
-/** 经 `processOutput` 规范化后的错误输出。 */
+/** Error output normalized by `processOutput`. */
 export type NotebookCellSourceErrorOutput = {
   output_type: 'error'
-  text: string // 合并 ename/evalue/traceback 后的单段文本
+  text: string // single text merged from ename/evalue/traceback
 }
 
-/** 送入工具链前的单元输出联合。 */
+/** Union of cell outputs before entering the tool chain. */
 export type NotebookCellSourceOutput =
   | NotebookCellSourceStreamOutput
   | NotebookCellSourceRichOutput
   | NotebookCellSourceErrorOutput
 
-/** 送入模型工具结果的单元摘要结构。 */
+/** Cell summary structure fed to the model as a tool result. */
 export type NotebookCellSource = {
-  cellType: NotebookCellType // 与源 cell 对齐的类型
-  source: string // 拼接后的单元源码字符串
-  execution_count?: number // 代码格保留执行计数
-  cell_id: string // 稳定单元 id（无则生成 cell-{index}）
-  language?: string // 代码格语言 id（非 python 时标注）
-  outputs?: NotebookCellSourceOutput[] // 规范化后的输出列表
+  cellType: NotebookCellType // type aligned with the source cell
+  source: string // concatenated cell source string
+  execution_count?: number // execution count kept for code cells
+  cell_id: string // stable cell id (generated as cell-{index} if absent)
+  language?: string // code cell language id (annotated when not python)
+  outputs?: NotebookCellSourceOutput[] // normalized output list
 }

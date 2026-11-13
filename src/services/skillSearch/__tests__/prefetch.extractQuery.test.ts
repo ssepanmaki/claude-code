@@ -24,18 +24,18 @@ function assistantText(text: string): Message {
   return { type: 'assistant', content: text } as unknown as Message
 }
 
-describe('extractQueryFromMessages — inter-turn穿透逻辑', () => {
-  test('null input + messages末尾是tool_result → 穿透到真实user文本', () => {
+describe('extractQueryFromMessages — inter-turn pass-through logic', () => {
+  test('null input + messages end with tool_result → pass through to the real user text', () => {
     const messages: Message[] = [
-      userText('研究当前代码'),
-      assistantText('调用工具'),
+      userText('study the current code'),
+      assistantText('calling a tool'),
       userToolResult('tool_01'),
     ]
     const query = extractQueryFromMessages(null, messages)
-    expect(query).toBe('研究当前代码')
+    expect(query).toBe('study the current code')
   })
 
-  test('null input + messages末尾是text block形式的user → 正确提取', () => {
+  test('null input + messages end with a user text block → extracted correctly', () => {
     const messages: Message[] = [
       userTextBlocks('refactor the auth module'),
       assistantText('thinking...'),
@@ -45,26 +45,26 @@ describe('extractQueryFromMessages — inter-turn穿透逻辑', () => {
     expect(query).toBe('refactor the auth module')
   })
 
-  test('null input + 连续多轮tool_result → 继续向前找到最早的user文本', () => {
+  test('null input + several consecutive rounds of tool_result → keep looking back to the earliest user text', () => {
     const messages: Message[] = [
-      userText('研究当前代码'),
-      assistantText('第一次调用'),
+      userText('study the current code'),
+      assistantText('first call'),
       userToolResult('tool_a'),
-      assistantText('第二次调用'),
+      assistantText('second call'),
       userToolResult('tool_b'),
-      assistantText('第三次调用'),
+      assistantText('third call'),
       userToolResult('tool_c'),
     ]
     const query = extractQueryFromMessages(null, messages)
-    expect(query).toBe('研究当前代码')
+    expect(query).toBe('study the current code')
   })
 
-  test('null input + 空messages → 空串', () => {
+  test('null input + empty messages → empty string', () => {
     const query = extractQueryFromMessages(null, [])
     expect(query).toBe('')
   })
 
-  test('null input + 全是tool_result (无真实文本) → 空串', () => {
+  test('null input + all tool_result (no real text) → empty string', () => {
     const messages: Message[] = [
       userToolResult('tool_a'),
       userToolResult('tool_b'),
@@ -73,26 +73,26 @@ describe('extractQueryFromMessages — inter-turn穿透逻辑', () => {
     expect(query).toBe('')
   })
 
-  test('string input + null messages → 只返回input', () => {
+  test('string input + null messages → returns only the input', () => {
     const query = extractQueryFromMessages('hello world', [])
     expect(query).toBe('hello world')
   })
 
-  test('string input + 有user文本 → 两者拼接', () => {
+  test('string input + user text present → the two are concatenated', () => {
     const messages: Message[] = [userText('previous query')]
     const query = extractQueryFromMessages('new query', messages)
     expect(query).toContain('new query')
     expect(query).toContain('previous query')
   })
 
-  test('超长user文本被截断到500字', () => {
+  test('overlong user text is truncated to 500 characters', () => {
     const longText = 'a'.repeat(1000)
     const messages: Message[] = [userText(longText)]
     const query = extractQueryFromMessages(null, messages)
     expect(query.length).toBe(500)
   })
 
-  test('tool_result里含text字段 (但type=tool_result) → 必须跳过，不能误用', () => {
+  test('tool_result with a text field (but type=tool_result) → must be skipped, never misused', () => {
     const messages: Message[] = [
       userText('real query'),
       {
@@ -109,7 +109,7 @@ describe('extractQueryFromMessages — inter-turn穿透逻辑', () => {
     expect(query).toBe('real query')
   })
 
-  test('user content数组里text为空串 → 跳过空text继续找', () => {
+  test('empty-string text in the user content array → skip the empty text and keep looking', () => {
     const messages: Message[] = [
       userText('real query'),
       {

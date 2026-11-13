@@ -41,7 +41,7 @@ export function getUltraplanTimeoutMs(): number {
 }
 
 /**
- * 是否启用 ultraplan, 默认启用
+ * Whether ultraplan is enabled; enabled by default
  *
  * @returns
  */

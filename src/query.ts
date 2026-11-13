@@ -1257,8 +1257,8 @@ async function* queryLoop(
       return { reason: 'model_error', error }
     }
 
-    // 检测缓存命中率并在需要时 yield 警告消息
-    // 必须在 executePostSamplingHooks 之前执行，确保警告消息在工具结果之前显示
+    // Detect the cache hit rate and yield a warning message when needed
+    // Must run before executePostSamplingHooks so the warning appears before the tool results
     if (
       assistantMessages.length > 0 &&
       !toolUseContext.options.isNonInteractiveSession

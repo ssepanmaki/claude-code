@@ -108,7 +108,7 @@ export function getAuthStatus(): AuthStatus {
 
   let plan: AuthStatus['subscription']['plan'] = null
   if (subscriptionActive && oauthTokens) {
-    // 本地持久化或历史 token 中可能出现 'free' 等未纳入 SubscriptionType 的字符串
+    // Strings such as 'free' that are not in SubscriptionType may appear in local persisted data or historical tokens
     const raw = oauthTokens.subscriptionType as
       | (SubscriptionType | 'free')
       | null

@@ -1,29 +1,29 @@
 #!/usr/bin/env bun
 /**
- * 构建产物完整性检查脚本
+ * Build output integrity check script
  *
- * 检查 Bun.build({ splitting: true }) 输出的 dist/ 目录中是否存在：
- * 1. 引用了不存在的 chunk 文件（断链）
- * 2. 通过 __require() 或 import() 引用的第三方模块（非 Node.js 内置），在生产环境中会找不到
- * 3. 缺失的静态 import 依赖（跨 chunk 引用目标不存在）
+ * Checks whether the dist/ directory produced by Bun.build({ splitting: true }) contains:
+ * 1. References to chunk files that do not exist (broken links)
+ * 2. Third-party modules (non-Node.js builtins) referenced via __require() or import() that cannot be found in production
+ * 3. Missing static import dependencies (cross-chunk reference target does not exist)
  *
- * 用法：
- *   bun scripts/check-bundle-integrity.ts          # 检查当前 dist/
- *   bun scripts/check-bundle-integrity.ts ./dist    # 指定目录
+ * Usage:
+ *   bun scripts/check-bundle-integrity.ts          #   bun scripts/check-bundle-integrity.ts          # check the current dist/
+ *   bun scripts/check-bundle-integrity.ts ./dist    #   bun scripts/check-bundle-integrity.ts ./dist    # specify a directory
  */
 
 import { readdir, readFile } from 'fs/promises'
 import { join, resolve, dirname } from 'path'
 import { fileURLToPath } from 'url'
 
-// ─── 从 package.json 读取 dependencies 作为白名单 ────────────────
+// ─── Read dependencies from package.json as the allowlist ───
 const __dirname = dirname(fileURLToPath(import.meta.url))
 const pkg = JSON.parse(
   await readFile(join(__dirname, '..', 'package.json'), 'utf-8'),
 )
 const PKG_DEPS = new Set(Object.keys(pkg.dependencies ?? {}))
 
-// ─── Node.js 内置模块白名单 ────────────────────────────────────────
+// ─── Node.js builtin module allowlist ───
 const NODE_BUILTINS = new Set([
   'assert',
   'async_hooks',
@@ -69,13 +69,13 @@ const NODE_BUILTINS = new Set([
   'node:test',
 ])
 
-// Node 18+ 内置但不在传统列表中的模块
+// Builtin since Node 18+ but not in the traditional list
 const NODE_18_PLUS_BUILTINS = new Set(['undici'])
 
-// Bun 专用模块（仅在 Bun 运行时可用，Node.js 环境会失败）
+// Bun-only modules (available only in the Bun runtime; fail under Node.js)
 const BUN_MODULES = new Set(['bun', 'bun:ffi', 'bun:test', 'bun:sqlite'])
 
-// macOS JXA / native 框架（通过 ObjC.import，非真正的 require）
+// macOS JXA / native frameworks (via ObjC.import, not a real require)
 const NATIVE_FRAMEWORKS = new Set([
   'AppKit',
   'CoreGraphics',
@@ -83,14 +83,14 @@ const NATIVE_FRAMEWORKS = new Set([
   'UIKit',
 ])
 
-// ─── 模式 ──────────────────────────────────────────────────────────
-// 匹配 import { ... } from "./chunk-xxxxx.js" 或 import"./chunk-xxxxx.js"
+// ─── Patterns ───
+// Matches import { ... } from "./chunk-xxxxx.js" or import"./chunk-xxxxx.js"
 const STATIC_IMPORT_RE = /(?:from\s+|import\s+)"(\.\/[^"]+\.js)"/g
-// 匹配 __require("xxx")
+// Matches __require("xxx")
 const REQUIRE_RE = /__require\("([^"]+)"\)/g
-// 匹配动态 import("xxx")，排除 ./chunk-xxx.js 的内部引用
+// Matches dynamic import("xxx"), excluding internal ./chunk-xxx.js references
 const DYNAMIC_IMPORT_RE = /import\("([^"]+)"\)/g
-// 匹配 nodeRequire("xxx")（createRequire 创建的 require 别名）
+// Matches nodeRequire("xxx") (require alias created by createRequire)
 const NODE_REQUIRE_RE = /nodeRequire\("([^"]+)"\)/g
 
 interface Finding {
@@ -110,24 +110,24 @@ interface Finding {
 async function main() {
   const distDir = resolve(process.argv[2] || './dist')
 
-  console.log(`\n🔍 检查构建产物完整性: ${distDir}\n`)
+  console.log(`\n🔍 Checking build output integrity: ${distDir}\n`)
 
-  // 1. 列出所有 chunk 文件
+  // 1. List all chunk files
   let files: string[]
   try {
     files = (await readdir(distDir)).filter(f => f.endsWith('.js'))
   } catch {
-    console.error(`❌ 无法读取目录: ${distDir}`)
-    console.error('   请先运行 bun run build')
+    console.error(`❌ Cannot read directory: ${distDir}`)
+    console.error('   Run bun run build first')
     process.exit(1)
   }
 
   const fileSet = new Set(files)
-  console.log(`📦 找到 ${files.length} 个 JS 文件\n`)
+  console.log(`📦 Found ${files.length} JS files\n`)
 
   const findings: Finding[] = []
 
-  // 2. 逐文件扫描
+  // 2. Scan file by file
   for (const file of files) {
     const filePath = join(distDir, file)
     const content = await readFile(filePath, 'utf-8')
@@ -137,11 +137,11 @@ async function main() {
       const line = lines[i]
       const lineNum = i + 1
 
-      // 2a. 检查静态 chunk 引用是否断链
+      // 2a. Check whether static chunk references are broken
       const staticImportMatches = line.matchAll(STATIC_IMPORT_RE)
       for (const m of staticImportMatches) {
         const ref = m[1]
-        // 提取文件名部分（去掉 ./）
+        // Extract the file name part (strip ./)
         const refFile = ref.replace(/^\.\//, '')
         if (!fileSet.has(refFile)) {
           findings.push({
@@ -155,11 +155,11 @@ async function main() {
         }
       }
 
-      // 2b. 检查 __require 中的第三方模块
+      // 2b. Check third-party modules in __require
       const requireMatches = line.matchAll(REQUIRE_RE)
       for (const m of requireMatches) {
         const mod = m[1]
-        // 跳过 ObjC.import（JXA 语法，不是真正的 require）
+        // Skip ObjC.import (JXA syntax, not a real require)
         if (NATIVE_FRAMEWORKS.has(mod)) continue
         if (
           NODE_BUILTINS.has(mod) ||
@@ -179,7 +179,7 @@ async function main() {
           })
           continue
         }
-        // 第三方模块 — 在生产环境（全局 npm install）中找不到
+        // Third-party module — cannot be found in production (global npm install)
         findings.push({
           type: 'third-party-require',
           severity: 'error',
@@ -190,13 +190,13 @@ async function main() {
         })
       }
 
-      // 2c. 检查动态 import() 中的第三方模块
+      // 2c. Check third-party modules in dynamic import()
       const dynImportMatches = line.matchAll(DYNAMIC_IMPORT_RE)
       for (const m of dynImportMatches) {
         const mod = m[1]
-        // 跳过内部 chunk 引用和相对路径
+        // Skip internal chunk references and relative paths
         if (mod.startsWith('./') || mod.startsWith('../')) continue
-        // 跳过 ObjC.import
+        // Skip ObjC.import
         if (NATIVE_FRAMEWORKS.has(mod)) continue
         if (
           NODE_BUILTINS.has(mod) ||
@@ -206,7 +206,7 @@ async function main() {
         )
           continue
         if (BUN_MODULES.has(mod)) {
-          // bun:test 等只在 Bun 运行时可用，Node.js 运行时会失败
+          // bun:test etc. are available only in the Bun runtime and fail under Node.js
           findings.push({
             type: 'bun-runtime-only',
             severity: 'warning',
@@ -217,7 +217,7 @@ async function main() {
           })
           continue
         }
-        // 第三方动态 import
+        // Third-party dynamic import
         findings.push({
           type: 'third-party-import',
           severity: 'error',
@@ -228,7 +228,7 @@ async function main() {
         })
       }
 
-      // 2d. 检查 nodeRequire("xxx") 中的第三方模块（createRequire 别名）
+      // 2d. Check third-party modules in nodeRequire("xxx") (createRequire alias)
       const nodeRequireMatches = line.matchAll(NODE_REQUIRE_RE)
       for (const m of nodeRequireMatches) {
         const mod = m[1]
@@ -263,11 +263,11 @@ async function main() {
     }
   }
 
-  // 3. 汇总报告
+  // 3. Summary report
   const errors = findings.filter(f => f.severity === 'error')
   const warnings = findings.filter(f => f.severity === 'warning')
 
-  // 按 type 分组
+  // Group by type
   const brokenRefs = errors.filter(f => f.type === 'broken-chunk-ref')
   const thirdPartyRequires = errors.filter(
     f => f.type === 'third-party-require',
@@ -279,7 +279,7 @@ async function main() {
   const bunRuntimeOnly = warnings.filter(f => f.type === 'bun-runtime-only')
 
   if (brokenRefs.length > 0) {
-    console.log('❌ 断裂的 chunk 引用（引用了不存在的文件）:')
+    console.log('❌ Broken chunk references (referenced files do not exist):')
     for (const f of brokenRefs) {
       console.log(`   ${f.file}:${f.line} → ${f.module}`)
     }
@@ -287,67 +287,73 @@ async function main() {
   }
 
   if (thirdPartyRequires.length > 0) {
-    console.log('❌ 通过 __require() 引用的第三方模块（生产环境会找不到）:')
+    console.log(
+      '❌ Third-party modules referenced via __require() (cannot be found in production):',
+    )
     const grouped = groupByModule(thirdPartyRequires)
     for (const [mod, items] of grouped) {
-      console.log(`   "${mod}" — 出现 ${items.length} 次:`)
+      console.log(`   "${mod}" — appears ${items.length} times:`)
       for (const f of items.slice(0, 5)) {
         console.log(`     ${f.file}:${f.line}`)
       }
-      if (items.length > 5) console.log(`     ... 还有 ${items.length - 5} 处`)
+      if (items.length > 5) console.log(`     ... ${items.length - 5} more`)
     }
     console.log()
   }
 
   if (thirdPartyImports.length > 0) {
-    console.log('❌ 通过 import() 动态引用的第三方模块（生产环境会找不到）:')
+    console.log(
+      '❌ Third-party modules dynamically referenced via import() (cannot be found in production):',
+    )
     const grouped = groupByModule(thirdPartyImports)
     for (const [mod, items] of grouped) {
-      console.log(`   "${mod}" — 出现 ${items.length} 次:`)
+      console.log(`   "${mod}" — appears ${items.length} times:`)
       for (const f of items.slice(0, 5)) {
         console.log(`     ${f.file}:${f.line}`)
       }
-      if (items.length > 5) console.log(`     ... 还有 ${items.length - 5} 处`)
+      if (items.length > 5) console.log(`     ... ${items.length - 5} more`)
     }
     console.log()
   }
 
   if (thirdPartyNodeRequires.length > 0) {
     console.log(
-      '❌ 通过 nodeRequire() 引用的第三方模块（绕过打包，生产环境会找不到）:',
+      '❌ Third-party modules referenced via nodeRequire() (bypass bundling, cannot be found in production):',
     )
     const grouped = groupByModule(thirdPartyNodeRequires)
     for (const [mod, items] of grouped) {
-      console.log(`   "${mod}" — 出现 ${items.length} 次:`)
+      console.log(`   "${mod}" — appears ${items.length} times:`)
       for (const f of items.slice(0, 5)) {
         console.log(`     ${f.file}:${f.line}`)
       }
-      if (items.length > 5) console.log(`     ... 还有 ${items.length - 5} 处`)
+      if (items.length > 5) console.log(`     ... ${items.length - 5} more`)
     }
     console.log()
   }
 
   if (bunRuntimeOnly.length > 0) {
-    console.log('⚠️  Bun 运行时专用模块（Node.js 环境会失败）:')
+    console.log('⚠️  Bun Bun-runtime-only modules (fail under Node.js):')
     const grouped = groupByModule(bunRuntimeOnly)
     for (const [mod, items] of grouped) {
-      console.log(`   "${mod}" — 出现 ${items.length} 次`)
+      console.log(`   "${mod}" — appears ${items.length} times`)
     }
     console.log()
   }
 
-  // 4. 总结
+  // 4. Conclusion
   console.log('─'.repeat(50))
   if (errors.length === 0 && warnings.length === 0) {
-    console.log('✅ 构建产物完整性检查通过，未发现问题。')
+    console.log('✅ Build output integrity check passed; no problems found.')
   } else {
-    console.log(`📊 总计: ${errors.length} 个错误, ${warnings.length} 个警告`)
+    console.log(
+      `📊 Total: ${errors.length} errors, ${warnings.length} warnings`,
+    )
     if (errors.length > 0) {
       console.log(
-        `\n💡 修复建议:
-   - 第三方模块问题：在 build.ts 中通过 external 选项排除，或确保它们被正确打包到 chunk 中
-   - 断链问题：检查 build 时是否有文件被意外删除或构建不完整
-   - Bun 专用模块：确保运行时使用 bun 而非 node`,
+        `\n💡 Suggested fixes:
+   - Third-party module issues: exclude them via the external option in build.ts, or make sure they are bundled into chunks correctly
+   - Broken links: check whether files were accidentally deleted during the build or the build is incomplete
+   - Bun-only modules: make sure the runtime is bun rather than node`,
       )
     }
   }
@@ -362,7 +368,7 @@ function groupByModule(items: Finding[]): Map<string, Finding[]> {
     list.push(item)
     map.set(item.module, list)
   }
-  // 按出现次数降序
+  // Sort by occurrence count, descending
   return new Map([...map.entries()].sort((a, b) => b[1].length - a[1].length))
 }
 

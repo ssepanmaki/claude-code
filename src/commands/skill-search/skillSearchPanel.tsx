@@ -13,29 +13,29 @@ type SkillSearchAction = {
 
 const ACTION_LABEL_COLUMN_WIDTH = 28;
 
-const ABOUT_TEXT = `# Skill Search (自动技能匹配)
+const ABOUT_TEXT = `# Skill Search (automatic skill matching)
 
-Skill Search 控制对话中的自动技能匹配功能。
+Skill Search controls automatic skill matching during a conversation.
 
-启用后，Claude Code 会在每轮对话中自动搜索并加载与当前任务最相关的 skill 文件，
-无需手动指定。搜索基于 TF-IDF 向量余弦相似度，支持英文词干化和 CJK bi-gram 分词。
+When enabled, Claude Code automatically searches for and loads the skill files most relevant to the current task in every turn,
+with no need to specify them by hand. Search is based on TF-IDF vector cosine similarity, with English stemming and CJK bi-gram tokenization.
 
-## 工作原理
-1. 对话开始时，自动索引 .claude/skills/ 和 ~/.claude/skills/ 下的 Markdown 文件
-2. 每轮对话根据上下文自动匹配最相关的 skill
-3. 匹配到的 skill 内容会作为上下文注入，指导 Claude Code 的行为
+## How it works
+1. When the conversation starts, Markdown files under .claude/skills/ and ~/.claude/skills/ are indexed automatically
+2. In every turn the most relevant skills are matched automatically from the context
+3. Matched skill content is injected as context to guide Claude Code's behavior
 
-## 控制方式
-- /skill-search start  — 启用自动匹配
-- /skill-search stop   — 禁用自动匹配
-- /skill-search status — 查看当前状态
+## Controls
+- /skill-search start  — enable automatic matching
+- /skill-search stop   — disable automatic matching
+- /skill-search status — show the current status
 
-当前状态: ${isSkillSearchEnabled() ? '已启用' : '未启用'}
+Current status: ${isSkillSearchEnabled() ? 'enabled' : 'disabled'}
 `;
 
 function getStatusText(): string {
   return [
-    'Skill Search (自动技能匹配)',
+    'Skill Search (automatic skill matching)',
     `Status: ${isSkillSearchEnabled() ? 'enabled' : 'disabled'}`,
     '',
     'When enabled, relevant skills are automatically matched and',

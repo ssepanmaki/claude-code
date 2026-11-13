@@ -15,7 +15,7 @@ export function Navbar({ onIdentityClick, onTokenClick, activeTokenLabel, sessio
     <nav className="sticky top-0 z-40 border-b border-border bg-surface-1/80 backdrop-blur-md">
       <div className="mx-auto flex h-11 sm:h-12 max-w-5xl items-center justify-between px-3 sm:px-4">
         {sessionTitle ? (
-          /* Session 页面 — 返回按钮 + agent 名 */
+          /* Session page — back button + agent name */
           <div className="flex items-center gap-2 min-w-0">
             <button
               type="button"
@@ -32,7 +32,7 @@ export function Navbar({ onIdentityClick, onTokenClick, activeTokenLabel, sessio
             </span>
           </div>
         ) : (
-          /* Dashboard 页面 — 品牌 */
+          /* Dashboard page — brand */
           <a
             href="/code/"
             className="flex items-center gap-2 font-display text-lg font-semibold text-text-primary no-underline"

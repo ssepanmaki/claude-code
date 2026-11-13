@@ -1,2 +1,2 @@
-/** Glob（文件名模式匹配）工具在 API 中的注册名称字面量（与 `GLOB_TOOL_NAME` 常量 `'Glob'` 一致）。 */
+/** Registered name literal of the Glob (filename pattern matching) tool in the API (matches the `GLOB_TOOL_NAME` constant `'Glob'`). */
 export type GLOB_TOOL_NAME = 'Glob'

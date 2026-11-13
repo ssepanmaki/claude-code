@@ -1,5 +1,5 @@
 /**
- * dump-prompt.ts — 生成完整 system prompt 用于人工检查格式和内容。
+ * dump-prompt.ts — generate the full system prompt for manual inspection of format and content.
  * Usage: bun run scripts/dump-prompt.ts
  */
 import { mock } from 'bun:test'

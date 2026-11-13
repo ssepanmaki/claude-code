@@ -63,11 +63,11 @@ export { TeamDeleteTool } from './tools/TeamDeleteTool/TeamDeleteTool.js'
 export { TerminalCaptureTool } from './tools/TerminalCaptureTool/TerminalCaptureTool.js'
 export { VerifyPlanExecutionTool } from './tools/VerifyPlanExecutionTool/VerifyPlanExecutionTool.js'
 export { WebBrowserTool } from './tools/WebBrowserTool/WebBrowserTool.js'
-// WorkflowTool 实现已迁移到 @claude-code-best/workflow-engine（独立包，端口适配）。
-// 注意：本 commit 移除了 builtin-tools 的 WorkflowTool 值导出和 getWorkflowCommands。
-// - WorkflowTool 工厂：改由 @claude-code-best/workflow-engine 的 createWorkflowTool 提供
-// - getWorkflowCommands：已移除，功能迁至 src/workflow/namedWorkflowCommands.ts
-// 第三方若从本包 import 这两个符号，需切换到新路径。
+// The WorkflowTool implementation has moved to @claude-code-best/workflow-engine (standalone package, port adapters).
+// Note: this commit removed builtin-tools' WorkflowTool value export and getWorkflowCommands.
+// - WorkflowTool factory: now provided by createWorkflowTool in @claude-code-best/workflow-engine
+// - getWorkflowCommands: removed; the functionality moved to src/workflow/namedWorkflowCommands.ts
+// Third parties importing these two symbols from this package must switch to the new paths.
 export {
   createWorkflowTool,
   WORKFLOW_TOOL_NAME,

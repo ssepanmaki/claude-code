@@ -1,14 +1,14 @@
-/** 主循环/流式输出旁路指示器所处的交互阶段。 */
+/** Interaction phase of the side-channel indicator for the main loop / streaming output. */
 export type SpinnerMode =
-  | 'tool-input' // 等待用户对工具输入的响应
-  | 'tool-use' // 工具执行中
-  | 'responding' // 模型正在输出回复
-  | 'thinking' // 模型思考/规划（不区分 provider 细节）
-  | 'requesting' // 请求已发出、等待首包（含 shimmer 较快节奏）
+  | 'tool-input' // waiting for the user to respond to a tool input
+  | 'tool-use' // tool executing
+  | 'responding' // model is streaming a reply
+  | 'thinking' // model thinking/planning (provider details not distinguished)
+  | 'requesting' // request sent, waiting for the first chunk (faster shimmer cadence)
 
-/** 终端 24 位色（与 Ink `RGBColor` 及渐变插值工具一致）。 */
+/** Terminal 24-bit color (consistent with Ink `RGBColor` and the gradient interpolation helpers). */
 export type RGBColor = {
-  r: number // 红 0–255
-  g: number // 绿 0–255
-  b: number // 蓝 0–255
+  r: number // red 0–255
+  g: number // green 0–255
+  b: number // blue 0–255
 }

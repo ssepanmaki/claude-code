@@ -28,49 +28,49 @@ import {
 } from './rippleAnimation.js';
 
 /**
- * 每档最小宽度（足够装下 'ultracode' 9 字符 + 居中留白）。
- * 当终端窄时使用此值，保证最低可读性。
+ * Minimum width per tier (enough for the 9-character 'ultracode' plus centered padding).
+ * Used when the terminal is narrow, guaranteeing minimum readability.
  */
 const MIN_SEGMENT = 12;
 
 const SUBLABEL_ULTRACODE = 'xhigh + workflows';
 
-// 颜色：与项目主题对齐（suggestion=Medium blue #5769F7）。
-const COLOR_LABEL_SELECTED = '#5769F7'; // 选中档位（suggestion）
-const COLOR_LABEL_DEFAULT = '#7a8eff'; // 未选中档位（淡紫蓝，与波纹背景协调）
-const COLOR_OVERLAY = '#5769F7'; // Faster / Smarter / ▲ 等 overlay 文字
+// Colors: aligned with the project theme (suggestion=Medium blue #5769F7).
+const COLOR_LABEL_SELECTED = '#5769F7'; // selected tier (suggestion)
+const COLOR_LABEL_DEFAULT = '#7a8eff'; // unselected tier (light purple-blue, matches the ripple background)
+const COLOR_OVERLAY = '#5769F7'; // overlay text such as Faster / Smarter / ▲
 
-// 淡入淡出每帧步长：60ms 间隔下 5 帧达到目标 ≈ 300ms 动画时长。
+// Fade step per frame: at 60ms intervals, 5 frames reach the target ≈ 300ms animation duration.
 const FADE_STEP = 0.2;
 
-// 波纹震源 y 坐标（相对波纹区域坐标系，y=0 是档位名行）。
+// Ripple source y coordinate (in the ripple area's coordinate system; y=0 is the tier-name row).
 const RIPPLE_SOURCE_Y = 0;
 
 /**
- * 根据终端宽度计算每档实际宽度（SEGMENT）。
+ * Compute the actual width of each tier (SEGMENT) from the terminal width.
  *
- * 规则：
- * - 留出 paddingX={1} 的左右各 1 列 → 可用宽度 = columns - 2
- * - 若可用宽度 <= MIN_SEGMENT * 6（72），用 MIN_SEGMENT（保持当前窄布局）
- * - 否则铺满：floor(可用宽度 / 6)
+ * Rules:
+ * - Reserve 1 column on each side for paddingX={1} → available width = columns - 2
+ * - If available width <= MIN_SEGMENT * 6 (72), use MIN_SEGMENT (keep the current narrow layout)
+ * - Otherwise fill the width: floor(available width / 6)
  *
- * 即"窄则不变，宽则铺满"。最小宽度保证 'ultracode' 9 字符能正常显示。
+ * That is, "unchanged when narrow, fill when wide". The minimum width ensures the 9-character 'ultracode' displays properly.
  */
 function computeSegment(terminalColumns: number): number {
-  const available = terminalColumns - 2; // paddingX={1} 两侧
+  const available = terminalColumns - 2; // both sides of paddingX={1}
   const minNeeded = MIN_SEGMENT * PANEL_POSITIONS.length;
   if (available <= minNeeded) return MIN_SEGMENT;
   return Math.floor(available / PANEL_POSITIONS.length);
 }
 
 /**
- * 计算波纹震源 x 坐标（ultracode 段内 'ultracode' 标签的中心列）。
+ * Compute the ripple source x coordinate (center column of the 'ultracode' label inside the ultracode segment).
  *
- * 'ultracode' 是 9 字符，在 SEGMENT 列内居中：
+ * 'ultracode' is 9 characters, centered within SEGMENT columns:
  *   offset = floor((SEGMENT - 9) / 2)
- *   labelCenter = SEGMENT * 5 + offset + 4  （4 是 9 字符串的中心偏移）
+ *   labelCenter = SEGMENT *   labelCenter = SEGMENT * 5 + offset + 4  (4 is the center offset of the 9-character string)
  *
- * SEGMENT=12 → 60 + 1 + 4 = 65（与历史值一致）
+ * SEGMENT=12 → 60 + 1 + 4 = 65 (consistent with the historical value)
  * SEGMENT=20 → 100 + 5 + 4 = 109
  */
 function computeRippleSourceX(segment: number): number {
@@ -81,8 +81,8 @@ function computeRippleSourceX(segment: number): number {
 }
 
 /**
- * 计算某段 idx 内居中文字的起始列。
- * 动态 segment：textLen 字符在 segment 列内居中。
+ * Compute the start column of centered text inside segment idx.
+ * Dynamic segment: textLen characters are centered within segment columns.
  */
 function segmentTextStartX(idx: number, textLen: number, segment: number): number {
   return segment * idx + Math.max(0, Math.floor((segment - textLen) / 2));
@@ -98,8 +98,8 @@ export function EffortPanel({ appStateEffort, onDone }: Props): React.ReactNode 
   const model = useMainLoopModel();
   const { columns } = useTerminalSize();
 
-  // 自适应宽度：根据终端列数计算每档宽度。
-  // 终端变化（resize）时 columns 改变 → 重新计算 → 重渲染。
+  // Adaptive width: compute each tier's width from the terminal column count.
+  // When the terminal resizes, columns changes → recompute → re-render.
   const segment = React.useMemo(() => computeSegment(columns), [columns]);
   const panelWidth = segment * PANEL_POSITIONS.length;
   const rippleSourceX = React.useMemo(() => computeRippleSourceX(segment), [segment]);
@@ -113,12 +113,12 @@ export function EffortPanel({ appStateEffort, onDone }: Props): React.ReactNode 
 
   const isOnUltracode = cursor === 'ultracode';
   const [fade, setFade] = React.useState(0);
-  // 仍在波纹模式：cursor 在 ultracode，或退出动画未结束（fade > 0）
+  // Still in ripple mode: cursor is on ultracode, or the exit animation has not finished (fade > 0)
   const showingRipple = isOnUltracode || fade > 0.001;
   const [rippleRef, time] = useRippleFrame(showingRipple);
 
-  // 淡入淡出驱动：每 tick（time 推进）朝目标步进 FADE_STEP。
-  // 退出动画完成后 fade 归零，showingRipple 变 false，时钟停止订阅。
+  // Fade driver: on each tick (time advances), step toward the target by FADE_STEP.
+  // After the exit animation completes fade returns to zero, showingRipple becomes false, and the clock stops subscribing.
   React.useEffect(() => {
     if (!showingRipple) return;
     const target = isOnUltracode ? 1 : 0;
@@ -163,9 +163,9 @@ export function EffortPanel({ appStateEffort, onDone }: Props): React.ReactNode 
   const envActive = envOverride !== null && envOverride !== undefined;
   const envRaw = process.env.CLAUDE_CODE_EFFORT_LEVEL;
 
-  // 波纹行 cells 计算：返回该行所有 cell（含 overlay 文字）
-  // fade 控制背景颜色亮度（0 → 全 transparent，1 → 完整波纹）。
-  // 文字 overlay 也乘以 fade，让进入/退出动画整体淡入淡出。
+  // Ripple row cell computation: returns all cells of the row (including overlay text)
+  // fade controls background color brightness (0 → fully transparent, 1 → full ripple).
+  // Text overlays are also multiplied by fade, so the enter/exit animation fades in/out as a whole.
   const renderRippleRow = React.useCallback(
     (relY: number, overlays: Overlay[]): Segment[] => {
       const cells = computeRippleCells({
@@ -209,7 +209,7 @@ export function EffortPanel({ appStateEffort, onDone }: Props): React.ReactNode 
   );
 }
 
-// ---- 普通模式（无波纹）----
+// ---- Normal mode (no ripple) ----
 
 function PlainContent({
   cursor,
@@ -255,20 +255,20 @@ function PlainContent({
   );
 }
 
-// ---- 波纹模式（cursor === 'ultracode'）----
+// ---- Ripple mode (cursor === 'ultracode') ----
 //
-// 渲染策略：
-// - 每行先 computeRippleCells 算出强度→颜色的 cell 数组（背景为空格 + 颜色）
-// - applyOverlaysToCells 把文字 overlay（Faster/▲/档位名/副标签）写入对应 cell
-// - cellsToSegments 合并相邻同色段
-// - 渲染层遍历 segments：每个段判断是"空格波纹段"还是"文字段"
-//   - 空格段：用 backgroundColor 把空格染成色块（pure color block）
-//   - 文字段：用 color 染色文字（背景保持终端默认，让文字最清晰）
-//   - 混合段（既有空格又有文字，少见）：拆为前后两个 Text
+// Rendering strategy:
+// - For each row, computeRippleCells first produces the intensity→color cell array (background is spaces + color)
+// - applyOverlaysToCells writes text overlays (Faster/▲/tier name/sublabel) into the matching cells
+// - cellsToSegments merges adjacent same-color segments
+// - The render layer walks segments: each segment is judged to be a "space ripple segment" or a "text segment"
+//   - Space segment: uses backgroundColor to paint the spaces into a color block (pure color block)
+//   - Text segment: uses color to paint the text (background stays terminal default, keeping the text clearest)
+//   - Mixed segment (both spaces and text, uncommon): split into two Text parts, before and after
 //
-// 注意：Segment 内可能同时有空格和非空格字符（如 "  Faster  " 居中文字）。
-// 这种段用 color 渲染时，空格部分不显示色块——视觉上"色块断裂"。
-// 解决：渲染时把 segment 按字符类型二次拆分（runs of whitespace vs non-whitespace）。
+// Note: a Segment may contain both spaces and non-space characters (e.g. centered text "  Faster  ").
+// When such a segment is rendered with color, the space part shows no color block — visually the "color block breaks".
+// Fix: split each segment a second time by character type at render time (runs of whitespace vs non-whitespace).
 
 type RippleContentProps = {
   renderRow: (relY: number, overlays: Overlay[]) => Segment[];
@@ -280,14 +280,14 @@ type RippleContentProps = {
 };
 
 function RippleContent({ renderRow, cursor, segment, panelWidth, time }: RippleContentProps): React.ReactNode {
-  // 光标索引跟随 cursor（退出动画期间 cursor 已移到别处，
-  // 让 ▲ overlay 跟着移走，ultracode 段恢复普通背景色）。
+  // Cursor index follows the cursor (during the exit animation the cursor has already moved elsewhere,
+  // so the ▲ overlay moves away with it and the ultracode segment returns to the normal background color).
   const cursorIdx = PANEL_POSITIONS.indexOf(cursor);
-  // 副标签固定在 ultracode 段下方，不跟随光标移动。
+  // The sublabel is fixed beneath the ultracode segment and does not follow the cursor.
   const ultracodeIdx = PANEL_POSITIONS.length - 1;
 
-  // 文字颜色跟随波浪色相旋转：取当前 time 的 hueShift，
-  // 应用到所有 overlay 颜色，让文字与背景色环保持同步。
+  // Text colors follow the wave hue rotation: take the hueShift at the current time
+  // and apply it to all overlay colors, keeping the text in sync with the background color wheel.
   const hueShift = getHueShiftAtTime(time);
   const overlayColor = rotateHue(COLOR_OVERLAY, hueShift);
   const labelSelectedColor = rotateHue(COLOR_LABEL_SELECTED, hueShift);
@@ -320,16 +320,16 @@ function RippleContent({ renderRow, cursor, segment, panelWidth, time }: RippleC
     color: labelDefaultColor,
   };
 
-  // 各行 y 坐标（相对震源 RIPPLE_SOURCE_Y = 档位名行）
-  //   y=-4: 顶部纯波纹行（视觉一致，无 overlay）
+  // Row y coordinates (relative to the source RIPPLE_SOURCE_Y = tier-name row)
+  //   y=-4: top pure ripple row (visually consistent, no overlay)
   //   y=-3: Faster/Smarter
-  //   y=-2: 分隔线
+  //   y=-2: divider line
   //   y=-1: ▲
-  //   y=0:  档位名（震源）
-  //   y=1:  副标签
-  //   y=2:  底部纯波纹行（视觉一致，无 overlay）
+  //   y=0:  tier names (source)
+  //   y=1:  sublabel
+  //   y=2:  bottom pure ripple row (visually consistent, no overlay)
   //
-  // 快捷键行：plain Text，不参与波纹渲染（无背景动画），紧贴底部波纹行。
+  // Shortcut-key row: plain Text, does not take part in ripple rendering (no background animation), sits right under the bottom ripple row.
   return (
     <>
       <RippleRow segments={renderRow(-4, [])} />
@@ -345,19 +345,19 @@ function RippleContent({ renderRow, cursor, segment, panelWidth, time }: RippleC
 }
 
 /**
- * 渲染一行波纹 segments。
+ * Render one row of ripple segments.
  *
- * 每个 segment 可能含空格 + 文字混合（如 "  Faster  "）：
- * - 空格部分用 backgroundColor 染色块（波纹颜色）
- * - 文字部分用 color 染色（亮色，背景保持终端默认）
+ * Each segment may mix spaces + text (e.g. "  Faster  "):
+ * - Space parts use backgroundColor to paint color blocks (ripple color)
+ * - Text parts use color to paint (bright color, background stays terminal default)
  *
- * 简化策略：遍历 segment 字符，按"是否为空格"二次拆分为 token。
- * 相邻同类型 token 合并，避免 React key 爆炸。
+ * Simplified strategy: walk segment characters and split them a second time into tokens by "is it a space".
+ * Adjacent tokens of the same type merge, avoiding a React key explosion.
  */
 function RippleRow({ segments }: { segments: Segment[] }): React.ReactNode {
   const tokens: Array<{ text: string; kind: 'space' | 'text'; color: string }> = [];
   for (const seg of segments) {
-    // 拆分 seg.text 为空格段和非空格段
+    // Split seg.text into space segments and non-space segments
     let buf = '';
     let bufIsSpace: boolean | null = null;
     const flush = (): void => {

@@ -11,10 +11,10 @@
   "navigation": {
     "groups": [
       {
-        "group": "开始",
+        "group": "Getting started",
         "pages": [
           {
-            "group": "介绍",
+            "group": "Introduction",
             "pages": [
               "docs/introduction/what-is-claude-code",
               "docs/introduction/why-this-whitepaper",
@@ -24,7 +24,7 @@
         ]
       },
       {
-        "group": "对话是如何运转的",
+        "group": "How a conversation works",
         "pages": [
           "docs/conversation/the-loop",
           "docs/conversation/streaming",
@@ -32,7 +32,7 @@
         ]
       },
       {
-        "group": "工具：AI 的双手",
+        "group": "Tools: the hands of the AI",
         "pages": [
           "docs/tools/what-are-tools",
           "docs/tools/file-operations",
@@ -42,7 +42,7 @@
         ]
       },
       {
-        "group": "上下文工程",
+        "group": "Context engineering",
         "pages": [
           "docs/context/system-prompt",
           "docs/context/project-memory",
@@ -51,7 +51,7 @@
         ]
       },
       {
-        "group": "多 Agent 协作",
+        "group": "Multi-agent collaboration",
         "pages": [
           "docs/agent/sub-agents",
           "docs/agent/worktree-isolation",
@@ -59,7 +59,7 @@
         ]
       },
       {
-        "group": "可扩展性",
+        "group": "Extensibility",
         "pages": [
           "docs/extensibility/mcp-protocol",
           "docs/extensibility/hooks",
@@ -68,7 +68,7 @@
         ]
       },
       {
-        "group": "安全与权限",
+        "group": "Safety and permissions",
         "pages": [
           "docs/safety/why-safety-matters",
           "docs/safety/permission-model",
@@ -79,7 +79,7 @@
         ]
       },
       {
-        "group": "揭秘：隐藏功能与内部机制",
+        "group": "Under the hood: hidden features and internals",
         "pages": [
           "docs/internals/three-tier-gating",
           "docs/internals/feature-flags",
@@ -94,10 +94,10 @@
         ]
       },
       {
-        "group": "隐藏功能详解",
+        "group": "Hidden features in detail",
         "pages": [
           {
-            "group": "Agent 与协作",
+            "group": "Agents and collaboration",
             "pages": [
               "docs/features/coordinator-mode",
               "docs/features/fork-subagent",
@@ -106,7 +106,7 @@
             ]
           },
           {
-            "group": "运行模式",
+            "group": "Run modes",
             "pages": [
               "docs/features/kairos",
               "docs/features/voice-mode",
@@ -117,7 +117,7 @@
             ]
           },
           {
-            "group": "工具增强",
+            "group": "Tool enhancements",
             "pages": [
               "docs/features/mcp-skills",
               "docs/features/tree-sitter-bash",
@@ -127,7 +127,7 @@
             ]
           },
           {
-            "group": "上下文与自动化",
+            "group": "Context and automation",
             "pages": [
               "docs/features/token-budget",
               "docs/features/context-collapse",
@@ -139,7 +139,7 @@
         ]
       },
       {
-        "group": "基础设施与依赖",
+        "group": "Infrastructure and dependencies",
         "pages": [
           "docs/auto-updater",
           "docs/lsp-integration",
@@ -166,7 +166,7 @@
     }
   },
   "search": {
-    "prompt": "搜索 Claude Code 架构文档..."
+    "prompt": "Search the Claude Code architecture docs..."
   },
   "seo": {
     "metatags": {

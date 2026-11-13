@@ -91,10 +91,10 @@ interface ExportedHandler<Env = unknown> {
 // This declaration provides the R2 binding + wrangler vars so the Worker compiles
 // without the generated file.
 //
-// NOTE: 这个文件是脚本（没有 top-level import/export），顶层 interface 自动是 global
-// ambient，会和 worker-configuration.d.ts 的 `interface Env` 走 interface declaration
-// merging。不要用 `declare global { ... }` 包裹——脚本文件里那种写法是 TS2669 错误，
-// 在 .d.ts 里甚至会被静默吞掉，导致 Env 桩完全不生效（CI 上就是这种情况）。
+// NOTE: this file is a script (no top-level import/export), so top-level interfaces are automatically global
+// ambient and go through interface declaration merging with `interface Env` of worker-configuration.d.ts.
+// Do not wrap them in `declare global { ... }` — that form in a script file is a TS2669 error,
+// and in a .d.ts it is even silently swallowed, making the Env stub take no effect at all (which is what happened on CI).
 interface Env {
   BUCKET: R2Bucket
   TOKEN: string

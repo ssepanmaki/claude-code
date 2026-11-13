@@ -1,2 +1,2 @@
-/** 返回当前 Shell/会话逻辑工作目录字符串；与宿主 `src/utils/cwd.js` 中 `getCwd` 一致。 */
+/** Returns the logical working directory string of the current Shell/session; same as `getCwd` in the host `src/utils/cwd.js`. */
 export type getCwd = typeof import('src/utils/cwd.js').getCwd

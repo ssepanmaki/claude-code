@@ -178,13 +178,13 @@ export const FileEditTool = buildTool({
 
     const fs = getFsImplementation()
 
-    // 预检：防止 OOM（超大文件）+ 防止编辑目录路径
-    // 目录路径预检避免 AI 模型传入目录时触发原始 EISDIR 错误，
-    // 确保模型拿到清晰、可操作的指引消息。
+    // Pre-check: prevent OOM (huge files) + prevent editing a directory path
+    // The directory pre-check avoids the raw EISDIR error when the AI model passes a directory,
+    // making sure the model gets a clear, actionable guidance message.
     try {
       const fileStat = await fs.stat(fullFilePath)
-      // 预检：如果路径已是一个存在的目录，及时拒绝并给出指引
-      // 避免 AI 模型传入目录路径后 Edit 工具读取文件时抛 EISDIR。
+      // Pre-check: if the path is already an existing directory, reject early with guidance
+      // to avoid the Edit tool throwing EISDIR when reading the file after the AI model passes a directory path.
       if (fileStat.isDirectory()) {
         return {
           result: false,

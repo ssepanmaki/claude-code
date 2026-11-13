@@ -1,2 +1,2 @@
-/** REPL 全局 UI 与权限等状态快照类型；与宿主 `src/state/AppStateStore.js` 中 `AppState` 一致。 */
+/** Snapshot type of REPL global UI, permissions and other state; same as `AppState` in the host `src/state/AppStateStore.js`. */
 export type AppState = import('src/state/AppStateStore.js').AppState

@@ -2,7 +2,7 @@ import { randomUUID } from 'crypto'
 import { getInitialSettings } from './settings/settings.js'
 import type { Message } from '../types/message.js'
 
-// Usage 类型（从 API 响应中提取）
+// Usage type (extracted from the API response)
 interface Usage {
   input_tokens: number
   cache_creation_input_tokens: number
@@ -12,7 +12,7 @@ interface Usage {
 export interface CacheHitRateInfo {
   hitRate: number
   threshold: number
-  trend: number | null // 正数=上升，负数=下降
+  trend: number | null // positive = rising, negative = falling
   shouldWarn: boolean
 }
 
@@ -21,7 +21,7 @@ interface CacheWarningState {
   lastTimestamp: number | null
 }
 
-// 模块级状态，每个 querySource 独立跟踪
+// Module-level state, tracked independently per querySource
 const cacheWarningStateBySource = new Map<string, CacheWarningState>()
 
 // Limit the number of tracked sources to prevent unbounded Map growth.
@@ -33,7 +33,7 @@ const MAX_SOURCE_ENTRIES = 50
 const DEFAULT_CACHE_THRESHOLD = 70
 
 /**
- * 从 settings.json 读取缓存阈值配置
+ * Read the cache threshold config from settings.json
  */
 export function getCacheThreshold(): number {
   const settings = getInitialSettings()
@@ -41,7 +41,7 @@ export function getCacheThreshold(): number {
 }
 
 /**
- * 检查缓存警告是否启用。默认 true。
+ * Check whether cache warnings are enabled. Defaults to true.
  */
 export function isCacheWarningEnabled(): boolean {
   const settings = getInitialSettings()
@@ -49,8 +49,8 @@ export function isCacheWarningEnabled(): boolean {
 }
 
 /**
- * 计算缓存命中率
- * 返回值范围 0-100，null 表示无有效数据
+ * Compute the cache hit rate
+ * Returns a value in the range 0-100; null means no valid data
  */
 export function calculateCacheHitRate(
   usage: Usage | null | undefined,
@@ -60,7 +60,7 @@ export function calculateCacheHitRate(
   const { input_tokens, cache_creation_input_tokens, cache_read_input_tokens } =
     usage
 
-  // 所有缓存字段为 0 表示无缓存数据
+  // All cache fields being 0 means there is no cache data
   if (cache_read_input_tokens === 0 && cache_creation_input_tokens === 0) {
     return null
   }
@@ -73,11 +73,11 @@ export function calculateCacheHitRate(
 }
 
 /**
- * 检测是否需要显示缓存警告
- * @param usage API usage 数据
- * @param querySource 查询来源（用于独立跟踪状态）
- * @param threshold 缓存阈值百分比
- * @returns 警告信息，如果不需要警告则返回 null
+ * Detect whether a cache warning needs to be shown
+ * @param usage API usage data
+ * @param querySource query source (used to track state independently)
+ * @param threshold cache threshold percentage
+ * @returns warning info, or null if no warning is needed
  */
 export function shouldShowCacheWarning(
   usage: Usage | null | undefined,
@@ -86,12 +86,12 @@ export function shouldShowCacheWarning(
 ): CacheHitRateInfo | null {
   const hitRate = calculateCacheHitRate(usage)
 
-  // 无缓存数据
+  // No cache data
   if (hitRate === null) {
     return null
   }
 
-  // 获取或初始化该 querySource 的状态
+  // Get or initialize the state for this querySource
   let state = cacheWarningStateBySource.get(querySource)
   if (!state) {
     state = { lastHitRate: null, lastTimestamp: null }
@@ -105,21 +105,21 @@ export function shouldShowCacheWarning(
     cacheWarningStateBySource.set(querySource, state)
   }
 
-  // 首次请求不显示警告
+  // Do not show a warning for the first request
   if (state.lastHitRate === null) {
     state.lastHitRate = hitRate
     state.lastTimestamp = Date.now()
     return null
   }
 
-  // 计算趋势
+  // Compute the trend
   const trend = hitRate - state.lastHitRate
 
-  // 更新状态
+  // Update state
   state.lastHitRate = hitRate
   state.lastTimestamp = Date.now()
 
-  // 检查是否需要警告
+  // Check whether a warning is needed
   if (hitRate < threshold) {
     return { hitRate, threshold, trend, shouldWarn: true }
   }
@@ -128,9 +128,9 @@ export function shouldShowCacheWarning(
 }
 
 /**
- * 生成缓存警告消息
- * @param info 缓存警告信息
- * @returns system 类型消息，在 REPL 主界面和 transcript 模式下可见
+ * Generate the cache warning message
+ * @param info cache warning info
+ * @returns system-type message, visible in the REPL main screen and in transcript mode
  */
 export function createCacheWarningMessage(info: CacheHitRateInfo): Message {
   const { hitRate, threshold, trend } = info

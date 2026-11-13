@@ -1,2 +1,2 @@
-/** ExitPlanMode 工具在 API 中的注册名称字面量（与内置 ExitPlanMode 工具 `name` 一致）。 */
+/** Registered name literal of the ExitPlanMode tool in the API (matches the `name` of the built-in ExitPlanMode tool). */
 export type EXIT_PLAN_MODE_TOOL_NAME = 'ExitPlanMode'

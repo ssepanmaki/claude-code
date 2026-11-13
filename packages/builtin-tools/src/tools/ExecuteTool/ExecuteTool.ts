@@ -116,7 +116,7 @@ export const ExecuteTool = buildTool({
         },
         newMessages: [
           createUserMessage({
-            content: `工具 "${input.tool_name}" 当前不可用：Remote Control 未连接。`,
+            content: `Tool "${input.tool_name}" is currently unavailable: Remote Control is not connected.`,
           }),
         ],
       }

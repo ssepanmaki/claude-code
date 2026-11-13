@@ -26,7 +26,7 @@ export function setShellIfWindows(): void {
 /**
  * Dependencies for git-bash discovery. Exposed as a parameter so the
  * discovery logic can be unit-tested without `mock.module` polluting
- * other tests in the same process (see CLAUDE.md "跨文件 mock 污染").
+ * other tests in the same process (see CLAUDE.md "Cross-file mock pollution").
  */
 export type GitBashDiscoveryDeps = {
   /** Returns true iff the path exists on disk. */

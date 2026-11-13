@@ -4,7 +4,7 @@ import { cn } from '../../src/lib/utils';
 import { ToolPermissionButtons } from '../ai-elements/permission-request';
 
 // =============================================================================
-// 工具调用折叠组 — Anthropic: subtle card, left-border accent, compact layout
+// Tool call collapsible group — Anthropic: subtle card, left-border accent, compact layout
 // =============================================================================
 
 interface ToolCallGroupProps {
@@ -17,7 +17,7 @@ export function ToolCallGroup({ entries, onPermissionRespond }: ToolCallGroupPro
 
   if (entries.length === 0) return null;
 
-  // 单个工具调用 — 默认折叠，不展开内容详情
+  // Single tool call — collapsed by default, details not expanded
   if (entries.length === 1) {
     return (
       <div className="pl-10">
@@ -26,13 +26,13 @@ export function ToolCallGroup({ entries, onPermissionRespond }: ToolCallGroupPro
     );
   }
 
-  // 多个工具调用 — 折叠组
+  // Multiple tool calls — collapsible group
   const summary = buildSummary(entries);
 
   return (
     <div className="pl-10">
       <div className="rounded-lg border border-border bg-surface-2/50 overflow-hidden">
-        {/* 折叠头 */}
+        {/* Collapse header */}
         <button
           type="button"
           className="w-full flex items-center gap-2 px-3 py-2 text-sm text-text-secondary hover:bg-surface-1/50 transition-colors"
@@ -50,7 +50,7 @@ export function ToolCallGroup({ entries, onPermissionRespond }: ToolCallGroupPro
           <span className="text-xs text-text-muted font-display">{summary}</span>
         </button>
 
-        {/* 展开内容 */}
+        {/* Expanded content */}
         {expanded && (
           <div className="border-t border-border divide-y divide-border">
             {entries.map((entry, i) => (
@@ -69,7 +69,7 @@ export function ToolCallGroup({ entries, onPermissionRespond }: ToolCallGroupPro
 }
 
 // =============================================================================
-// 单个工具卡片 — compact, left-accent, inline status
+// Single tool card — compact, left-accent, inline status
 // =============================================================================
 
 interface SingleToolCardProps {
@@ -105,7 +105,7 @@ function SingleToolCard({ tool, compact, onPermissionRespond }: SingleToolCardPr
 
   return (
     <div className={cn('px-3 py-2', compact && 'py-1.5')}>
-      {/* 标题行 — 单行紧凑 */}
+      {/* Title row — single-line compact */}
       <button
         type="button"
         className="flex w-full items-center gap-1.5 text-left group"
@@ -118,7 +118,7 @@ function SingleToolCard({ tool, compact, onPermissionRespond }: SingleToolCardPr
         {tool.status === 'running' && <span className="text-[10px] text-status-running animate-pulse">running</span>}
       </button>
 
-      {/* 权限请求按钮 */}
+      {/* Permission request buttons */}
       {tool.status === 'waiting_for_confirmation' && tool.permissionRequest && (
         <div className="mt-1.5 ml-4">
           <ToolPermissionButtons
@@ -129,7 +129,7 @@ function SingleToolCard({ tool, compact, onPermissionRespond }: SingleToolCardPr
         </div>
       )}
 
-      {/* 展开详情 */}
+      {/* Expanded details */}
       {expanded && (
         <div className="mt-1.5 ml-4 space-y-1.5">
           {tool.rawInput && Object.keys(tool.rawInput).length > 0 && (
@@ -158,10 +158,10 @@ function SingleToolCard({ tool, compact, onPermissionRespond }: SingleToolCardPr
 }
 
 // =============================================================================
-// 工具函数
+// Utilities
 // =============================================================================
 
-/** 构建统计摘要 */
+/** Build the summary of counts */
 function buildSummary(entries: ToolCallEntry[]): string {
   const toolCounts = new Map<string, number>();
   for (const entry of entries) {
@@ -171,21 +171,21 @@ function buildSummary(entries: ToolCallEntry[]): string {
 
   const parts: string[] = [];
   for (const [name, count] of toolCounts) {
-    parts.push(count === 1 ? name : `${count} 次${name}`);
+    parts.push(count === 1 ? name : `${name} x${count}`);
   }
 
-  if (parts.length === 0) return `${entries.length} 个工具调用`;
+  if (parts.length === 0) return `${entries.length} tool calls`;
   if (parts.length === 1) return parts[0];
-  return `${entries.length} 个工具: ${parts.join('、')}`;
+  return `${entries.length} tools: ${parts.join(', ')}`;
 }
 
-/** 简化工具名称 */
+/** Simplify the tool name */
 function simplifyToolName(title: string): string {
   const match = title.match(/^(\w+)/);
   return match ? match[1] : title;
 }
 
-/** 格式化工具输出 */
+/** Format the tool output */
 function formatOutput(tool: ToolCallData): string {
   if (tool.content && tool.content.length > 0) {
     const texts = tool.content

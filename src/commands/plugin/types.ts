@@ -1,37 +1,37 @@
 import type { LocalJSXCommandOnDone } from 'src/types/command.js'
 
 /**
- * `/plugin` 根视图在子面板之间的导航状态。
- * 各分支对应不同子界面或从 CLI 参数解析出的初始路由。
+ * Navigation state of the `/plugin` root view between sub-panels.
+ * Each branch corresponds to a different sub-screen or an initial route parsed from CLI arguments.
  */
 export type ViewState =
-  | { type: 'menu' } // 返回插件功能总菜单
-  | { type: 'help' } // 展示帮助说明
-  | { type: 'validate'; path?: string } // 校验指定路径下的插件包
+  | { type: 'menu' } // return to the main plugin menu
+  | { type: 'help' } // show help
+  | { type: 'validate'; path?: string } // validate the plugin package at the given path
   | {
-      type: 'browse-marketplace' // 在指定市场中浏览/安装插件
-      targetMarketplace: string // 目标市场标识
-      targetPlugin?: string // 可选：预选插件名
+      type: 'browse-marketplace' // browse/install plugins in the given marketplace
+      targetMarketplace: string // target marketplace identifier
+      targetPlugin?: string // optional: preselected plugin name
     }
-  | { type: 'discover-plugins'; targetPlugin?: string } // 发现页；可预选搜索插件名
+  | { type: 'discover-plugins'; targetPlugin?: string } // discover page; may preselect a plugin name to search
   | {
-      type: 'manage-plugins' // 已安装插件管理（启用/禁用/卸载）
-      targetPlugin?: string // 可选：聚焦某插件
-      targetMarketplace?: string // 可选：与 targetPlugin 联用的市场
-      action?: 'uninstall' | 'enable' | 'disable' // 可选：打开时直接执行的操作
+      type: 'manage-plugins' // manage installed plugins (enable/disable/uninstall)
+      targetPlugin?: string // optional: focus a plugin
+      targetMarketplace?: string // optional: marketplace used together with targetPlugin
+      action?: 'uninstall' | 'enable' | 'disable' // optional: action to run directly on open
     }
-  | { type: 'marketplace-list' } // 列出已配置市场
-  | { type: 'marketplace-menu' } // 市场相关子菜单
-  | { type: 'add-marketplace'; initialValue?: string } // 添加市场；可预填 URL/名称
+  | { type: 'marketplace-list' } // list configured marketplaces
+  | { type: 'marketplace-menu' } // marketplace-related submenu
+  | { type: 'add-marketplace'; initialValue?: string } // add a marketplace; may prefill URL/name
   | {
-      type: 'manage-marketplaces' // 管理已保存的市场源
-      targetMarketplace?: string // 可选：聚焦某市场
-      action?: 'remove' | 'update' // 可选：移除或刷新该市场
+      type: 'manage-marketplaces' // manage saved marketplace sources
+      targetMarketplace?: string // optional: focus a marketplace
+      action?: 'remove' | 'update' // optional: remove or refresh the marketplace
     }
 
-/** `/plugin` Ink 命令入口的 props。 */
+/** Props of the `/plugin` Ink command entry. */
 export type PluginSettingsProps = {
-  onComplete: LocalJSXCommandOnDone // 子流程结束回调（可带结果文案与展示方式）
-  args?: string // CLI 透传的子命令参数字符串
-  showMcpRedirectMessage?: boolean // 从 `/mcp` 跳转时展示 MCP 相关提示
+  onComplete: LocalJSXCommandOnDone // callback when the sub-flow ends (may carry result text and display mode)
+  args?: string // CLI subcommand argument string passed through from the CLI
+  showMcpRedirectMessage?: boolean // show MCP-related hints when redirected from `/mcp`
 }

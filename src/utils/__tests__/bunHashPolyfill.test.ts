@@ -1,5 +1,5 @@
 /**
- * Tests for fix: 修复 Bun.hash 不存在的问题 (ecbd5a9)
+ * Tests for fix: Tests for fix: fix Bun.hash not existing (ecbd5a9)
  *
  * The Node.js polyfill in build.ts injects a FNV-1a hash implementation as
  * globalThis.Bun.hash so bundled output doesn't crash under plain Node.js.

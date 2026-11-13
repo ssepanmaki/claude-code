@@ -1,17 +1,17 @@
 /**
  * promptEngineeringAudit.test.ts
  *
- * 验证 prompts.ts 中从 Opus 4.7 官方 prompt 借鉴的提示词工程改进。
- * 对应审计文档: docs/features/opus-4.7-prompt-engineering-audit.md
+ * Verifies the prompt-engineering improvements in prompts.ts borrowed from the official Opus 4.7 prompt.
+ * Corresponding audit document: docs/features/opus-4.7-prompt-engineering-audit.md
  *
- * 测试策略: 通过 getSystemPrompt() 生成完整 system prompt，
- * 然后检查关键段落是否存在。大部分被测函数是 module-private，
- * 只能通过最终输出间接验证。
+ * Test strategy: generate the full system prompt via getSystemPrompt(),
+ * then check that the key passages exist. Most functions under test are module-private
+ * and can only be verified indirectly through the final output.
  */
 
 import { describe, test, expect, mock, beforeEach } from 'bun:test'
 
-// --- MACRO 全局注入 (编译时 define 在测试中不可用) ---
+// --- MACRO global injection (compile-time define is unavailable in tests) ---
 ;(globalThis as any).MACRO = {
   VERSION: '2.1.888',
   BUILD_TIME: '2026-04-22T00:00:00Z',
@@ -22,7 +22,7 @@ import { describe, test, expect, mock, beforeEach } from 'bun:test'
   VERSION_CHANGELOG: '',
 }
 
-// --- Mock 链 (阻断副作用) ---
+// --- Mock chain (blocks side effects) ---
 
 mock.module('src/bootstrap/state.js', () => ({
   getIsNonInteractiveSession: () => false,
@@ -106,7 +106,7 @@ mock.module('src/constants/systemPromptSections.js', () => ({
     sections.filter(s => s !== null),
 }))
 
-// 工具常量 mock
+// Tool constants mock
 const TOOL_NAMES = {
   Bash: 'Bash',
   Read: 'Read',
@@ -195,7 +195,7 @@ mock.module(
   () => ({ isReplModeEnabled: () => false }),
 )
 
-// --- 导入被测模块 ---
+// --- Import the module under test ---
 
 import {
   getSystemPrompt,
@@ -205,7 +205,7 @@ import {
 } from './prompts.js'
 import type { Tools } from '../Tool.js'
 
-// --- 辅助 ---
+// --- Helpers ---
 
 const standardTools: Tools = [
   { name: 'Bash' },
@@ -228,14 +228,14 @@ async function getFullPrompt(
 }
 
 // =====================================================================
-// 第一部分: 提示词工程技巧验证
-// 对应审计文档 第一部分 #1-#10
+// Part 1: prompt-engineering technique verification
+// Corresponds to audit document Part 1 #1-#10
 // =====================================================================
 
 describe('Opus 4.7 Prompt Engineering Audit', () => {
   // ------------------------------------------------------------------
-  // #1 决策树结构 (Decision Tree)
-  // TXT 来源: {request_evaluation_checklist} — Step 0→1→2→3
+  // #1 Decision Tree structure
+  // TXT source: {request_evaluation_checklist} — Step 0→1→2→3
   // ------------------------------------------------------------------
   describe('#1 Decision tree for tool selection', () => {
     test('prompt contains tool selection guidance via dedicated tools', async () => {
@@ -264,8 +264,8 @@ describe('Opus 4.7 Prompt Engineering Audit', () => {
   })
 
   // ------------------------------------------------------------------
-  // #2 反模式先行 (Anti-Pattern First)
-  // TXT 来源: {unnecessary_computer_use_avoidance}, {artifact_usage_criteria}
+  // #2 Anti-Pattern First
+  // TXT source: {unnecessary_computer_use_avoidance}, {artifact_usage_criteria}
   // ------------------------------------------------------------------
   describe('#2 Anti-pattern guidance (when NOT to use tools)', () => {
     test('prompt says when NOT to use tools', async () => {
@@ -302,8 +302,8 @@ describe('Opus 4.7 Prompt Engineering Audit', () => {
   })
 
   // ------------------------------------------------------------------
-  // #6 渐进式回退链 (Progressive Fallback Chain)
-  // TXT 来源: {core_search_behaviors}, {past_chats_tools}
+  // #6 Progressive Fallback Chain
+  // TXT source: {core_search_behaviors}, {past_chats_tools}
   // ------------------------------------------------------------------
   describe('#6 Progressive fallback chain', () => {
     test('prompt encourages searching before asking user', async () => {
@@ -329,8 +329,8 @@ describe('Opus 4.7 Prompt Engineering Audit', () => {
   })
 
   // ------------------------------------------------------------------
-  // #3 Few-Shot 场景示例 (Few-Shot Examples)
-  // TXT 来源: {examples}, {visualizer_examples}, {past_chats_tools}
+  // #3 Few-Shot Examples
+  // TXT source: {examples}, {visualizer_examples}, {past_chats_tools}
   // ------------------------------------------------------------------
   describe('#3 Few-shot examples', () => {
     test('contains concrete tool preference examples', async () => {
@@ -364,8 +364,8 @@ describe('Opus 4.7 Prompt Engineering Audit', () => {
   })
 
   // ------------------------------------------------------------------
-  // #4 语言信号识别 (Linguistic Signal Detection)
-  // TXT 来源: {past_chats_tools}, {file_creation_advice}
+  // #4 Linguistic Signal Detection
+  // TXT source: {past_chats_tools}, {file_creation_advice}
   // ------------------------------------------------------------------
   describe('#4 Linguistic signal detection', () => {
     test('file creation signals teach when to create vs inline', async () => {
@@ -388,8 +388,8 @@ describe('Opus 4.7 Prompt Engineering Audit', () => {
   })
 
   // ------------------------------------------------------------------
-  // #5 成本不对称分析 (Asymmetric Cost Analysis)
-  // TXT 来源: {tool_discovery} "treat tool_search as essentially free"
+  // #5 Asymmetric Cost Analysis
+  // TXT source: {tool_discovery} "treat tool_search as essentially free"
   // ------------------------------------------------------------------
   describe('#5 Cost asymmetry framing', () => {
     test('prompt has cost asymmetry for actions (existing)', async () => {
@@ -413,8 +413,8 @@ describe('Opus 4.7 Prompt Engineering Audit', () => {
   })
 
   // ------------------------------------------------------------------
-  // #7 反过度解释 (Anti-Over-Explanation)
-  // TXT 来源: {sharing_files}, {request_evaluation_checklist}
+  // #7 Anti-Over-Explanation
+  // TXT source: {sharing_files}, {request_evaluation_checklist}
   // ------------------------------------------------------------------
   describe('#7 Anti-over-explanation', () => {
     test('prompt contains no-machinery-narration rule (existing)', async () => {
@@ -435,8 +435,8 @@ describe('Opus 4.7 Prompt Engineering Audit', () => {
   })
 
   // ------------------------------------------------------------------
-  // #8 查询构造教学 (Query Construction Teaching)
-  // TXT 来源: {search_usage_guidelines}, {past_chats_tools}
+  // #8 Query Construction Teaching
+  // TXT source: {search_usage_guidelines}, {past_chats_tools}
   // ------------------------------------------------------------------
   describe('#8 Query construction guidance', () => {
     test('Grep is mentioned as a search tool', async () => {
@@ -461,8 +461,8 @@ describe('Opus 4.7 Prompt Engineering Audit', () => {
   })
 
   // ------------------------------------------------------------------
-  // #9 Prompt 注入防御 (Prompt Injection Defense)
-  // TXT 来源: {anthropic_reminders}, {request_evaluation_checklist}
+  // #9 Prompt Injection Defense
+  // TXT source: {anthropic_reminders}, {request_evaluation_checklist}
   // ------------------------------------------------------------------
   describe('#9 Prompt injection defense', () => {
     test('prompt warns about prompt injection in tool results (existing)', async () => {
@@ -477,17 +477,17 @@ describe('Opus 4.7 Prompt Engineering Audit', () => {
   })
 
   // =====================================================================
-  // 第二部分: 行为规则验证
-  // 对应审计文档 第二部分 #11-#18
+  // Part 2: behavior rule verification
+  // Corresponds to audit document Part 2 #11-#18
   // =====================================================================
 
   // ------------------------------------------------------------------
-  // #11 格式化纪律 (Formatting Discipline)
-  // TXT 来源: {lists_and_bullets}
+  // #11 Formatting Discipline
+  // TXT source: {lists_and_bullets}
   // ------------------------------------------------------------------
   // ------------------------------------------------------------------
-  // #10 分步搜索策略 (Multi-Step Search Strategy)
-  // TXT 来源: {tool_discovery}, {core_search_behaviors}
+  // #10 Multi-Step Search Strategy
+  // TXT source: {tool_discovery}, {core_search_behaviors}
   // ------------------------------------------------------------------
   describe('#10 Multi-step search strategy', () => {
     test('encourages searching before concluding', async () => {
@@ -521,8 +521,8 @@ describe('Opus 4.7 Prompt Engineering Audit', () => {
   })
 
   // ------------------------------------------------------------------
-  // #22 先搜再说不知道 (Search Before Saying Unknown)
-  // TXT 来源: {tool_discovery}
+  // #22 Search Before Saying Unknown
+  // TXT source: {tool_discovery}
   // ------------------------------------------------------------------
   describe('#22 Search before saying unknown', () => {
     test('instructs to search before claiming something does not exist', async () => {
@@ -537,8 +537,8 @@ describe('Opus 4.7 Prompt Engineering Audit', () => {
   })
 
   // ------------------------------------------------------------------
-  // #12 温暖语气 (Warm Tone)
-  // TXT 来源: {tone_and_formatting}
+  // #12 Warm Tone
+  // TXT source: {tone_and_formatting}
   // ------------------------------------------------------------------
   describe('#12 Warm tone', () => {
     test('avoids negative assumptions about user abilities', async () => {
@@ -553,8 +553,8 @@ describe('Opus 4.7 Prompt Engineering Audit', () => {
   })
 
   // ------------------------------------------------------------------
-  // #20 风险感知时说得更少 (Say Less When Risky)
-  // TXT 来源: {refusal_handling}
+  // #20 Say Less When Risky
+  // TXT source: {refusal_handling}
   // ------------------------------------------------------------------
   describe('#20 Say less when risky', () => {
     test('security-sensitive code should say less about details', async () => {
@@ -564,8 +564,8 @@ describe('Opus 4.7 Prompt Engineering Audit', () => {
   })
 
   // ------------------------------------------------------------------
-  // #23 不解释为什么搜索 (Don't Justify Search)
-  // TXT 来源: {search_usage_guidelines}
+  // #23 Don't Justify Search
+  // TXT source: {search_usage_guidelines}
   // ------------------------------------------------------------------
   describe("#23 Don't justify search", () => {
     test('instructs not to justify why searching', async () => {
@@ -575,8 +575,8 @@ describe('Opus 4.7 Prompt Engineering Audit', () => {
   })
 
   // ------------------------------------------------------------------
-  // #13 产品线信息 (Product Information)
-  // TXT 来源: {product_information}
+  // #13 Product Information
+  // TXT source: {product_information}
   // ------------------------------------------------------------------
   describe('#13 Product information', () => {
     test('env info contains Claude Code product description', async () => {
@@ -606,8 +606,8 @@ describe('Opus 4.7 Prompt Engineering Audit', () => {
   })
 
   // ------------------------------------------------------------------
-  // #15 对话结束尊重 (Conversation End Respect)
-  // TXT 来源: {refusal_handling} line 51
+  // #15 Conversation End Respect
+  // TXT source: {refusal_handling} line 51
   // ------------------------------------------------------------------
   describe('#15 Conversation end respect', () => {
     test('discourages "anything else?" appendages', async () => {
@@ -618,8 +618,8 @@ describe('Opus 4.7 Prompt Engineering Audit', () => {
   })
 
   // ------------------------------------------------------------------
-  // #16 每回复最多一个问题 (One Question Per Response)
-  // TXT 来源: {tone_and_formatting} line 71
+  // #16 One Question Per Response
+  // TXT source: {tone_and_formatting} line 71
   // ------------------------------------------------------------------
   describe('#16 One question per response', () => {
     test('limits questions per response', async () => {
@@ -629,8 +629,8 @@ describe('Opus 4.7 Prompt Engineering Audit', () => {
   })
 
   // =====================================================================
-  // 第三部分: 已存在功能的回归测试
-  // 确保现有的从 TXT 对齐的锚点不被破坏
+  // Part 3: regression tests for existing features
+  // Ensure the existing anchors aligned from the TXT are not broken
   // =====================================================================
 
   describe('Existing behavioral anchors (regression)', () => {
@@ -674,7 +674,7 @@ describe('Opus 4.7 Prompt Engineering Audit', () => {
 
     test('CYBER_RISK_INSTRUCTION: allows security testing', async () => {
       const prompt = await getFullPrompt()
-      // TS 允许安全测试 (TXT 完全禁止 — 这是有意的差异)
+      // TS allows security testing (TXT forbids it entirely — this is an intentional difference)
       expect(prompt).not.toContain(
         'does not write or explain or work on malicious code',
       )
@@ -682,7 +682,7 @@ describe('Opus 4.7 Prompt Engineering Audit', () => {
   })
 
   // =====================================================================
-  // 第四部分: prependBullets 工具函数
+  // Part 4: prependBullets helper function
   // =====================================================================
 
   describe('prependBullets utility', () => {
@@ -702,7 +702,7 @@ describe('Opus 4.7 Prompt Engineering Audit', () => {
   })
 
   // =====================================================================
-  // 第五部分: 环境信息与模型 cutoff
+  // Part 5: environment info and model cutoff
   // =====================================================================
 
   describe('Knowledge cutoff correctness', () => {

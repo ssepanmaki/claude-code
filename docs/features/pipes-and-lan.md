@@ -1,157 +1,157 @@
-# Pipes + LAN Pipes 完整功能指南
+# Pipes + LAN Pipes: Complete Feature Guide
 
-## 概述
+## Overview
 
-Pipes 系统提供 Claude Code CLI 实例之间的通讯能力，分两层：
+The Pipes system provides communication between Claude Code CLI instances, in two layers:
 
-1. **Pipes（本机）**：同一台机器上的多个 CLI 实例通过 UDS（Unix Domain Socket / Windows Named Pipe）协作
-2. **LAN Pipes（局域网）**：不同机器上的 CLI 实例通过 TCP + UDP Multicast 协作
+1. **Pipes (same machine)**: multiple CLI instances on one machine cooperate over UDS (Unix Domain Socket / Windows Named Pipe).
+2. **LAN Pipes (local network)**: CLI instances on different machines cooperate over TCP + UDP multicast.
 
-两层使用同一套协议（NDJSON）和同一套命令（`/pipes`、`/attach`、`/send` 等），对用户透明。
+Both layers use the same protocol (NDJSON) and the same commands (`/pipes`, `/attach`, `/send`, and so on), so the difference is transparent to the user.
 
 ## Feature Flags
 
-| Flag | 控制范围 | 默认 |
+| Flag | Scope | Default |
 |------|----------|------|
-| `UDS_INBOX` | 本机 Pipe IPC 全部功能 | dev/build 启用 |
-| `LAN_PIPES` | 局域网 TCP + beacon 扩展 | dev/build 启用 |
+| `UDS_INBOX` | All same-machine Pipe IPC features | enabled in dev/build |
+| `LAN_PIPES` | LAN TCP + beacon extensions | enabled in dev/build |
 
-手动启用：`FEATURE_UDS_INBOX=1 FEATURE_LAN_PIPES=1 bun run dev`
+Enable manually: `FEATURE_UDS_INBOX=1 FEATURE_LAN_PIPES=1 bun run dev`
 
-## 快速上手
+## Quick start
 
-### 本机多实例
-
-```bash
-# 终端 1
-bun run dev
-# 启动后自动注册为 main
-
-# 终端 2
-bun run dev
-# 自动注册为 sub-1，被 main 自动 attach
-```
-
-在终端 1 中输入 `/pipes`，可以看到两个实例。选中 sub-1 后，输入的消息会自动转发到 sub-1 执行。
-
-### 局域网多机器
+### Multiple instances on one machine
 
 ```bash
-# 机器 A (192.168.50.22)
+# Terminal 1
+bun run dev
+# registers itself as main on startup
+
+# Terminal 2
+bun run dev
+# registers itself as sub-1 and is attached automatically by main
+```
+
+Type `/pipes` in terminal 1 to see both instances. After selecting sub-1, messages you type are forwarded to sub-1 for execution.
+
+### Multiple machines on a LAN
+
+```bash
+# Machine A (192.168.50.22)
 bun run dev
 
-# 机器 B (192.168.50.27)
+# Machine B (192.168.50.27)
 bun run dev
 ```
 
-两边启动后等 3-5 秒（beacon 广播间隔），LAN peers 会自动发现并 attach。输入 `/pipes` 可看到标记 `[LAN]` 的远端实例。
+After both sides start, wait 3-5 seconds (the beacon broadcast interval). LAN peers are discovered and attached automatically. Type `/pipes` to see remote instances marked `[LAN]`.
 
-### 防火墙配置（两台机器都需要）
+### Firewall configuration (needed on both machines)
 
-**Windows**（管理员 PowerShell）：
+**Windows** (administrator PowerShell):
 ```powershell
 New-NetFirewallRule -DisplayName "Claude Code LAN Beacon (UDP)" -Direction Inbound -Protocol UDP -LocalPort 7101 -Action Allow -Profile Private
 New-NetFirewallRule -DisplayName "Claude Code LAN Pipes (TCP)" -Direction Inbound -Protocol TCP -LocalPort 1024-65535 -Program (Get-Command bun).Source -Action Allow -Profile Private
 New-NetFirewallRule -DisplayName "Claude Code LAN Beacon Out (UDP)" -Direction Outbound -Protocol UDP -RemotePort 7101 -Action Allow -Profile Private
-# 确认网络为"专用"：Get-NetConnectionProfile
+# Confirm the network is "Private": Get-NetConnectionProfile
 ```
 
-**macOS**（首次运行时系统弹出对话框，点击"允许"即可）：
+**macOS** (the system shows a dialog on first run; click "Allow"):
 ```bash
-# 如果需要手动放行 pf 防火墙：
+# If you need to open the pf firewall manually:
 echo "pass in proto udp from any to any port 7101" | sudo pfctl -ef -
 ```
 
-**Linux**（firewalld / iptables）：
+**Linux** (firewalld / iptables):
 ```bash
 # firewalld
 sudo firewall-cmd --zone=trusted --add-port=7101/udp --permanent
 sudo firewall-cmd --zone=trusted --add-port=1024-65535/tcp --permanent
 sudo firewall-cmd --reload
 
-# 或 iptables
+# or iptables
 sudo iptables -A INPUT -p udp --dport 7101 -j ACCEPT
 sudo iptables -A INPUT -p tcp --dport 1024:65535 -m owner --uid-owner $(id -u) -j ACCEPT
 ```
 
-确认：网络为局域网（非公共 WiFi），路由器未开启 AP 隔离。
+Confirm that the network is a LAN (not public WiFi) and that the router does not have AP isolation turned on.
 
-## 交互面板与快捷键
+## Interactive panel and shortcuts
 
-### 状态栏
+### Status bar
 
-执行 `/pipes` 后，输入框底部出现 pipe 状态栏（单行）：
+After you run `/pipes`, a single-line pipe status bar appears at the bottom of the input box:
 
 ```
 pipe: cli-a91bad56 (main) 192.168.50.22  2/3 selected  selected pipes only · ←/→ or m switch · Shift+↓ edit
 ```
 
-状态栏始终可见（直到会话结束），显示：当前 pipe 名、角色、IP、已选数/总数、路由模式。
+The status bar stays visible until the session ends. It shows the current pipe name, role, IP, selected/total count, and routing mode.
 
-### 展开选择面板
+### Expanding the selection panel
 
-按 **Shift+↓**（Shift + 下箭头）展开选择面板：
+Press **Shift+↓** (Shift + Down arrow) to expand the selection panel:
 
 ```
 pipe: cli-a91bad56 (main) 192.168.50.22  ↑↓ move Space select ←/→ or m route Enter/Esc close Shift+↓ toggle
-  当前普通 prompt 走 已选 sub；切换不会清空选择
+  Ordinary prompts now go to the selected subs; switching does not clear the selection
   ☑ cli-da029538 (sub-1 XC/192.168.50.22)
   ☐ cli-04d67950 (main vmwin11/192.168.50.27)
   ☑ cli-893747d3 [offline] (sub-2 vmwin11/192.168.50.27)
 ```
 
-### 面板内快捷键
+### Shortcuts in the panel
 
-| 快捷键 | 场景 | 作用 |
+| Shortcut | When | Action |
 |--------|------|------|
-| **Shift+↓** | 状态栏可见时 | 展开/收起选择面板 |
-| **↑ / ↓** | 面板展开时 | 上下移动光标 |
-| **Space** | 面板展开时 | 切换当前光标所在 pipe 的选中状态（☑ ↔ ☐） |
-| **Enter** | 面板展开时 | 确认并关闭面板 |
-| **Esc** | 面板展开时 | 取消并关闭面板 |
-| **← / → 或 M** | 状态栏可见且有选中 pipe 时 | 切换路由模式（`selected pipes only` ↔ `local main`） |
+| **Shift+↓** | Status bar visible | Expand/collapse the selection panel |
+| **↑ / ↓** | Panel expanded | Move the cursor up and down |
+| **Space** | Panel expanded | Toggle the selection of the pipe under the cursor (☑ ↔ ☐) |
+| **Enter** | Panel expanded | Confirm and close the panel |
+| **Esc** | Panel expanded | Cancel and close the panel |
+| **← / → or M** | Status bar visible and a pipe is selected | Switch the routing mode (`selected pipes only` ↔ `local main`) |
 
-### M 键 — 路由模式切换
+### The M key: switching routing mode
 
-M 键（或 ← / →）用于在两种路由模式之间切换，**无需展开面板**：
+The M key (or ← / →) switches between two routing modes, **without expanding the panel**:
 
-| 模式 | 状态栏显示 | 行为 |
+| Mode | Status bar display | Behavior |
 |------|-----------|------|
-| `selected pipes only` | 绿色高亮 | 输入的 prompt **仅**发送到选中的 pipe，本地不执行 |
-| `local main` | 灰色 | 输入的 prompt 在**本地 main** 执行，不转发到任何 pipe |
+| `selected pipes only` | Highlighted green | The prompt you type is sent **only** to the selected pipes and is not run locally |
+| `local main` | Gray | The prompt you type runs on the **local main** and is not forwarded to any pipe |
 
-切换路由模式**不会清空选择**。你可以在 `local main` 模式下保持选择，随时按 M 切回 `selected pipes only` 继续向远端发送。
+Switching the routing mode **does not clear the selection**. You can keep the selection while in `local main` mode and press M at any time to switch back to `selected pipes only` and continue sending to the remote.
 
-### 完整操作流程示例
+### Example of a complete workflow
 
 ```
-1. 输入 /pipes                     → 状态栏出现，显示发现的实例
-2. 按 Shift+↓                      → 展开选择面板
-3. 按 ↓ 移动到目标 pipe             → 光标移到 cli-04d67950
-4. 按 Space                        → 选中 ☑ cli-04d67950
-5. 按 Enter                        → 确认，面板收起
-6. 输入 "帮我检查 git status"       → prompt 自动发送到 cli-04d67950 执行
-7. 按 M                            → 切换到 local main 模式
-8. 输入 "本地做点什么"              → 仅在本地执行
-9. 按 M                            → 切回 selected pipes only
-10. 输入 "继续远端任务"             → 又发送到 cli-04d67950
+1. Type /pipes                       → the status bar appears, showing discovered instances
+2. Press Shift+↓                     → expand the selection panel
+3. Press ↓ to move to the target     → the cursor moves to cli-04d67950
+4. Press Space                       → selects ☑ cli-04d67950
+5. Press Enter                       → confirm; the panel collapses
+6. Type "check git status for me"    → the prompt is sent to cli-04d67950 automatically
+7. Press M                           → switch to local main mode
+8. Type "do something locally"       → runs locally only
+9. Press M                           → switch back to selected pipes only
+10. Type "continue the remote task"  → sent to cli-04d67950 again
 ```
 
-## 命令参考
+## Command reference
 
 ### /pipes
 
-显示所有发现的实例，管理选择状态。再次执行 `/pipes` 切换面板展开/收起。
+Shows all discovered instances and manages the selection state. Running `/pipes` again toggles the panel open or closed.
 
 ```
-/pipes                    — 显示所有实例 + 切换选择面板
-/pipes select &lt;name&gt;      — 选中某实例（消息会广播到它）
-/pipes deselect &lt;name&gt;    — 取消选中
-/pipes all                — 全选
-/pipes none               — 全部取消
+/pipes                    — show all instances + toggle the selection panel
+/pipes select &lt;name&gt;      — select an instance (messages are broadcast to it)
+/pipes deselect &lt;name&gt;    — deselect it
+/pipes all                — select all
+/pipes none               — deselect all
 ```
 
-输出示例：
+Example output:
 ```
 Your pipe:   cli-a91bad56
 Role:        main
@@ -171,17 +171,17 @@ Selected: cli-da029538
 
 ### /attach &lt;name&gt;
 
-手动 attach 到一个实例，使其成为你的 slave。
+Manually attaches to an instance, making it your slave.
 
 ```
-/attach cli-04d67950      — 连接到指定 pipe（自动解析 LAN TCP 端点）
+/attach cli-04d67950      — connect to the given pipe (the LAN TCP endpoint is resolved automatically)
 ```
 
-attach 后，对方变为 slave，你变为 master。可以向它发送 prompt。通常不需要手动 attach——heartbeat 会自动发现并连接。
+After attaching, the other side becomes a slave and you become the master. You can send prompts to it. You usually do not need to attach manually, since the heartbeat discovers and connects automatically.
 
 ### /detach &lt;name&gt;
 
-断开与某个 slave 的连接。
+Disconnects from a slave.
 
 ```
 /detach cli-04d67950
@@ -189,65 +189,65 @@ attach 后，对方变为 slave，你变为 master。可以向它发送 prompt�
 
 ### /send &lt;name&gt; &lt;message&gt;
 
-向指定 pipe 发送消息（不依赖选择状态，直接指定目标）。
+Sends a message to a specific pipe (independent of the selection state; the target is given directly).
 
 ```
-/send cli-04d67950 请帮我检查一下日志
-/send tcp:192.168.50.27:58853 hello    — 直接通过 TCP 地址发送
+/send cli-04d67950 please check the logs for me
+/send tcp:192.168.50.27:58853 hello    — send directly to a TCP address
 ```
 
 ### /claim-main
 
-强制声明当前机器为 main（用于 main 意外退出后的恢复）。
+Forcibly declares the current machine as main (used to recover after main exits unexpectedly).
 
-## 消息路由
+## Message routing
 
-### 选中 pipe 后的自动路由
+### Automatic routing after selecting pipes
 
-1. 通过 `/pipes select` 或 Shift+Down 面板选中一个或多个 pipe
-2. 在输入框中正常输入消息
-3. 消息自动发送到所有选中的已连接 pipe
-4. 每个 pipe 独立执行，结果流式回传到 main 的消息列表
+1. Select one or more pipes with `/pipes select` or the Shift+Down panel.
+2. Type messages in the input box as usual.
+3. The message is sent automatically to all selected, connected pipes.
+4. Each pipe executes independently, and results stream back into main's message list.
 
-### 路由模式
+### Routing modes
 
-| 模式 | 行为 |
+| Mode | Behavior |
 |------|------|
-| `selected`（默认） | 消息发送到选中的 pipe |
-| `local` | 消息仅在本地执行，不转发 |
+| `selected` (default) | The message is sent to the selected pipes |
+| `local` | The message runs locally only and is not forwarded |
 
-## 架构
+## Architecture
 
-### 通信协议
+### Communication protocol
 
-所有通讯使用 NDJSON（Newline-Delimited JSON），每行一个消息：
+All communication uses NDJSON (Newline-Delimited JSON), one message per line:
 
 ```json
 {"type":"ping","from":"cli-abc","ts":"2026-04-11T00:00:00.000Z"}
-{"type":"prompt","data":"帮我查看 git status","from":"cli-abc","ts":"..."}
-{"type":"stream","data":"正在执行...","from":"cli-def","ts":"..."}
+{"type":"prompt","data":"check git status for me","from":"cli-abc","ts":"..."}
+{"type":"stream","data":"Running...","from":"cli-def","ts":"..."}
 {"type":"done","data":"","from":"cli-def","ts":"..."}
 ```
 
-### 消息类型
+### Message types
 
-| 类型 | 方向 | 说明 |
+| Type | Direction | Description |
 |------|------|------|
-| `ping`/`pong` | 双向 | 健康检查 |
-| `attach_request`/`accept`/`reject` | M→S/S→M | 连接控制 |
-| `detach` | M→S | 断开连接 |
-| `prompt` | M→S | 主向从发送 prompt |
-| `prompt_ack` | S→M | 从确认接收 |
-| `stream` | S→M | 从流式回传 AI 输出 |
-| `tool_start`/`tool_result` | S→M | 工具执行通知 |
-| `done` | S→M | 本轮完成 |
-| `error` | 双向 | 错误通知 |
-| `permission_request`/`response`/`cancel` | 双向 | 权限审批转发 |
+| `ping`/`pong` | Both | Health check |
+| `attach_request`/`accept`/`reject` | M→S/S→M | Connection control |
+| `detach` | M→S | Disconnect |
+| `prompt` | M→S | Master sends a prompt to a slave |
+| `prompt_ack` | S→M | Slave acknowledges receipt |
+| `stream` | S→M | Slave streams AI output back |
+| `tool_start`/`tool_result` | S→M | Tool execution notifications |
+| `done` | S→M | The turn is complete |
+| `error` | Both | Error notification |
+| `permission_request`/`response`/`cancel` | Both | Permission approval forwarding |
 
-### 传输层
+### Transport layer
 
 ```
-                  本机                          LAN
+                  Local                         LAN
             ┌──────────────┐            ┌──────────────┐
             │  PipeServer  │            │  PipeServer  │
             │   UDS sock   │            │   UDS sock   │
@@ -258,85 +258,85 @@ attach 后，对方变为 slave，你变为 master。可以向它发送 prompt�
             └──────────────┘            └──────────────┘
 ```
 
-- **UDS**：本机实例间通讯，通过文件系统路径寻址（`~/.claude/pipes/cli-xxx.sock`）
-- **TCP**：LAN 实例间通讯，动态端口，通过 beacon 发现
-- **UDP Multicast**：peer 发现，3 秒广播一次 announce 包
+- **UDS**: communication between instances on the same machine, addressed by file system path (`~/.claude/pipes/cli-xxx.sock`).
+- **TCP**: communication between LAN instances, on a dynamic port, discovered through the beacon.
+- **UDP multicast**: peer discovery, with an announce packet broadcast every 3 seconds.
 
-### 角色模型
+### Role model
 
-| 角色 | 说明 |
+| Role | Description |
 |------|------|
-| `main` | 首个启动的实例，管理 registry |
-| `sub` | 后续启动的同机实例（或被 attach 的 LAN 实例） |
-| `master` | attach 了至少一个 slave 的实例 |
-| `slave` | 被 master attach 控制的实例 |
+| `main` | The first instance started; manages the registry |
+| `sub` | An instance started later on the same machine (or a LAN instance that was attached) |
+| `master` | An instance that has attached at least one slave |
+| `slave` | An instance attached and controlled by a master |
 
-角色转换：
-- 首个启动 → `main`
-- 同机后续启动 → `sub`（自动被 main attach → `slave`）
-- LAN 发现 → 两边都是 `main`，heartbeat 自动互相 attach
-- 被 attach → 变为 `slave`（可通过 `/detach` 恢复）
+Role transitions:
+- First to start → `main`
+- Later start on the same machine → `sub` (attached automatically by main → `slave`)
+- LAN discovery → both sides are `main`, and the heartbeat attaches them to each other automatically
+- When attached → becomes `slave` (can be restored with `/detach`)
 
-### 发现机制
+### Discovery mechanism
 
-**本机**：通过 `~/.claude/pipes/registry.json` 文件（带文件锁），`machineId` 绑定主机身份。
+**Same machine**: through the `~/.claude/pipes/registry.json` file (with a file lock), with `machineId` bound to the host identity.
 
-**LAN**：通过 UDP multicast beacon：
-1. 每 3 秒广播 `{ proto, pipeName, machineId, ip, tcpPort, role }`
-2. 收到其他实例的 announce → 记入 peers Map
-3. 15 秒未收到 → 标记 peer lost
-4. Heartbeat 合并 local registry + beacon peers → 统一 attach 目标列表
+**LAN**: through a UDP multicast beacon:
+1. Every 3 seconds it broadcasts `{ proto, pipeName, machineId, ip, tcpPort, role }`.
+2. On receiving another instance's announce, it records it in the peers Map.
+3. If nothing is received for 15 seconds, the peer is marked lost.
+4. The heartbeat merges the local registry and the beacon peers into one attach-target list.
 
-### Heartbeat 循环（5 秒间隔）
+### Heartbeat loop (5-second interval)
 
 ```
-main/master 角色:
-  1. cleanupStaleEntries()        — 清理 registry 中死掉的条目
-  2. getAliveSubs()               — 获取存活的本地 subs
-  3. refreshDiscoveredPipes()     — 刷新 discoveredPipes（包含 LAN peers）
-  4. 合并 LAN peers 到 state
-  5. 构建统一 attach 目标列表     — 本地 subs + LAN peers
-  6. 遍历未连接的目标 → 自动 attach
-  7. 清理断开的 slave 连接        — 同时检查 local registry 和 beacon
+main/master role:
+  1. cleanupStaleEntries()        — remove dead entries from the registry
+  2. getAliveSubs()               — get the live local subs
+  3. refreshDiscoveredPipes()     — refresh discoveredPipes (including LAN peers)
+  4. merge LAN peers into state
+  5. build the unified attach-target list     — local subs + LAN peers
+  6. iterate over unconnected targets → attach automatically
+  7. clean up disconnected slave connections  — checks both the local registry and the beacon
 
-sub 角色:
-  1. 检测 main 是否存活
-  2. main 死亡 → 同机则接管 main 角色，跨机则独立
+sub role:
+  1. check whether main is alive
+  2. main is dead → on the same machine, take over the main role; across machines, run independently
 ```
 
-## 关键文件
+## Key files
 
-| 文件 | 职责 |
+| File | Responsibility |
 |------|------|
-| `src/utils/pipeTransport.ts` | PipeServer（双模 UDS+TCP）、PipeClient、类型定义 |
-| `src/utils/lanBeacon.ts` | UDP multicast beacon、singleton 管理 |
-| `src/utils/pipeRegistry.ts` | Registry CRUD、角色判定、machineId、LAN merge |
-| `src/utils/peerAddress.ts` | 地址解析（uds:/bridge:/tcp: scheme） |
-| `src/screens/REPL.tsx` | Bootstrap、heartbeat、cleanup、prompt 路由 |
-| `src/hooks/useMasterMonitor.ts` | Slave client registry、消息订阅 |
-| `src/hooks/useSlaveNotifications.ts` | Slave 端通知处理 |
-| `src/commands/pipes/pipes.ts` | /pipes 命令 |
-| `src/commands/attach/attach.ts` | /attach 命令 |
-| `src/commands/send/send.ts` | /send 命令 |
-| `packages/builtin-tools/src/tools/SendMessageTool/SendMessageTool.ts` | AI 发消息工具（含 tcp: 支持） |
+| `src/utils/pipeTransport.ts` | PipeServer (dual-mode UDS+TCP), PipeClient, type definitions |
+| `src/utils/lanBeacon.ts` | UDP multicast beacon, singleton management |
+| `src/utils/pipeRegistry.ts` | Registry CRUD, role determination, machineId, LAN merge |
+| `src/utils/peerAddress.ts` | Address parsing (uds:/bridge:/tcp: schemes) |
+| `src/screens/REPL.tsx` | Bootstrap, heartbeat, cleanup, prompt routing |
+| `src/hooks/useMasterMonitor.ts` | Slave client registry, message subscription |
+| `src/hooks/useSlaveNotifications.ts` | Slave-side notification handling |
+| `src/commands/pipes/pipes.ts` | The /pipes command |
+| `src/commands/attach/attach.ts` | The /attach command |
+| `src/commands/send/send.ts` | The /send command |
+| `packages/builtin-tools/src/tools/SendMessageTool/SendMessageTool.ts` | The AI message-sending tool (includes tcp: support) |
 
-## 后续优化方向
+## Future improvements
 
-### 安全（P0）
+### Security (P0)
 
-1. **TCP 认证**：首次连接时交换 HMAC-SHA256 token（基于 machineId + session secret），防止未授权设备连接
-2. **JSON schema 验证**：在所有 `JSON.parse` 入口点增加 Zod 校验，防止 prototype pollution
-3. **Beacon 信息脱敏**：hash machineId 后再广播，不暴露硬件序列号
+1. **TCP authentication**: exchange an HMAC-SHA256 token (based on machineId + a session secret) on first connection to keep unauthorized devices from connecting.
+2. **JSON schema validation**: add Zod validation at every `JSON.parse` entry point to prevent prototype pollution.
+3. **Beacon info scrubbing**: hash the machineId before broadcasting so hardware serial numbers are not exposed.
 
-### 可靠性（P1）
+### Reliability (P1)
 
-4. **多网卡选择**：`getLocalIp()` 应优先选择 RFC 1918 地址，排除 VPN/Docker 接口
-5. **TCP target 验证**：`parseTcpTarget()` 应限制目标为已知 beacon peers 或 RFC 1918 范围
-6. **PipeServer close()**：改为 `Promise.allSettled` 并行关闭 UDS + TCP，加 `_closing` guard
+4. **Multi-NIC selection**: `getLocalIp()` should prefer RFC 1918 addresses and exclude VPN/Docker interfaces.
+5. **TCP target validation**: `parseTcpTarget()` should restrict targets to known beacon peers or the RFC 1918 range.
+6. **PipeServer close()**: switch to `Promise.allSettled` to close UDS + TCP in parallel, with a `_closing` guard.
 
-### 功能（P2）
+### Features (P2)
 
-7. **mDNS/DNS-SD**：作为 multicast 受限环境下的 beacon 替代方案
-8. **固定端口配置**：允许用户指定 TCP 端口范围，便于防火墙精确配置
-9. **TLS 加密**：TCP 传输加密，防中间人窃听
-10. **双向 prompt**：当前只有 master → slave 方向，可考虑 slave 主动向 master 发送结果/请求
+7. **mDNS/DNS-SD**: an alternative to the beacon in environments where multicast is restricted.
+8. **Fixed port configuration**: let users specify a TCP port range so firewalls can be configured precisely.
+9. **TLS encryption**: encrypt TCP transport to prevent eavesdropping by a man in the middle.
+10. **Bidirectional prompts**: today the direction is only master → slave; consider letting a slave proactively send results/requests to the master.

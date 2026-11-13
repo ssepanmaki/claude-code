@@ -1,37 +1,37 @@
 ---
-title: "搜索与导航工具 - 代码库精准定位"
-description: "解析 Claude Code 的搜索导航工具：Glob 文件匹配、Grep 内容搜索，基于 ripgrep 的高性能代码检索，帮助 AI 在百万行代码中精准定位。"
-keywords: ["代码搜索", "Glob", "Grep", "ripgrep", "文件搜索"]
+title: "Search and Navigation Tools - Pinpointing Code in the Codebase"
+description: "A walkthrough of Claude Code's search and navigation tools: Glob file matching and Grep content search, high-performance code retrieval built on ripgrep that helps the AI pinpoint targets in a million lines of code."
+keywords: ["code search", "Glob", "Grep", "ripgrep", "file search"]
 ---
 
-## 两种搜索维度
+## Two search dimensions
 
-| 维度 | 工具 | 底层实现 | 适用场景 |
-|------|------|----------|---------|
-| **按名称找文件** | Glob | ripgrep `--files` + glob 过滤 | "找到所有测试文件"、"找 config 开头的文件" |
-| **按内容找代码** | Grep | ripgrep 正则搜索 | "哪里定义了这个函数"、"谁在调用这个 API" |
+| Dimension | Tool | Underlying implementation | Use cases |
+|-----------|------|---------------------------|-----------|
+| **Find files by name** | Glob | ripgrep `--files` + glob filtering | "Find all test files", "find files starting with config" |
+| **Find code by content** | Grep | ripgrep regex search | "Where is this function defined", "who calls this API" |
 
-两者共享同一个 ripgrep 引擎，通过不同的参数组合实现不同搜索模式。
+Both share the same ripgrep engine and get different search modes through different parameter combinations.
 
-## ripgrep 的内嵌方式
+## How ripgrep is embedded
 
-Claude Code 不依赖系统安装的 ripgrep——它在 `src/utils/ripgrep.ts` 中实现了三级降级策略：
+Claude Code does not depend on a system-installed ripgrep. `src/utils/ripgrep.ts` implements a three-level fallback strategy:
 
 ```
-优先级 1: 系统 ripgrep (USE_BUILTIN_RIPGREP=false)
-  → 使用 PATH 中的 rg 二进制
-  → 安全考虑：只用命令名 'rg'，不用完整路径，防止 PATH 劫持
+Priority 1: system ripgrep (USE_BUILTIN_RIPGREP=false)
+  → use the rg binary on PATH
+  → security: use only the command name 'rg', not a full path, to prevent PATH hijacking
 
-优先级 2: 内嵌模式 (bundled/native build)
-  → process.execPath 自身，argv0='rg'
-  → Bun 将 rg 静态编译进二进制，通过 argv0 分发
+Priority 2: embedded mode (bundled/native build)
+  → process.execPath itself, argv0='rg'
+  → Bun statically compiles rg into the binary and dispatches through argv0
 
-优先级 3: vendor 目录 (npm build)
+Priority 3: vendor directory (npm build)
   → vendor/ripgrep/{arch}-{platform}/rg
-  → macOS 需要 codesign 签名 + 移除 quarantine xattr
+  → macOS needs codesign signing + removal of the quarantine xattr
 ```
 
-平台适配示例：
+Platform layout example:
 ```
 vendor/ripgrep/
   ├── x86_64-darwin/rg      # macOS Intel
@@ -41,243 +41,243 @@ vendor/ripgrep/
   └── x86_64-win32/rg.exe    # Windows
 ```
 
-### macOS 代码签名
+### macOS code signing
 
-vendor 模式下的 rg 二进制需要 ad-hoc 签名才能通过 Gatekeeper（`codesignRipgrepIfNecessary()`）：
+In vendor mode the rg binary needs an ad-hoc signature to pass Gatekeeper (`codesignRipgrepIfNecessary()`):
 
 ```typescript
-// 首次使用时执行：
-// 1. 检查是否已是有效签名
+// Runs on first use:
+// 1. Check whether it already has a valid signature
 codesign -vv -d <rg-path>
-// 2. 如果只是 linker-signed，重新签名
+// 2. If it is only linker-signed, re-sign it
 codesign --sign - --force --preserve-metadata=entitlements,requirements,flags,runtime <rg-path>
-// 3. 移除隔离属性
+// 3. Remove the quarantine attribute
 xattr -d com.apple.quarantine <rg-path>
 ```
 
-## 搜索结果的设计考量
+## Design considerations for search results
 
-### head_limit 与 Token 预算
+### head_limit and the token budget
 
-大型项目的搜索结果可能有数十万条。默认最多返回 250 条匹配——这不是随意选择，而是**token 预算**的约束：
+Search results in a large project can run to hundreds of thousands of entries. By default at most 250 matches are returned. This is not an arbitrary choice but a **token budget** constraint:
 
-- 每条匹配行约 50-100 token
-- 250 条 ≈ 12,500-25,000 token
-- 这大约占 200k 上下文窗口的 6-12%
-- 超过这个比例，AI 的推理质量会下降
+- Each matching line is about 50-100 tokens
+- 250 entries ≈ 12,500-25,000 tokens
+- That is roughly 6-12% of a 200k context window
+- Beyond that share, the AI's reasoning quality degrades
 
-Grep 工具的 `head_limit` 参数让 AI 可以按需调整——搜索小项目时可以用更大的值。
+The Grep tool's `head_limit` parameter lets the AI adjust this on demand, using a larger value when searching a small project.
 
-### 按修改时间排序
+### Sorting by modification time
 
-Glob 默认把**最近修改的文件排在前面**。这不是默认的文件系统排序，而是刻意的设计决策：
-
-```
-设计假设：最近修改的文件最可能与当前任务相关
-实际效果：AI 优先看到"活"的代码，而不是沉寂的历史文件
-```
-
-在 `packages/builtin-tools/src/tools/GlobTool/` 中，ripgrep 的输出在返回给 AI 前按 mtime 排序。
-
-### ripgrep 的错误处理
-
-ripgrep 执行有专门的错误恢复链（`src/utils/ripgrep.ts`）：
-
-| 错误 | 处理 |
-|------|------|
-| **EAGAIN**（资源不足） | 自动以单线程模式 `-j 1` 重试 |
-| **超时**（默认 20s，WSL 60s） | 返回已有部分结果，丢弃可能不完整的最后一行 |
-| **缓冲区溢出** | 截断到 20MB，返回已收集的结果 |
-| **SIGTERM 失效** | 5 秒后升级为 SIGKILL |
-
-## ToolSearch：在 50+ 工具中发现目标
-
-当可用工具超过 50 个时（含 MCP 提供的外部工具），AI 可能不知道该用哪个。**ToolSearch**（`packages/builtin-tools/src/tools/ToolSearchTool/`）提供了工具发现机制。
-
-### 搜索算法
-
-ToolSearch 实现了基于关键词的加权搜索（`searchToolsWithKeywords()`）：
+Glob puts **recently modified files first** by default. This is not the default filesystem ordering but a deliberate design decision:
 
 ```
-输入: query = "database connection"
+Design assumption: recently modified files are the most likely to be relevant to the current task
+Practical effect: the AI sees "live" code first, not dormant historical files
+```
+
+In `packages/builtin-tools/src/tools/GlobTool/`, ripgrep's output is sorted by mtime before being returned to the AI.
+
+### ripgrep error handling
+
+ripgrep execution has a dedicated error recovery chain (`src/utils/ripgrep.ts`):
+
+| Error | Handling |
+|-------|----------|
+| **EAGAIN** (insufficient resources) | Automatically retry in single-threaded mode with `-j 1` |
+| **Timeout** (default 20s, 60s on WSL) | Return partial results gathered so far and drop the possibly incomplete last line |
+| **Buffer overflow** | Truncate to 20MB and return the results collected |
+| **SIGTERM ignored** | Escalate to SIGKILL after 5 seconds |
+
+## ToolSearch: finding the target among 50+ tools
+
+When more than 50 tools are available (including external tools provided by MCP), the AI may not know which to use. **ToolSearch** (`packages/builtin-tools/src/tools/ToolSearchTool/`) provides a tool discovery mechanism.
+
+### Search algorithm
+
+ToolSearch implements keyword-based weighted search (`searchToolsWithKeywords()`):
+
+```
+Input: query = "database connection"
      ↓
-1. 精确匹配: 检查是否有工具名完全匹配（快速路径）
-2. MCP 前缀匹配: "mcp__postgres" → 匹配所有 postgres 相关工具
-3. 关键词拆分: ["database", "connection"]
-4. 工具名解析:
-   - MCP 工具: "mcp__server__action" → ["server", "action"]
-   - 普通工具: "FileEditTool" → ["file", "edit", "tool"]
-5. 加权评分:
-   - 工具名精确匹配: 10 分（MCP: 12 分）
-   - 工具名部分匹配: 5 分（MCP: 6 分）
-   - searchHint 匹配: 4 分
-   - 描述匹配: 2 分
-6. 必选词过滤: "+database" 前缀表示必须包含
-7. 按分数排序，返回 top-N
+1. Exact match: check whether any tool name matches exactly (fast path)
+2. MCP prefix match: "mcp__postgres" → matches all postgres-related tools
+3. Keyword splitting: ["database", "connection"]
+4. Tool name parsing:
+   - MCP tools: "mcp__server__action" → ["server", "action"]
+   - Regular tools: "FileEditTool" → ["file", "edit", "tool"]
+5. Weighted scoring:
+   - Exact tool name match: 10 points (MCP: 12)
+   - Partial tool name match: 5 points (MCP: 6)
+   - searchHint match: 4 points
+   - Description match: 2 points
+6. Required-term filtering: a "+database" prefix means the term must be present
+7. Sort by score and return the top N
 ```
 
-### `select:` 直接选择
+### `select:` direct selection
 
-AI 也可以用 `select:ToolName` 精确选择已知工具。这比搜索更快，且支持逗号分隔的批量选择（`select:A,B,C`）。
+The AI can also use `select:ToolName` to pick a known tool exactly. This is faster than searching and supports comma-separated batch selection (`select:A,B,C`).
 
-### 延迟加载（Deferred Tools）
+### Deferred loading (Deferred Tools)
 
-不是所有工具都常驻内存。MCP 工具和低频工具被标记为 `isDeferredTool`，只有在 ToolSearch 选中后才真正加载。这减少了每次 API 调用的 token 开销（工具描述占用大量 token）。
+Not every tool stays resident in memory. MCP tools and low-frequency tools are marked `isDeferredTool` and are only actually loaded after ToolSearch selects them. This reduces the token overhead of every API call (tool descriptions take up a lot of tokens).
 
-### 缓存策略
+### Caching strategy
 
-工具描述的获取是 memoized 的——只在延迟工具集合变化时清除缓存：
+Fetching tool descriptions is memoized, and the cache is cleared only when the set of deferred tools changes:
 
 ```typescript
-// 工具名排序后拼接作为缓存 key
+// Sorted tool names joined as the cache key
 function getDeferredToolsCacheKey(deferredTools: Tools): string {
   return deferredTools.map(t => t.name).sort().join(',')
 }
 ```
 
-## Web 搜索与抓取
+## Web search and fetch
 
-AI 的信息获取不局限于本地代码：
+The AI's information gathering is not limited to local code:
 
-- **WebSearch**（`packages/builtin-tools/src/tools/WebSearchTool/`）：调用 Anthropic API 的 `web_search_20250305` server tool 搜索互联网
-- **WebFetch**（`packages/builtin-tools/src/tools/WebFetchTool/`）：抓取特定 URL 内容，转换为 Markdown 供 AI 阅读
+- **WebSearch** (`packages/builtin-tools/src/tools/WebSearchTool/`): calls the Anthropic API's `web_search_20250305` server tool to search the internet
+- **WebFetch** (`packages/builtin-tools/src/tools/WebFetchTool/`): fetches the content of a specific URL and converts it to Markdown for the AI to read
 
-这让 AI 可以查阅文档、搜索 Stack Overflow、阅读 GitHub issue——和人类开发者的工作方式一致。
+This lets the AI consult documentation, search Stack Overflow and read GitHub issues, the same way a human developer works.
 
-### WebSearch 实现机制
+### How WebSearch is implemented
 
-WebSearch 通过适配器模式支持三种搜索后端，由 `packages/builtin-tools/src/tools/WebSearchTool/adapters/` 中的工厂函数 `createAdapter()` 选择：
+WebSearch supports three search backends through the adapter pattern, chosen by the factory function `createAdapter()` in `packages/builtin-tools/src/tools/WebSearchTool/adapters/`:
 
 ```
-适配器架构:
+Adapter architecture:
   WebSearchTool.call()
-    → createAdapter() 选择后端
-      ├─ ApiSearchAdapter — Anthropic API 服务端搜索（需官方 API 密钥）
-      ├─ BingSearchAdapter — 直接抓取 Bing 搜索页面解析（无需 API 密钥）
-      └─ BraveSearchAdapter — 调用 Brave LLM Context API 解析（需 Brave API 密钥）
+    → createAdapter() picks the backend
+      ├─ ApiSearchAdapter — Anthropic API server-side search (needs an official API key)
+      ├─ BingSearchAdapter — scrapes Bing search pages directly and parses them (no API key needed)
+      └─ BraveSearchAdapter — calls the Brave LLM Context API and parses the result (needs a Brave API key)
     → adapter.search(query, options)
-    → 转换为统一 SearchResult[] 格式返回
+    → converted to a unified SearchResult[] format and returned
 ```
 
-#### 适配器选择逻辑
+#### Adapter selection logic
 
-`adapters/index.ts` 中的工厂函数按以下优先级选择后端：
+The factory function in `adapters/index.ts` picks the backend in the following priority order:
 
-| 优先级 | 条件 | 适配器 |
-|--------|------|--------|
-| 1 | 环境变量 `WEB_SEARCH_ADAPTER=api` | `ApiSearchAdapter` |
-| 2 | 环境变量 `WEB_SEARCH_ADAPTER=bing` | `BingSearchAdapter` |
-| 3 | 环境变量 `WEB_SEARCH_ADAPTER=brave` | `BraveSearchAdapter` |
-| 4 | API Base URL 指向 Anthropic 官方 | `ApiSearchAdapter` |
-| 5 | 第三方代理 / 非官方端点 | `BingSearchAdapter` |
+| Priority | Condition | Adapter |
+|----------|-----------|---------|
+| 1 | Environment variable `WEB_SEARCH_ADAPTER=api` | `ApiSearchAdapter` |
+| 2 | Environment variable `WEB_SEARCH_ADAPTER=bing` | `BingSearchAdapter` |
+| 3 | Environment variable `WEB_SEARCH_ADAPTER=brave` | `BraveSearchAdapter` |
+| 4 | API Base URL points to Anthropic's official endpoint | `ApiSearchAdapter` |
+| 5 | Third-party proxy / unofficial endpoint | `BingSearchAdapter` |
 
-适配器是无状态的，同一会话内缓存复用。
+Adapters are stateless and cached for reuse within a session.
 
-#### ApiSearchAdapter — API 服务端搜索
+#### ApiSearchAdapter — API server-side search
 
-将搜索请求委托给 Anthropic API 的 `web_search_20250305` server tool：
+Delegates the search request to the Anthropic API's `web_search_20250305` server tool:
 
 ```
-调用链:
+Call chain:
   ApiSearchAdapter.search(query, options)
-    → queryModelWithStreaming() 发起独立的 API 调用
-      → 携带 extraToolSchemas: [BetaWebSearchTool20250305]
-      → API 服务端执行搜索，返回流式事件
-        → server_tool_use / web_search_tool_result / text 交替返回
-    → extractSearchResults() 从 content blocks 提取 SearchResult[]
+    → queryModelWithStreaming() issues a separate API call
+      → carries extraToolSchemas: [BetaWebSearchTool20250305]
+      → the API server executes the search and returns streaming events
+        → server_tool_use / web_search_tool_result / text come back interleaved
+    → extractSearchResults() extracts SearchResult[] from the content blocks
 ```
 
-| 特性 | 实现 |
-|------|------|
-| **模型选择** | Feature flag `tengu_plum_vx3` 控制用 Haiku（强制 tool_choice）还是主模型 |
-| **搜索上限** | 每次调用最多 8 次搜索（`max_uses: 8`） |
-| **域过滤** | 支持 `allowedDomains` / `blockedDomains` |
-| **进度追踪** | 流式解析 `input_json_delta` 提取 query，实时回调 `onProgress` |
+| Feature | Implementation |
+|---------|----------------|
+| **Model selection** | Feature flag `tengu_plum_vx3` controls whether Haiku (forced tool_choice) or the main model is used |
+| **Search cap** | At most 8 searches per call (`max_uses: 8`) |
+| **Domain filtering** | Supports `allowedDomains` / `blockedDomains` |
+| **Progress tracking** | Parses `input_json_delta` while streaming to extract the query and calls `onProgress` in real time |
 
-#### BingSearchAdapter — Bing 搜索页面解析
+#### BingSearchAdapter — Bing search page parsing
 
-直接抓取 Bing 搜索 HTML 并用正则提取结果，无需 API 密钥：
+Scrapes the Bing search HTML directly and extracts results with regexes, with no API key:
 
 ```
-调用链:
+Call chain:
   BingSearchAdapter.search(query, options)
-    → axios.get(bing.com/search?q=...)  — 使用浏览器级别 headers 绕过反爬
+    → axios.get(bing.com/search?q=...)  — uses browser-grade headers to get past anti-scraping
     → extractBingResults(html)
-      → 正则匹配 <li class="b_algo"> 块
-      → 提取 <h2><a> 标题和 URL
-      → resolveBingUrl() 解码 Bing 重定向链接
-      → extractSnippet() 三级降级提取摘要
-    → 客户端域过滤 (allowedDomains / blockedDomains)
-    → 返回 SearchResult[]
+      → regex-match <li class="b_algo"> blocks
+      → extract the <h2><a> title and URL
+      → resolveBingUrl() decodes Bing redirect links
+      → extractSnippet() extracts the snippet with a three-level fallback
+    → client-side domain filtering (allowedDomains / blockedDomains)
+    → return SearchResult[]
 ```
 
-**反爬策略**：Bing 对非浏览器 UA 返回需要 JS 渲染的空页面。适配器使用完整的 Edge 浏览器请求头（包含 `Sec-Ch-Ua`、`Sec-Fetch-*` 等现代浏览器标头）确保获得完整 HTML。同时使用 `setmkt=en-US` 参数统一市场定位，避免 Bing 基于用户 IP 做区域化定向（如跳转到德语/新加坡市场导致结果不相关）。
+**Anti-scraping strategy**: Bing returns an empty page that needs JS rendering for non-browser user agents. The adapter uses the full Edge browser request headers (including modern browser headers such as `Sec-Ch-Ua` and `Sec-Fetch-*`) to make sure it gets the complete HTML. It also uses the `setmkt=en-US` parameter to fix the market, so Bing does not localize by the user's IP (for example redirecting to the German or Singapore market and returning irrelevant results).
 
-**URL 解码**：Bing 搜索结果中的 URL 为重定向格式（`bing.com/ck/a?...&u=a1aHR0cHM6Ly9...`），`resolveBingUrl()` 从 `u` 参数中 base64 解码出真实目标 URL（`a1` 前缀 = https，`a0` = http）。
+**URL decoding**: URLs in Bing results are in redirect format (`bing.com/ck/a?...&u=a1aHR0cHM6Ly9...`), and `resolveBingUrl()` base64-decodes the real target URL from the `u` parameter (the `a1` prefix = https, `a0` = http).
 
-**摘要提取**（`extractSnippet()`）按优先级尝试三个来源：
-1. `<p class="b_lineclamp...">` — 带行截断的摘要段落
-2. `<div class="b_caption">` 内的 `<p>` — 普通摘要段落
-3. `<div class="b_caption">` 的直接文本内容 — 兜底方案
+**Snippet extraction** (`extractSnippet()`) tries three sources in priority order:
+1. `<p class="b_lineclamp...">` — the line-clamped snippet paragraph
+2. The `<p>` inside `<div class="b_caption">` — a regular snippet paragraph
+3. The direct text content of `<div class="b_caption">` — the fallback
 
-| 特性 | 实现 |
-|------|------|
-| **超时** | 30 秒（`FETCH_TIMEOUT_MS`） |
-| **域过滤** | 支持 `allowedDomains` / `blockedDomains`，含子域名匹配 |
-| **进度追踪** | 发送 query_update 和 search_results_received 回调 |
-| **中止支持** | 外部 AbortSignal 传播到 axios 请求 |
+| Feature | Implementation |
+|---------|----------------|
+| **Timeout** | 30 seconds (`FETCH_TIMEOUT_MS`) |
+| **Domain filtering** | Supports `allowedDomains` / `blockedDomains`, including subdomain matching |
+| **Progress tracking** | Sends query_update and search_results_received callbacks |
+| **Abort support** | An external AbortSignal propagates to the axios request |
 
-### WebSearchTool 统一接口
+### The unified WebSearchTool interface
 
-`WebSearchTool`（`packages/builtin-tools/src/tools/WebSearchTool/WebSearchTool.ts`）是面向主循环的工具定义，所有 provider 均可使用（`isEnabled()` 始终返回 true）。它将适配器返回的 `SearchResult[]` 转换为内部 `Output` 格式，`mapToolResultToToolResultBlockParam` 将搜索结果格式化为带 markdown 超链接的文本，并附加 "REMINDER" 要求主模型在回复中包含 Sources。
+`WebSearchTool` (`packages/builtin-tools/src/tools/WebSearchTool/WebSearchTool.ts`) is the tool definition the main loop sees, usable with every provider (`isEnabled()` always returns true). It converts the `SearchResult[]` returned by an adapter into the internal `Output` format, and `mapToolResultToToolResultBlockParam` formats the results as text with markdown hyperlinks and appends a "REMINDER" asking the main model to include Sources in its reply.
 
-### WebFetch 实现机制
+### How WebFetch is implemented
 
-WebFetch 是一个完整的 HTTP 客户端 + 内容处理管线：
+WebFetch is a full HTTP client plus content-processing pipeline:
 
 ```
-调用链:
+Call chain:
   WebFetchTool.call({ url, prompt })
     → getURLMarkdownContent(url)
-      → validateURL() — 长度≤2000、无用户名密码、公网域名
-      → URL_CACHE 命中检查（15 分钟 TTL LRU，50MB 上限）
-      → checkDomainBlocklist() — 调用 api.anthropic.com/api/web/domain_info 预检
-      → getWithPermittedRedirects() — axios 请求，自定义重定向处理
-        → HTML → Turndown 转 Markdown（懒加载单例，~1.4MB）
-        → 非 HTML → 原始文本
-        → 二进制（PDF 等）→ persistBinaryContent() 保存到磁盘
+      → validateURL() — length ≤2000, no username/password, public domain
+      → URL_CACHE hit check (15-minute TTL LRU, 50MB cap)
+      → checkDomainBlocklist() — pre-check via api.anthropic.com/api/web/domain_info
+      → getWithPermittedRedirects() — axios request with custom redirect handling
+        → HTML → Turndown converts to Markdown (lazily loaded singleton, ~1.4MB)
+        → non-HTML → raw text
+        → binary (PDF etc.) → persistBinaryContent() saves to disk
     → applyPromptToMarkdown()
-      → 截断到 100K 字符
-      → queryHaiku() 用小模型按 prompt 提取信息
-    → 返回处理后的结果
+      → truncate to 100K characters
+      → queryHaiku() uses a small model to extract information according to the prompt
+    → return the processed result
 ```
 
-安全防护多层设计：
+Safety protection is layered:
 
-| 层级 | 机制 | 说明 |
-|------|------|------|
-| **域名预检** | `checkDomainBlocklist()` | 调用 `api.anthropic.com/api/web/domain_info?domain=…`，5 分钟缓存 |
-| **重定向控制** | `isPermittedRedirect()` | 仅允许同 host（±www）重定向，跨域重定向返回提示让 AI 重新调用 |
-| **重定向深度** | `MAX_REDIRECTS = 10` | 防止重定向循环无限挂起 |
-| **内容大小** | `MAX_HTTP_CONTENT_LENGTH = 10MB` | 单次响应上限 |
-| **请求超时** | `FETCH_TIMEOUT_MS = 60s` | 主请求超时；域名预检 10s |
-| **URL 验证** | `validateURL()` | 长度、协议、用户名密码、公网域名检查 |
-| **egress 检测** | `X-Proxy-Error: blocked-by-allowlist` | 检测企业代理拦截 |
+| Layer | Mechanism | Description |
+|-------|-----------|-------------|
+| **Domain pre-check** | `checkDomainBlocklist()` | Calls `api.anthropic.com/api/web/domain_info?domain=…`, cached for 5 minutes |
+| **Redirect control** | `isPermittedRedirect()` | Only same-host redirects (±www) are allowed; a cross-domain redirect returns a hint so the AI calls again |
+| **Redirect depth** | `MAX_REDIRECTS = 10` | Prevents redirect loops from hanging forever |
+| **Content size** | `MAX_HTTP_CONTENT_LENGTH = 10MB` | Cap for a single response |
+| **Request timeout** | `FETCH_TIMEOUT_MS = 60s` | Main request timeout; domain pre-check is 10s |
+| **URL validation** | `validateURL()` | Checks length, protocol, username/password and public domain |
+| **Egress detection** | `X-Proxy-Error: blocked-by-allowlist` | Detects blocking by an enterprise proxy |
 
-预批准域名（`packages/builtin-tools/src/tools/WebFetchTool/preapproved.ts`）：
+Pre-approved domains (`packages/builtin-tools/src/tools/WebFetchTool/preapproved.ts`):
 
-用户无需手动授权即可抓取的域名列表，包含 ~90 个主流技术文档站点（MDN、Python docs、React docs、AWS docs 等）。列表分为 hostname-only 和 path-prefix 两类，查找复杂度 O(1)。
+A list of domains the user does not need to authorize manually, containing ~90 mainstream technical documentation sites (MDN, Python docs, React docs, AWS docs and so on). The list is split into hostname-only and path-prefix entries, with O(1) lookup.
 
-对预批准域名，WebFetch 跳过 Haiku 摘要步骤（如果内容是 Markdown 且 < 100K 字符），直接返回原文——因为技术文档本身的结构化程度已经足够好。
+For pre-approved domains, WebFetch skips the Haiku summarization step (if the content is Markdown and under 100K characters) and returns the original text directly, since technical documentation is already well structured.
 
-权限模型方面，WebFetch 按 hostname 生成 `domain:xxx` 规则匹配用户的 allow/deny/ask 规则，支持用户对特定域名配置永久允许或拒绝。
+For the permission model, WebFetch generates `domain:xxx` rules by hostname to match the user's allow/deny/ask rules, so users can configure permanent allow or deny for a specific domain.
 
-### ripgrep 的流式输出
+### ripgrep streaming output
 
-对于交互式场景（如 QuickOpen），ripgrep 支持**流式输出**（`ripGrepStream()`）：
+For interactive scenarios (such as QuickOpen), ripgrep supports **streaming output** (`ripGrepStream()`):
 
 ```
-rg --files → 逐 chunk 到达 → 按行分割 → onLines(lines) 回调
+rg --files → chunks arrive one by one → split by line → onLines(lines) callback
 ```
 
-不需要等 ripgrep 完成整个搜索——第一批结果在 rg 仍在遍历目录树时就已展示。调用者可以通过 AbortSignal 提前终止搜索（例如找到足够多的结果后）。
+There is no need to wait for ripgrep to finish the whole search. The first batch of results is shown while rg is still walking the directory tree. The caller can terminate the search early through an AbortSignal (for example once enough results are found).

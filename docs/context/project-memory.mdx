@@ -1,42 +1,42 @@
 ---
-title: "项目记忆系统 - 文件级跨对话记忆架构"
-description: "深度解析 Claude Code 记忆系统：基于文件的持久化存储、MEMORY.md 索引结构、四类型分类法、Sonnet 智能召回、Session Memory 压缩集成。"
-keywords: ["项目记忆", "MEMORY.md", "AI 记忆", "跨对话", "自动记忆", "memdir"]
+title: "Project Memory System - File-Level Cross-Conversation Memory Architecture"
+description: "A deep dive into Claude Code's memory system: file-based persistent storage, the MEMORY.md index structure, the four-type taxonomy, Sonnet-powered recall, and Session Memory compaction integration."
+keywords: ["project memory", "MEMORY.md", "AI memory", "cross-conversation", "auto memory", "memdir"]
 ---
 
-{/* 本章目标：从源码层面剖析记忆系统的存储架构、召回机制和注入链路 */}
+{/* Goal of this chapter: analyze the memory system's storage architecture, recall mechanism and injection path at the source level */}
 
-## 记忆系统的存储架构
+## Storage architecture of the memory system
 
-源码路径：`src/memdir/paths.ts`、`src/memdir/memdir.ts`
+Source paths: `src/memdir/paths.ts`, `src/memdir/memdir.ts`
 
-Claude Code 的记忆系统是**纯文件**的——没有数据库、没有向量存储，只有 Markdown 文件和目录结构。
+Claude Code's memory system is **purely file-based**: no database, no vector store, only Markdown files and a directory structure.
 
-### 目录布局
+### Directory layout
 
 ```
 ~/.claude/projects/<sanitized-git-root>/memory/
-├── MEMORY.md                    ← 入口索引（每次对话加载）
-├── user_role.md                 ← 用户记忆
-├── feedback_testing.md          ← 反馈记忆
-├── project_mobile_release.md    ← 项目记忆
-├── reference_linear_ingest.md   ← 参考记忆
-└── logs/                        ← KAIROS 模式：每日日志
+├── MEMORY.md                    ← entry index (loaded every conversation)
+├── user_role.md                 ← user memory
+├── feedback_testing.md          ← feedback memory
+├── project_mobile_release.md    ← project memory
+├── reference_linear_ingest.md   ← reference memory
+└── logs/                        ← KAIROS mode: daily logs
     └── 2026/
         └── 04/
             └── 2026-04-01.md
 ```
 
-路径解析链路（`getAutoMemPath()`）：
-1. `CLAUDE_COWORK_MEMORY_PATH_OVERRIDE` 环境变量（Cowork SDK 全路径覆盖）
-2. `autoMemoryDirectory` 设置（仅限 `policySettings`/`localSettings`/`userSettings`——**故意排除** `projectSettings`，防止恶意仓库将记忆路径指向 `~/.ssh`）
-3. 默认：`<memoryBase>/projects/<sanitized-git-root>/memory/`
+Path resolution chain (`getAutoMemPath()`):
+1. The `CLAUDE_COWORK_MEMORY_PATH_OVERRIDE` environment variable (full-path override for the Cowork SDK)
+2. The `autoMemoryDirectory` setting (only from `policySettings`/`localSettings`/`userSettings`. `projectSettings` is **deliberately excluded**, to stop a malicious repository from pointing the memory path at `~/.ssh`)
+3. Default: `<memoryBase>/projects/<sanitized-git-root>/memory/`
 
-同一个 Git 仓库的所有 worktree 共享一个记忆目录（通过 `findCanonicalGitRoot()` 找到真正的 `.git` 根）。
+All worktrees of the same Git repository share one memory directory (`findCanonicalGitRoot()` finds the real `.git` root).
 
-### MEMORY.md 索引
+### The MEMORY.md index
 
-`MEMORY.md` 是记忆的入口索引，每次对话都完整加载到上下文中：
+`MEMORY.md` is the entry index of memory and is loaded into context in full every conversation:
 
 ```typescript
 // memdir.ts:34-38
@@ -45,73 +45,73 @@ export const MAX_ENTRYPOINT_LINES = 200
 export const MAX_ENTRYPOINT_BYTES = 25_000
 ```
 
-索引有**双重上限**：200 行 AND 25KB。超过任何一条都会被 `truncateEntrypointContent()` 截断并追加警告。设计原因：p97 的索引文件用 200 行就能覆盖，但有些索引条目特别长（p100 观测到 197KB/200 行），字节上限捕捉这种长行异常。
+The index has **two caps**: 200 lines AND 25KB. Exceeding either gets it truncated by `truncateEntrypointContent()` with a warning appended. The reason: at p97 an index file fits within 200 lines, but some index entries are very long (p100 observed 197KB/200 lines), and the byte cap catches these long-line outliers.
 
-索引条目格式：
+Index entry format:
 ```markdown
 - [Title](file.md) — one-line hook
 ```
 
-每条一行，~150 字符以内。`MEMORY.md` 本身没有 frontmatter——它只是一个链接列表，不是记忆内容。
+One entry per line, within ~150 characters. `MEMORY.md` itself has no frontmatter. It is just a list of links, not memory content.
 
-## 四类型分类法
+## The four-type taxonomy
 
-源码路径：`src/memdir/memoryTypes.ts`
+Source path: `src/memdir/memoryTypes.ts`
 
-记忆被约束为一个**封闭的四类型系统**，每种类型有明确的 `<when_to_save>`、`<how_to_use>` 和 `<body_structure>` 规范：
+Memories are constrained to a **closed four-type system**, and each type has explicit `<when_to_save>`, `<how_to_use>` and `<body_structure>` specifications:
 
-| 类型 | 存储内容 | 典型触发 |
-|------|---------|---------|
-| **user** | 用户角色、偏好、技术背景 | "我是数据科学家"、"我写了十年 Go" |
-| **feedback** | 用户对 AI 行为的纠正和确认 | "别 mock 数据库"、"单 PR 更好" |
-| **project** | 非代码可推导的项目上下文 | "合并冻结从周四开始"、"auth 重写是合规要求" |
-| **reference** | 外部系统指针 | "pipeline bugs 在 Linear INGEST 项目" |
+| Type | What it stores | Typical trigger |
+|------|----------------|-----------------|
+| **user** | The user's role, preferences, technical background | "I'm a data scientist", "I've written Go for ten years" |
+| **feedback** | The user's corrections and confirmations of AI behavior | "Don't mock the database", "a single PR is better" |
+| **project** | Project context that cannot be derived from code | "Merge freeze starts Thursday", "the auth rewrite is a compliance requirement" |
+| **reference** | Pointers to external systems | "Pipeline bugs are in the Linear INGEST project" |
 
-关键设计约束：**只存储无法从当前项目状态推导的信息**。代码架构、文件路径、git 历史都可以实时获取，不需要记忆。
+Key design constraint: **store only information that cannot be derived from the current project state**. Code architecture, file paths and git history can all be fetched live and need no memory.
 
-### 反馈类型的双通道捕获
+### Dual-channel capture for feedback
 
-`feedback` 类型的 `when_to_save` 指令特别强调：
+The `when_to_save` instruction of the `feedback` type stresses this in particular:
 
 > Record from failure AND success: if you only save corrections, you will avoid past mistakes but drift away from approaches the user has already validated, and may grow overly cautious.
 
-这意味着 AI 不仅在用户说"不要这样做"时保存，也在用户说"对，就是这样"时保存。后一种更难捕捉，但同等重要——它防止 AI 的行为随时间漂移。
+This means the AI saves not only when the user says "don't do this" but also when the user says "yes, exactly like that". The latter is harder to catch but equally important, since it keeps the AI's behavior from drifting over time.
 
-### 每条记忆的 Frontmatter 格式
+### Frontmatter format of each memory
 
 ```markdown
 ---
 name: {{memory name}}
-description: {{one-line description — 用于未来判断相关性}}
+description: {{one-line description — used to judge relevance in the future}}
 type: {{user, feedback, project, reference}}
 ---
 
-{{memory content — feedback/project 类型建议包含 **Why:** 和 **How to apply:** 行}}
+{{memory content — for feedback/project types, including **Why:** and **How to apply:** lines is recommended}}
 ```
 
-`description` 字段是关键：它不是给人读的摘要，而是给 AI 召回系统做相关性判断的搜索关键词。
+The `description` field is the key: it is not a summary for humans but the search keywords the AI recall system uses to judge relevance.
 
-## 智能召回机制
+## The smart recall mechanism
 
-源码路径：`src/memdir/findRelevantMemories.ts`、`src/memdir/memoryScan.ts`
+Source paths: `src/memdir/findRelevantMemories.ts`, `src/memdir/memoryScan.ts`
 
-不是所有记忆都适合每次对话。系统使用一个**轻量级 Sonnet 侧查询**来筛选最相关的记忆。
+Not every memory fits every conversation. The system uses a **lightweight Sonnet side query** to pick the most relevant memories.
 
-### 召回流程
+### Recall flow
 
 ```
-用户消息 → findRelevantMemories(query, memoryDir)
-  ├── scanMemoryFiles() — 扫描所有记忆文件的 frontmatter
-  ├── selectRelevantMemories() — Sonnet 侧查询，从清单中选出 ≤5 条
-  └── 返回 [{path, mtimeMs}, ...]
+User message → findRelevantMemories(query, memoryDir)
+  ├── scanMemoryFiles() — scan the frontmatter of all memory files
+  ├── selectRelevantMemories() — Sonnet side query, picks ≤5 from the manifest
+  └── returns [{path, mtimeMs}, ...]
 ```
 
-核心是 `selectRelevantMemories()` 函数，它调用 `sideQuery()`（一个独立的轻量 API 调用）：
+The core is the `selectRelevantMemories()` function, which calls `sideQuery()` (a separate lightweight API call):
 
 ```typescript
 // findRelevantMemories.ts:98-121
 const result = await sideQuery({
-  model: getDefaultSonnetModel(),  // 用 Sonnet 做筛选（非主模型）
+  model: getDefaultSonnetModel(),  // use Sonnet for selection (not the main model)
   system: SELECT_MEMORIES_SYSTEM_PROMPT,
   messages: [{
     role: 'user',
@@ -122,9 +122,9 @@ const result = await sideQuery({
 })
 ```
 
-### 近期工具去噪
+### Denoising for recently used tools
 
-当 AI 正在使用某个工具时，召回该工具的使用文档是噪音（对话中已有工作上下文）。`recentTools` 参数让召回系统跳过这些记忆：
+When the AI is already using a tool, recalling that tool's usage documentation is noise (the working context is already in the conversation). The `recentTools` parameter lets the recall system skip those memories:
 
 ```typescript
 // findRelevantMemories.ts:92-95
@@ -133,22 +133,22 @@ const toolsSection = recentTools.length > 0
   : ''
 ```
 
-System Prompt 明确指示："如果已提供最近使用的工具列表，不要选择该工具的使用参考或 API 文档。**仍然要选择**关于这些工具的警告、陷阱或已知问题——这正是使用时最关键的信息。"
+The system prompt states explicitly: "If a list of recently used tools is provided, do not select usage reference or API documentation for those tools. **Still select** warnings, gotchas or known issues about those tools. That is exactly the information that matters most when using them."
 
-### 已展示去重
+### Already-surfaced dedup
 
-`alreadySurfaced` 参数过滤之前轮次已展示过的文件路径，让 Sonnet 的 5 槽预算花在新的候选上，而不是重复召回同一文件。
+The `alreadySurfaced` parameter filters out file paths already shown in earlier turns, so Sonnet's 5-slot budget is spent on new candidates instead of recalling the same file again.
 
-## 记忆注入 System Prompt 的链路
+## How memory is injected into the system prompt
 
-源码路径：`src/memdir/memdir.ts` → `src/context.ts`
+Source paths: `src/memdir/memdir.ts` → `src/context.ts`
 
-`loadMemoryPrompt()` 是记忆注入的入口，每会话调用一次（通过 `systemPromptSection('memory', ...)` 缓存）：
+`loadMemoryPrompt()` is the entry point for memory injection, called once per session (cached via `systemPromptSection('memory', ...)`):
 
 ```typescript
 // memdir.ts:419-507
 export async function loadMemoryPrompt(): Promise<string | null> {
-  // 优先级：KAIROS 日志模式 → TEAMMEM 组合模式 → 纯自动记忆
+  // Priority: KAIROS log mode → TEAMMEM combined mode → plain auto memory
   if (feature('KAIROS') && autoEnabled && getKairosActive()) {
     return buildAssistantDailyLogPrompt(skipIndex)
   }
@@ -162,29 +162,29 @@ export async function loadMemoryPrompt(): Promise<string | null> {
 }
 ```
 
-注入时机：`context.ts` 中 `getSystemContext()` 调用时，记忆 Prompt 作为 system prompt 的一个 section 被组装。`MEMORY.md` 的内容作为 **user context message** 注入（而非 system prompt），这样可以利用 Prompt Cache 的 prefix 共享。
+Injection timing: when `getSystemContext()` is called in `context.ts`, the memory prompt is assembled as a section of the system prompt. The contents of `MEMORY.md` are injected as a **user context message** (not in the system prompt), which lets it benefit from Prompt Cache prefix sharing.
 
-## KAIROS 模式：每日日志
+## KAIROS mode: daily logs
 
-源码路径：`src/memdir/memdir.ts`（`buildAssistantDailyLogPrompt`）
+Source path: `src/memdir/memdir.ts` (`buildAssistantDailyLogPrompt`)
 
-长期运行的 assistant 会话使用不同的记忆策略：
+Long-running assistant sessions use a different memory strategy:
 
-- **标准模式**：AI 维护 `MEMORY.md` 作为实时索引 + 独立记忆文件
-- **KAIROS 模式**：AI 只往日期文件追加日志（`logs/YYYY/MM/YYYY-MM-DD.md`），不做重组
+- **Standard mode**: the AI maintains `MEMORY.md` as a live index plus separate memory files
+- **KAIROS mode**: the AI only appends logs to date files (`logs/YYYY/MM/YYYY-MM-DD.md`) and does no reorganization
 
 ```typescript
-// 日志路径模式（非字面路径——因为 Prompt 被缓存）
+// Log path pattern (not a literal path, because the prompt is cached)
 const logPathPattern = join(memoryDir, 'logs', 'YYYY', 'MM', 'YYYY-MM-DD.md')
 ```
 
-一个独立的夜间 `/dream` 技能负责将日志蒸馏为主题文件 + `MEMORY.md` 索引。
+A separate nightly `/dream` skill distills the logs into topic files plus the `MEMORY.md` index.
 
-## 记忆漂移防御
+## Defense against memory drift
 
-源码路径：`src/memdir/memoryTypes.ts`（`TRUSTING_RECALL_SECTION`）
+Source path: `src/memdir/memoryTypes.ts` (`TRUSTING_RECALL_SECTION`)
 
-记忆可能过期。系统在 Prompt 中设置了一个专门的 section "Before recommending from memory"：
+Memories can go stale. The system places a dedicated section in the prompt, "Before recommending from memory":
 
 ```
 A memory that names a specific function, file, or flag is a claim
@@ -195,9 +195,9 @@ renamed, removed, or never merged. Before recommending it:
 - If the memory names a function or flag: grep for it.
 ```
 
-这个 section 的标题经过 A/B 测试验证："Before recommending from memory"（行动导向）比 "Trusting what you recall"（抽象描述）效果好（3/3 vs 0/3）。
+The title of this section was validated by A/B testing: "Before recommending from memory" (action-oriented) outperformed "Trusting what you recall" (abstract description), 3/3 vs 0/3.
 
-### 忽略记忆的严格语义
+### Strict semantics for ignoring memory
 
 ```
 If the user says to *ignore* or *not use* memory:
@@ -206,21 +206,21 @@ Do not apply remembered facts, cite, compare against,
 or mention memory content.
 ```
 
-这解决了 AI 的一个常见反模式：用户说"忽略关于 X 的记忆"，AI 虽然正确识别了代码但仍然加上"不像记忆中说的 Y"——这不是"忽略"，而是"承认然后覆盖"。
+This addresses a common AI anti-pattern: the user says "ignore the memory about X", and the AI identifies the code correctly but still adds "unlike what memory says about Y". That is not "ignoring"; it is "acknowledging and then overriding".
 
-## Session Memory 与压缩的联动
+## Linkage between Session Memory and compaction
 
-源码路径：`src/services/compact/sessionMemoryCompact.ts`
+Source path: `src/services/compact/sessionMemoryCompact.ts`
 
-记忆系统与上下文压缩有深度集成。当 `tengu_session_memory` 和 `tengu_sm_compact` 两个 feature flag 同时开启时，压缩优先使用 Session Memory 而非传统摘要：
+The memory system is deeply integrated with context compaction. When both the `tengu_session_memory` and `tengu_sm_compact` feature flags are on, compaction prefers Session Memory over a traditional summary:
 
 ```typescript
 // sessionMemoryCompact.ts:57-61
 const DEFAULT_SM_COMPACT_CONFIG = {
-  minTokens: 10_000,           // 压缩后至少保留 10K token
-  minTextBlockMessages: 5,     // 至少保留 5 条文本消息
-  maxTokens: 40_000,           // 最多保留 40K token
+  minTokens: 10_000,           // keep at least 10K tokens after compaction
+  minTextBlockMessages: 5,     // keep at least 5 text messages
+  maxTokens: 40_000,           // keep at most 40K tokens
 }
 ```
 
-SM-compact 不调用压缩 API（没有摘要模型），而是直接使用已有的 Session Memory 作为摘要——更快、更便宜、且不会丢失信息。
+SM-compact does not call the compaction API (there is no summarization model). It uses the existing Session Memory directly as the summary, which is faster, cheaper, and loses no information.

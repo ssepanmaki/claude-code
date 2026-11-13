@@ -2,6 +2,7 @@
   "model": "sonnet",
   "effortLevel": "medium",
   "idleCompaction": false,
+  "autoCompactWindow": 200000,
   "attribution": {
     "commit": "",
     "pr": ""

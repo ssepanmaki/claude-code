@@ -1,74 +1,74 @@
-# Computer Use Windows 增强实施计划
+# Computer Use Windows Enhancement Implementation Plan
 
-更新时间：2026-04-03
-依赖文档：`docs/features/windows-ai-desktop-control.md`、`docs/features/computer-use.md`
+Updated: 2026-04-03
+Depends on: `docs/features/windows-ai-desktop-control.md`, `docs/features/computer-use.md`
 
-## 1. 目标
+## 1. Goals
 
-在已有的 PowerShell 子进程方案基础上，利用 Windows 原生 API 增强 Computer Use 的 Windows 实现，解决 3 个核心问题：
+On top of the existing PowerShell child-process approach, use native Windows APIs to strengthen the Windows implementation of Computer Use and solve 3 core problems:
 
-1. **窗口绑定截图**：当前 `CopyFromScreen` 只能全屏截图，无法对指定窗口截图（尤其是被遮挡/最小化窗口）
-2. **UI 结构感知**：当前只能通过坐标点击，无法像 macOS Accessibility 那样理解 UI 元素树
-3. **性能**：每次 PowerShell 启动约 273ms，剪贴板/窗口枚举等高频操作需要更快的方式
+1. **Window-bound screenshots**: `CopyFromScreen` can only capture the full screen and cannot capture a specific window (especially an occluded or minimized one)
+2. **UI structure awareness**: today we can only click by coordinates and cannot understand the UI element tree the way macOS Accessibility does
+3. **Performance**: each PowerShell launch takes about 273ms, so high-frequency operations such as clipboard access and window enumeration need a faster path
 
-## 2. 已验证的 Windows API 能力
+## 2. Verified Windows API capabilities
 
-以下 API 全部通过 PowerShell P/Invoke 实测通过：
+All of the following APIs were tested successfully through PowerShell P/Invoke:
 
-| 能力 | API | 验证结果 |
+| Capability | API | Result |
 |------|-----|---------|
-| 窗口绑定截图 | `PrintWindow(hwnd, hdc, PW_RENDERFULLCONTENT)` | ✅ VS Code 342KB, Chrome 273KB |
-| 枚举窗口+HWND | `EnumWindows` + `GetWindowText` + `GetWindowThreadProcessId` | ✅ 38 个窗口，含 HWND/PID/标题 |
-| UI 元素树 | `System.Windows.Automation.AutomationElement` | ✅ 记事本 39 个元素 |
-| UI 写值 | `ValuePattern.SetValue()` | ✅ 成功写入记事本文本 |
-| UI 点击 | `InvokePattern.Invoke()` | ✅ 按钮可程序化点击 |
-| 坐标元素识别 | `AutomationElement.FromPoint(x, y)` | ✅ 返回元素类型+名称 |
-| OCR | `Windows.Media.Ocr.OcrEngine` | ✅ 英语+中文引擎可用 |
-| 全局热键 | `RegisterHotKey` | ✅ API 可调 |
-| 剪贴板直接操作 | `System.Windows.Forms.Clipboard` | ✅ 读/写/图片检测 |
-| Shell 启动 | `ShellExecute` | ✅ 打开文件/URL/应用 |
+| Window-bound screenshot | `PrintWindow(hwnd, hdc, PW_RENDERFULLCONTENT)` | ✅ VS Code 342KB, Chrome 273KB |
+| Enumerate windows + HWND | `EnumWindows` + `GetWindowText` + `GetWindowThreadProcessId` | ✅ 38 windows, with HWND/PID/title |
+| UI element tree | `System.Windows.Automation.AutomationElement` | ✅ 39 elements in Notepad |
+| Write UI values | `ValuePattern.SetValue()` | ✅ Wrote text into Notepad |
+| Click UI elements | `InvokePattern.Invoke()` | ✅ Buttons can be clicked programmatically |
+| Identify element at a point | `AutomationElement.FromPoint(x, y)` | ✅ Returns element type + name |
+| OCR | `Windows.Media.Ocr.OcrEngine` | ✅ English + Chinese engines available |
+| Global hotkey | `RegisterHotKey` | ✅ API callable |
+| Direct clipboard access | `System.Windows.Forms.Clipboard` | ✅ Read/write/image detection |
+| Shell launch | `ShellExecute` | ✅ Opens files/URLs/apps |
 
-## 3. 架构设计
+## 3. Architecture design
 
-### 3.1 文件结构
+### 3.1 File structure
 
-在现有 `backends/win32.ts` 基础上新增 Windows 专属模块：
+Add Windows-specific modules on top of the existing `backends/win32.ts`:
 
 ```
 packages/@ant/computer-use-input/src/
 ├── backends/
-│   ├── darwin.ts          ← 不动
-│   ├── win32.ts           ← 增强：直接 Win32 API 替代部分 PowerShell
-│   └── linux.ts           ← 不动
+│   ├── darwin.ts          ← unchanged
+│   ├── win32.ts           ← enhanced: direct Win32 APIs replace some PowerShell
+│   └── linux.ts           ← unchanged
 
 packages/@ant/computer-use-swift/src/
 ├── backends/
-│   ├── darwin.ts          ← 不动
-│   ├── win32.ts           ← 增强：PrintWindow 窗口截图 + EnumWindows
-│   └── linux.ts           ← 不动
+│   ├── darwin.ts          ← unchanged
+│   ├── win32.ts           ← enhanced: PrintWindow window capture + EnumWindows
+│   └── linux.ts           ← unchanged
 
 packages/@ant/computer-use-mcp/src/
-│   └── tools.ts           ← 增加 Windows 专属工具定义（UI Automation、OCR）
+│   └── tools.ts           ← add Windows-specific tool definitions (UI Automation, OCR)
 
 src/utils/computerUse/
-│   └── win32/              ← 新增目录：Windows 专属能力
-│       ├── uiAutomation.ts  ← UI 元素树、点击、写值
-│       ├── ocr.ts           ← 截图 + OCR 文字识别
-│       ├── windowCapture.ts ← PrintWindow 窗口绑定截图
-│       └── windowEnum.ts    ← EnumWindows 窗口枚举
+│   └── win32/              ← new directory: Windows-specific capabilities
+│       ├── uiAutomation.ts  ← UI element tree, clicks, value writes
+│       ├── ocr.ts           ← screenshot + OCR text recognition
+│       ├── windowCapture.ts ← PrintWindow window-bound screenshots
+│       └── windowEnum.ts    ← EnumWindows window enumeration
 ```
 
-### 3.2 分层
+### 3.2 Layers
 
 ```
 ┌──────────────────────────────────────────────┐
 │           Computer Use MCP Tools             │
 │  screenshot / click / type / request_access  │
-│  + Windows 专属: ui_tree / ocr / window_cap  │
+│  + Windows-specific: ui_tree / ocr / window_cap │
 ├──────────────────────────────────────────────┤
 │           src/utils/computerUse/             │
-│  executor.ts → 按平台 dispatch               │
-│  win32/ → Windows 专属能力模块               │
+│  executor.ts → dispatch by platform          │
+│  win32/ → Windows-specific capability modules │
 ├──────────────────────────────────────────────┤
 │     packages/@ant/computer-use-{input,swift}  │
 │  backends/win32.ts → PowerShell + Win32 API  │
@@ -79,24 +79,24 @@ src/utils/computerUse/
 └──────────────────────────────────────────────┘
 ```
 
-## 4. 实施计划
+## 4. Implementation plan
 
-### Phase A：窗口绑定截图（解决核心问题）
+### Phase A: window-bound screenshots (the core problem)
 
-**问题**：当前 `CopyFromScreen` 只能全屏截图，无法对指定窗口截图。
-**方案**：用 `PrintWindow` + `FindWindow` 实现窗口级截图。
+**Problem**: `CopyFromScreen` can only capture the full screen and cannot capture a specific window.
+**Approach**: use `PrintWindow` + `FindWindow` for window-level screenshots.
 
-| 步骤 | 文件 | 改动 |
+| Step | File | Change |
 |------|------|------|
-| A.1 | `src/utils/computerUse/win32/windowCapture.ts` | 新建：`captureWindow(title)` 用 PrintWindow 截取指定窗口 |
-| A.2 | `src/utils/computerUse/win32/windowEnum.ts` | 新建：`listWindows()` 用 EnumWindows 返回 {hwnd, pid, title}[] |
-| A.3 | `packages/@ant/computer-use-swift/src/backends/win32.ts` | `screenshot.captureExcluding` 增加按窗口截图能力 |
-| A.4 | `packages/@ant/computer-use-swift/src/backends/win32.ts` | `apps.listRunning` 用 EnumWindows 替代 Get-Process（返回 HWND） |
+| A.1 | `src/utils/computerUse/win32/windowCapture.ts` | New: `captureWindow(title)` captures a specific window with PrintWindow |
+| A.2 | `src/utils/computerUse/win32/windowEnum.ts` | New: `listWindows()` returns {hwnd, pid, title}[] using EnumWindows |
+| A.3 | `packages/@ant/computer-use-swift/src/backends/win32.ts` | `screenshot.captureExcluding` gains per-window capture |
+| A.4 | `packages/@ant/computer-use-swift/src/backends/win32.ts` | `apps.listRunning` uses EnumWindows instead of Get-Process (returns HWND) |
 
-**PowerShell 脚本核心**：
+**Core of the PowerShell script**:
 
 ```powershell
-# PrintWindow 截取指定窗口
+# PrintWindow captures a specific window
 Add-Type -AssemblyName System.Drawing
 Add-Type -ReferencedAssemblies System.Drawing @'
 using System; using System.Runtime.InteropServices; using System.Drawing; using System.Drawing.Imaging;
@@ -114,41 +114,41 @@ public class WinCap {
 '@
 ```
 
-**验证标准**：
-- 能按窗口标题截图
-- 被遮挡的窗口也能截图
-- 返回 base64 + width + height
+**Acceptance criteria**:
+- Can capture by window title
+- Occluded windows can also be captured
+- Returns base64 + width + height
 
-### Phase B：UI Automation（Windows 专属新能力）
+### Phase B: UI Automation (new Windows-specific capability)
 
-**问题**：macOS 有 Accessibility API 可以读取/操作 UI 元素，Windows 当前只能坐标点击。
-**方案**：用 `System.Windows.Automation` 实现 UI 树读取和元素操作。
+**Problem**: macOS has the Accessibility API to read/operate UI elements, while Windows currently can only click by coordinates.
+**Approach**: use `System.Windows.Automation` to read the UI tree and operate on elements.
 
-| 步骤 | 文件 | 改动 |
+| Step | File | Change |
 |------|------|------|
-| B.1 | `src/utils/computerUse/win32/uiAutomation.ts` | 新建：核心 UIA 操作封装 |
-| B.2 | `packages/@ant/computer-use-mcp/src/tools.ts` | 增加 Windows 专属工具定义 |
+| B.1 | `src/utils/computerUse/win32/uiAutomation.ts` | New: core UIA operation wrappers |
+| B.2 | `packages/@ant/computer-use-mcp/src/tools.ts` | Add Windows-specific tool definitions |
 
-**uiAutomation.ts 导出函数**：
+**Functions exported by uiAutomation.ts**:
 
 ```typescript
-// 获取窗口的 UI 元素树
+// Get a window's UI element tree
 getUITree(windowTitle: string, depth: number): UIElement[]
 
-// 按名称/类型/AutomationId 查找元素
+// Find an element by name/type/AutomationId
 findElement(windowTitle: string, query: {name?, controlType?, automationId?}): UIElement | null
 
-// 点击元素（InvokePattern）
+// Click an element (InvokePattern)
 clickElement(windowTitle: string, automationId: string): boolean
 
-// 设置元素值（ValuePattern）
+// Set an element's value (ValuePattern)
 setValue(windowTitle: string, automationId: string, value: string): boolean
 
-// 获取坐标处的元素
+// Get the element at a point
 elementAtPoint(x: number, y: number): UIElement | null
 ```
 
-**UIElement 类型**：
+**UIElement type**:
 ```typescript
 interface UIElement {
   name: string
@@ -156,51 +156,51 @@ interface UIElement {
   automationId: string
   boundingRect: { x: number, y: number, w: number, h: number }
   isEnabled: boolean
-  value?: string         // ValuePattern 可用时
+  value?: string         // when ValuePattern is available
   children?: UIElement[]
 }
 ```
 
-**PowerShell 脚本核心**：
+**Core of the PowerShell script**:
 ```powershell
 Add-Type -AssemblyName UIAutomationClient
 Add-Type -AssemblyName UIAutomationTypes
 
-# 读取 UI 树
+# Read the UI tree
 $root = [AutomationElement]::RootElement
 $window = $root.FindFirst([TreeScope]::Children, 
   [PropertyCondition]::new([AutomationElement]::NameProperty, $title))
 $elements = $window.FindAll([TreeScope]::Descendants, [Condition]::TrueCondition)
 
-# 写入文本
+# Write text
 $element.GetCurrentPattern([ValuePattern]::Pattern).SetValue($text)
 
-# 点击按钮
+# Click a button
 $element.GetCurrentPattern([InvokePattern]::Pattern).Invoke()
 ```
 
-**验证标准**：
-- 能读取记事本的 UI 树（按钮、文本框、菜单）
-- 能向文本框写入内容
-- 能点击按钮
-- 能识别坐标处的元素
+**Acceptance criteria**:
+- Can read Notepad's UI tree (buttons, text boxes, menus)
+- Can write content into a text box
+- Can click a button
+- Can identify the element at a point
 
-### Phase C：OCR 屏幕文字识别
+### Phase C: OCR screen text recognition
 
-**问题**：截图后 AI 只能看到图片，无法直接读取文字。
-**方案**：用 `Windows.Media.Ocr` 对截图进行文字识别。
+**Problem**: after a screenshot, the AI only sees an image and cannot read the text directly.
+**Approach**: use `Windows.Media.Ocr` to run text recognition on the screenshot.
 
-| 步骤 | 文件 | 改动 |
+| Step | File | Change |
 |------|------|------|
-| C.1 | `src/utils/computerUse/win32/ocr.ts` | 新建：截图 + OCR 识别 |
-| C.2 | `packages/@ant/computer-use-mcp/src/tools.ts` | 增加 `screen_ocr` 工具定义 |
+| C.1 | `src/utils/computerUse/win32/ocr.ts` | New: screenshot + OCR recognition |
+| C.2 | `packages/@ant/computer-use-mcp/src/tools.ts` | Add the `screen_ocr` tool definition |
 
-**ocr.ts 导出函数**：
+**Functions exported by ocr.ts**:
 ```typescript
-// 对屏幕区域 OCR
+// OCR a screen region
 ocrRegion(x: number, y: number, w: number, h: number, lang?: string): OcrResult
 
-// 对指定窗口 OCR
+// OCR a specific window
 ocrWindow(windowTitle: string, lang?: string): OcrResult
 
 interface OcrResult {
@@ -210,106 +210,106 @@ interface OcrResult {
 }
 ```
 
-**已确认可用语言**：英语 (en-US) + 中文 (zh-Hans-CN)
+**Confirmed available languages**: English (en-US) + Chinese (zh-Hans-CN)
 
-**验证标准**：
-- 能识别屏幕区域中的英文和中文
-- 返回文字内容 + 每行的位置信息
+**Acceptance criteria**:
+- Can recognize English and Chinese text in a screen region
+- Returns the text content + position info for each line
 
-### Phase D：高频操作性能优化
+### Phase D: performance optimization for high-frequency operations
 
-**问题**：每次 PowerShell 启动 273ms，鼠标移动等高频操作太慢。
-**方案**：用 .NET `System.Windows.Forms.Clipboard` 等直接 API 替代 PowerShell 子进程。
+**Problem**: each PowerShell launch takes 273ms, which is too slow for high-frequency operations such as mouse moves.
+**Approach**: replace PowerShell child processes with direct .NET APIs such as `System.Windows.Forms.Clipboard`.
 
-| 步骤 | 文件 | 改动 |
+| Step | File | Change |
 |------|------|------|
-| D.1 | `src/utils/computerUse/executor.ts` | 剪贴板操作用直接 API 替代 PowerShell |
-| D.2 | 考虑驻留 PowerShell 进程 | 通过 stdin/stdout 交互，摊平启动成本 |
+| D.1 | `src/utils/computerUse/executor.ts` | Clipboard operations use direct APIs instead of PowerShell |
+| D.2 | Consider a resident PowerShell process | Interact over stdin/stdout to amortize the startup cost |
 
-**剪贴板直接 API**（不需要 PowerShell 子进程）：
+**Direct clipboard API** (no PowerShell child process needed):
 ```powershell
-# 读：50ms → <1ms
+# Read: 50ms → <1ms
 [System.Windows.Forms.Clipboard]::GetText()
 
-# 写：50ms → <1ms  
+# Write: 50ms → <1ms  
 [System.Windows.Forms.Clipboard]::SetText($text)
 
-# 图片检测
+# Image detection
 [System.Windows.Forms.Clipboard]::ContainsImage()
 ```
 
-### Phase E：`request_access` Windows 适配
+### Phase E: `request_access` Windows adaptation
 
-**问题**：`request_access` 依赖 macOS bundleId 识别应用，Windows 没有这个概念。
-**方案**：在 Windows 上用 exe 路径 + 窗口标题替代 bundleId。
+**Problem**: `request_access` relies on the macOS bundleId to identify apps, and Windows has no such concept.
+**Approach**: on Windows, use the exe path + window title in place of bundleId.
 
-| 步骤 | 文件 | 改动 |
+| Step | File | Change |
 |------|------|------|
-| E.1 | `packages/@ant/computer-use-mcp/src/toolCalls.ts` | `resolveRequestedApps` 在 Windows 上用 exe 路径匹配 |
-| E.2 | `packages/@ant/computer-use-mcp/src/sentinelApps.ts` | 增加 Windows 危险应用列表（cmd.exe, powershell.exe 等） |
-| E.3 | `packages/@ant/computer-use-mcp/src/deniedApps.ts` | 增加 Windows 浏览器/终端识别规则 |
-| E.4 | `src/utils/computerUse/hostAdapter.ts` | `ensureOsPermissions` Windows 上检查 UAC 状态 |
+| E.1 | `packages/@ant/computer-use-mcp/src/toolCalls.ts` | `resolveRequestedApps` matches by exe path on Windows |
+| E.2 | `packages/@ant/computer-use-mcp/src/sentinelApps.ts` | Add a list of dangerous Windows apps (cmd.exe, powershell.exe, etc.) |
+| E.3 | `packages/@ant/computer-use-mcp/src/deniedApps.ts` | Add Windows browser/terminal recognition rules |
+| E.4 | `src/utils/computerUse/hostAdapter.ts` | `ensureOsPermissions` checks UAC state on Windows |
 
-**Windows 应用标识映射**：
+**Windows app identifier mapping**:
 ```
-macOS bundleId          →  Windows 等价
-com.apple.Safari        →  C:\Program Files\...\msedge.exe（或窗口标题匹配）
+macOS bundleId          →  Windows equivalent
+com.apple.Safari        →  C:\Program Files\...\msedge.exe (or window title match)
 com.google.Chrome       →  chrome.exe
 com.apple.Terminal      →  WindowsTerminal.exe / cmd.exe
 ```
 
-### Phase F：全局热键（ESC 拦截）
+### Phase F: global hotkey (ESC interception)
 
-**问题**：当前非 darwin 直接跳过 ESC 热键，用 Ctrl+C 替代。
-**方案**：用 `RegisterHotKey` 或 `SetWindowsHookEx(WH_KEYBOARD_LL)` 实现。
+**Problem**: non-darwin platforms currently skip the ESC hotkey and use Ctrl+C instead.
+**Approach**: implement it with `RegisterHotKey` or `SetWindowsHookEx(WH_KEYBOARD_LL)`.
 
-| 步骤 | 文件 | 改动 |
+| Step | File | Change |
 |------|------|------|
-| F.1 | `src/utils/computerUse/escHotkey.ts` | Windows 分支：RegisterHotKey 注册 ESC |
+| F.1 | `src/utils/computerUse/escHotkey.ts` | Windows branch: register ESC via RegisterHotKey |
 
-**优先级低**——当前 Ctrl+C fallback 可用，ESC 热键是体验优化。
+**Low priority**: the Ctrl+C fallback works today, and the ESC hotkey is an experience optimization.
 
-## 5. 执行优先级
+## 5. Execution priority
 
 ```
-Phase A: 窗口绑定截图          ← P0 核心需求，解决"操作其他界面"
-Phase B: UI Automation         ← P0 核心能力，AI 理解 UI 结构
-Phase C: OCR                   ← P1 增值能力，AI 读屏幕文字
-Phase D: 性能优化              ← P1 体验优化，高频操作提速
-Phase E: request_access 适配   ← P1 功能完整性，权限模型适配
-Phase F: ESC 热键              ← P2 体验优化，可后做
+Phase A: window-bound screenshots   ← P0 core need, solves "operate other windows"
+Phase B: UI Automation              ← P0 core capability, lets the AI understand UI structure
+Phase C: OCR                        ← P1 value-add, lets the AI read on-screen text
+Phase D: performance optimization   ← P1 experience, speeds up high-frequency operations
+Phase E: request_access adaptation  ← P1 completeness, adapts the permission model
+Phase F: ESC hotkey                 ← P2 experience, can come later
 ```
 
-## 6. 每个 Phase 的改动量估算
+## 6. Estimated change size per phase
 
-| Phase | 新增文件 | 修改文件 | 新增代码行 | 风险 |
+| Phase | New files | Modified files | New lines of code | Risk |
 |-------|---------|---------|-----------|------|
-| A 窗口截图 | 2 | 1 | ~200 | 低 |
-| B UI Automation | 1 | 1 | ~300 | 中 |
-| C OCR | 1 | 1 | ~150 | 低 |
-| D 性能优化 | 0 | 2 | ~50 | 低 |
-| E request_access | 0 | 3 | ~100 | 中 |
-| F ESC 热键 | 0 | 1 | ~50 | 低 |
-| **总计** | **4** | **9** | **~850** | — |
+| A window screenshots | 2 | 1 | ~200 | Low |
+| B UI Automation | 1 | 1 | ~300 | Medium |
+| C OCR | 1 | 1 | ~150 | Low |
+| D performance | 0 | 2 | ~50 | Low |
+| E request_access | 0 | 3 | ~100 | Medium |
+| F ESC hotkey | 0 | 1 | ~50 | Low |
+| **Total** | **4** | **9** | **~850** | — |
 
-## 7. 不动的文件
+## 7. Files left untouched
 
-- `backends/darwin.ts`（两个包都不动）
-- `backends/linux.ts`（两个包都不动）
-- `src/utils/computerUse/` 中 macOS 相关代码路径不动
-- `packages/@ant/computer-use-mcp/src/` 中已复制的参考项目代码不动（只追加 Windows 工具）
+- `backends/darwin.ts` (untouched in both packages)
+- `backends/linux.ts` (untouched in both packages)
+- macOS-related code paths in `src/utils/computerUse/` stay unchanged
+- Code already copied from the reference project in `packages/@ant/computer-use-mcp/src/` stays unchanged (Windows tools are only appended)
 
-## 8. 与 macOS/Linux 方案的对比
+## 8. Comparison with the macOS/Linux approaches
 
-| 能力 | macOS | Windows (增强后) | Linux |
+| Capability | macOS | Windows (after enhancement) | Linux |
 |------|-------|-----------------|-------|
-| 截图方式 | SCContentFilter (per-app) | **PrintWindow (per-window)** | scrot (全屏/区域) |
-| UI 结构 | Accessibility API | **UI Automation** | 无 |
-| OCR | 无内置 | **Windows.Media.Ocr** | 无内置 |
-| 键鼠 | CGEvent + enigo | SendInput + keybd_event | xdotool |
-| 窗口管理 | NSWorkspace | **EnumWindows + Win32** | wmctrl |
-| 剪贴板 | pbcopy/pbpaste | **Clipboard 直接 API** | xclip |
-| ESC 热键 | CGEventTap | RegisterHotKey | 无 |
-| 应用标识 | bundleId | exe 路径 + 窗口标题 | /proc + wmctrl |
+| Screenshot method | SCContentFilter (per-app) | **PrintWindow (per-window)** | scrot (full screen/region) |
+| UI structure | Accessibility API | **UI Automation** | None |
+| OCR | None built in | **Windows.Media.Ocr** | None built in |
+| Keyboard/mouse | CGEvent + enigo | SendInput + keybd_event | xdotool |
+| Window management | NSWorkspace | **EnumWindows + Win32** | wmctrl |
+| Clipboard | pbcopy/pbpaste | **Direct Clipboard API** | xclip |
+| ESC hotkey | CGEventTap | RegisterHotKey | None |
+| App identifier | bundleId | exe path + window title | /proc + wmctrl |
 
-**Windows 增强后将在 UI Automation 和 OCR 方面超过 macOS 方案**——这两项 macOS 原始实现也没有（Anthropic 用的是截图 + Claude 视觉理解，没有结构化 UI 数据）。
+**After the enhancements, Windows will surpass the macOS approach in UI Automation and OCR**, neither of which the original macOS implementation has (Anthropic uses screenshots + Claude's visual understanding, with no structured UI data).

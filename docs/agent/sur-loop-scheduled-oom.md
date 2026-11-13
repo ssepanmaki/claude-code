@@ -2,7 +2,7 @@
 
 - **Flow id**: `recurring-bug-loop-oom` (pilot flow for autonomy ↔ deep-debug binding)
 - **Branch**: `fix/loop-scheduled-autonomy-oom`
-- **Worktree**: `E:\Source_code\Claude-code-bast-loop-scheduled-oom-fix`
+- **Worktree**: `<worktree-path>`
 - **Author**: back-filled from existing working-tree diff (no commits ahead of `main`)
 - **Status**: `report` (this document) — pending human approval before `regression-test` advances
 
@@ -424,7 +424,7 @@ recommendations to make that decision faster and more auditable.
 
 | Claim | Cross-check | Result |
 |---|---|---|
-| §10 H2/H3/H4 互锁 | Walked each "fix only one" counterfactual | ✅ Real interlock — fixing only one converts OOM into a different bug (silent suppression / persistent stacking) |
+| §10 H2/H3/H4 interlock | Walked each "fix only one" counterfactual | ✅ Real interlock — fixing only one converts OOM into a different bug (silent suppression / persistent stacking) |
 | §11 fix surface covers all 8 modified files | Compared against `git diff --stat` | ✅ Each file has a row in the table |
 | §11 "extra fields ignored" rollback claim | JSON parse semantics | ✅ Correct |
 | §11 compatibility claim "tolerated" | Re-read `isStaleActiveAutonomyRun` (`autonomyRuns.ts`) | ⚠️ Tolerance is real but **silent** — gap surfaced as Concern A below |
@@ -461,7 +461,7 @@ chore: reformat processSlashCommand with Biome   # ~250 lines, formatter-only
 feat: thread autonomy run id through forked slash commands for deferred completion   # ~50 lines, contract logic
 ```
 
-This satisfies `~/.claude/rules/deep-debug/core.md` §2 ("bug fix 不允许混入...格式化")
+This satisfies `~/.claude/rules/deep-debug/core.md` §2 ("a bug fix must not mix in ... formatting")
 in spirit by making the contract commit reviewable in isolation, without
 requiring a fragile manual revert of formatter output (which Biome would
 re-apply on the next save). All other 7 modified files in the OOM fix do not
@@ -475,7 +475,7 @@ revisiting (relates to §13 Q3). Not a blocker; suggested for follow-up flow.
 
 | §14 box | Agent recommendation | Rationale |
 |---|---|---|
-| §10 chosen root cause | Approve | H2/H3/H4 互锁 verified; diff supports each branch |
+| §10 chosen root cause | Approve | H2/H3/H4 interlock verified; diff supports each branch |
 | §11 fix plan (with §15 Concern A folded in) | Approve | Minimal, complete, regression-tested |
 | §11 compatibility note | Acknowledge as-extended (§11 now includes the warn-log requirement from Concern A) | Silent legacy blocking would surprise users; the added log makes it diagnosable |
 | Concern B `processSlashCommand.tsx` >50% diff | Resolved by commit-split rule (chore + feat) | 18 lines contract + ~250 lines formatter churn; commit split makes review tractable without fragile revert |

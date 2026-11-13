@@ -1,9 +1,14 @@
 #!/bin/bash
-# Global Claude config for every cloud session. Tunables live in env vars. Never fails.
+# Global Claude config for every cloud session. Never fails.
 C=~/.claude; H=$C/hooks; mkdir -p $H $C/output-styles $C/agents ~/.githooks
 cat > $C/settings.json <<'EOF'
 {"model":"sonnet","fallbackModel":"sonnet","effortLevel":"medium","outputStyle":"Terse",
- "idleCompaction":false,"attribution":{"commit":"","pr":""},"includeCoAuthoredBy":false,
+ "idleCompaction":false,"autoCompactWindow":200000,
+ "attribution":{"commit":"","pr":""},"includeCoAuthoredBy":false,
+ "env":{"CLAUDE_CODE_SUBAGENT_MODEL":"haiku","CLAUDE_CODE_DISABLE_1M_CONTEXT":"1",
+  "CLAUDE_CODE_DISABLE_NONESSENTIAL_TRAFFIC":"1","DISABLE_TELEMETRY":"1",
+  "DISABLE_ERROR_REPORTING":"1","CLAUDE_CODE_DISABLE_FEEDBACK_SURVEY":"1",
+  "BASH_MAX_OUTPUT_LENGTH":"20000","CLAUDE_CODE_FILE_READ_MAX_OUTPUT_TOKENS":"15000"},
  "permissions":{"allow":["Bash(git status:*)","Bash(git diff:*)","Bash(git log:*)",
   "Bash(bun test:*)","Bash(bun run:*)","Bash(npm test:*)","Bash(npm run:*)"],
   "deny":["Read(./**/node_modules/**)","Read(./**/dist/**)","Read(./**/*.lock)",
